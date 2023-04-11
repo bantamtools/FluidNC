@@ -22,10 +22,18 @@ bool spi_init_bus(pinnum_t sck_pin, pinnum_t miso_pin, pinnum_t mosi_pin, bool d
     };
 
     // Depends on the chip variant
+#ifdef CONFIG_IDF_TARGET_ESP32S3
+    return !spi_bus_initialize(SPI1_HOST, &bus_cfg, dma ? SPI_DMA_CH_AUTO : SPI_DMA_DISABLED);
+#else
     return !spi_bus_initialize(HSPI_HOST, &bus_cfg, dma ? SPI_DMA_CH1 : SPI_DMA_DISABLED);
+#endif
 }
 
 void spi_deinit_bus() {
+#ifdef CONFIG_IDF_TARGET_ESP32S3
+    esp_err_t err = spi_bus_free(SPI1_HOST);
+#else
     esp_err_t err = spi_bus_free(HSPI_HOST);
+#endif
     log_debug("deinit spi " << int(err));
 }

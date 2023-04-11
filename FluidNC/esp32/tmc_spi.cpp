@@ -38,11 +38,15 @@
 #include "src/Config.h"
 #include <TMCStepper.h>  // https://github.com/teemuatlut/TMCStepper
 
+#ifdef CONFIG_IDF_TARGET_ESP32S3
+#warning TMC SPI driver not updated for ESP32-S3!
+#else
 #include "hal/spi_ll.h"
 
 spi_dev_t* hw = SPI_LL_GET_HW(HSPI_HOST);
 
 static spi_ll_clock_val_t clk_reg_val = 0;
+#endif
 
 // Establish the SPI bus configuration needed for TMC device access
 // This should be done one before every TMC read or write operation,
@@ -54,7 +58,9 @@ static void tmc_spi_bus_setup() {
     gpio_matrix_out(bus_config->miso_io_num, io_signal[host].spiq_out, false, false);
     gpio_matrix_in(bus_config->miso_io_num, io_signal[host].spiq_in, false);
 #endif
-
+#ifdef CONFIG_IDF_TARGET_ESP32S3
+#warning TMC SPI driver not updated for ESP32-S3!
+#else
     if (clk_reg_val == 0) {
         spi_ll_master_cal_clock(SPI_LL_PERIPH_CLK_FREQ, 2000000, 128, &clk_reg_val);
     }
@@ -65,11 +71,15 @@ static void tmc_spi_bus_setup() {
     spi_ll_set_half_duplex(hw, false);
 
     spi_ll_master_set_line_mode(hw, { 1, 1, 1 });  // Single-line transfers; not DIO or QIO
+#endif
 }
 
 // Perform a full-duplex transfer from out/out_bitlen to in/in_bitlen
 // If in_bitlen is 0, the input data will be ignored
 static void tmc_spi_transfer_data(uint8_t* out, int out_bitlen, uint8_t* in, int in_bitlen) {
+#ifdef CONFIG_IDF_TARGET_ESP32S3
+#warning TMC SPI driver not updated for ESP32-S3!
+#else
     spi_ll_set_mosi_bitlen(hw, out_bitlen);
 
     spi_ll_set_miso_bitlen(hw, in_bitlen);
@@ -88,6 +98,7 @@ static void tmc_spi_transfer_data(uint8_t* out, int out_bitlen, uint8_t* in, int
     while (!spi_ll_usr_is_done(hw)) {}
 
     spi_ll_read_buffer(hw, in, in_bitlen);  // No-op if in_bitlen is 0
+#endif
 }
 
 // Do a single 5-byte (reg# + data) access to a TMC register,
@@ -95,6 +106,9 @@ static void tmc_spi_transfer_data(uint8_t* out, int out_bitlen, uint8_t* in, int
 // before the target device.  For reads, this is the first register
 // access that latches the register data into the output register.
 static void tmc_spi_rw_reg(uint8_t cmd, uint32_t data, int index) {
+#ifdef CONFIG_IDF_TARGET_ESP32S3
+#warning TMC SPI driver not updated for ESP32-S3!
+#else
     int before = index > 0 ? index - 1 : 0;
 
     const size_t packetLen       = 5;
@@ -114,22 +128,31 @@ static void tmc_spi_rw_reg(uint8_t cmd, uint32_t data, int index) {
     out[4] = data >> 0;
 
     tmc_spi_transfer_data(out, total_bits, NULL, 0);
+#endif
 }
 
 // Replace the library's weak definition of TMC2130Stepper::write()
 // This is executed in the object context so it has access to class
 // data such as the CS pin that switchCSpin() uses
 void TMC2130Stepper::write(uint8_t reg, uint32_t data) {
+#ifdef CONFIG_IDF_TARGET_ESP32S3
+#warning TMC SPI driver not updated for ESP32-S3!
+#else
     log_verbose("TMC reg 0x" << String(reg, 16) << " write 0x" << String(data, 16));
     tmc_spi_bus_setup();
 
     switchCSpin(0);
     tmc_spi_rw_reg(reg | 0x80, data, link_index);
     switchCSpin(1);
+#endif
 }
 
 // Replace the library's weak definition of TMC2130Stepper::read()
 uint32_t TMC2130Stepper::read(uint8_t reg) {
+#ifdef CONFIG_IDF_TARGET_ESP32S3
+#warning TMC SPI driver not updated for ESP32-S3!
+    return 0;
+#else
     tmc_spi_bus_setup();
 
     switchCSpin(0);
@@ -168,4 +191,5 @@ uint32_t TMC2130Stepper::read(uint8_t reg) {
     log_verbose("TMC reg 0x" << String(reg, 16) << " read 0x" << String(data, 16) << " status 0x" << String(status, 16));
 
     return data;
+#endif
 }

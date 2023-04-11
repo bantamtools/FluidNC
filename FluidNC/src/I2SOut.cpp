@@ -158,10 +158,17 @@ void IRAM_ATTR i2s_out_push() {
 }
 
 static inline void i2s_out_reset_fifo_without_lock() {
+#ifdef CONFIG_IDF_TARGET_ESP32S3 
+    I2S0.rx_conf.rx_fifo_reset = 1;
+    I2S0.rx_conf.rx_fifo_reset = 0;
+    I2S0.tx_conf.tx_fifo_reset = 1;
+    I2S0.tx_conf.tx_fifo_reset = 0;
+#else
     I2S0.conf.rx_fifo_reset = 1;
     I2S0.conf.rx_fifo_reset = 0;
     I2S0.conf.tx_fifo_reset = 1;
     I2S0.conf.tx_fifo_reset = 0;
+#endif
 }
 
 static int i2s_clear_dma_buffer(lldesc_t* dma_desc, uint32_t port_data) {
@@ -193,7 +200,11 @@ static int i2s_clear_o_dma_buffers(uint32_t port_data) {
 
 static int i2s_out_gpio_attach(pinnum_t ws, pinnum_t bck, pinnum_t data) {
     // Route the i2s pins to the appropriate GPIO
+#ifdef CONFIG_IDF_TARGET_ESP32S3
+    gpio_matrix_out_check(data, I2S0O_SD_OUT_IDX, 0, 0);
+#else
     gpio_matrix_out_check(data, I2S0O_DATA_OUT23_IDX, 0, 0);
+#endif
     gpio_matrix_out_check(bck, I2S0O_BCK_OUT_IDX, 0, 0);
     gpio_matrix_out_check(ws, I2S0O_WS_OUT_IDX, 0, 0);
     return 0;
@@ -222,6 +233,13 @@ static int i2s_out_gpio_shiftout(uint32_t port_data) {
 
 static int i2s_out_stop() {
     I2S_OUT_ENTER_CRITICAL();
+#ifdef CONFIG_IDF_TARGET_ESP32S3
+#warning I2S DMA configuration not updated for ESP32-S3!
+    
+    // stop TX module
+    I2S0.tx_conf.tx_start = 0;
+
+#else
     // Stop FIFO DMA
     I2S0.out_link.stop = 1;
 
@@ -230,6 +248,7 @@ static int i2s_out_stop() {
 
     // stop TX module
     I2S0.conf.tx_start = 0;
+#endif
 
     // Force WS to LOW before detach
     // This operation prevents unintended WS edge trigger when detach
@@ -267,7 +286,16 @@ static int i2s_out_start() {
     // Attach I2S to specified GPIO pin
     i2s_out_gpio_attach(i2s_out_ws_pin, i2s_out_bck_pin, i2s_out_data_pin);
 
-    // reest TX/RX module
+#ifdef CONFIG_IDF_TARGET_ESP32S3
+    // reset TX/RX module
+    I2S0.tx_conf.tx_reset = 1;
+    I2S0.tx_conf.tx_reset = 0;
+    I2S0.rx_conf.rx_reset = 1;
+    I2S0.rx_conf.rx_reset = 0;
+
+#warning I2S DMA configuration not updated for ESP32-S3!
+#else
+    // reset TX/RX module
     I2S0.conf.tx_reset = 1;
     I2S0.conf.tx_reset = 0;
     I2S0.conf.rx_reset = 1;
@@ -280,10 +308,23 @@ static int i2s_out_start() {
     I2S0.lc_conf.out_rst = 0;
 
     I2S0.out_link.addr = (uint32_t)o_dma.desc[0];
+#endif
 
     // reset FIFO
     i2s_out_reset_fifo_without_lock();
 
+#ifdef CONFIG_IDF_TARGET_ESP32S3
+#warning I2S DMA configuration not updated for ESP32-S3!
+
+    I2S0.tx_conf.tx_stop_en = 1;  // BCK and WCK are suppressed while FIFO is empty
+
+    I2S0.int_clr.val    = 0xFFFFFFFF;
+
+    I2S0.tx_conf.tx_start = 1;
+    // Wait for the first FIFO data to prevent the unintentional generation of 0 data
+    ets_delay_us(20);
+    I2S0.tx_conf.tx_stop_en = 0;  // BCK and WCK are generated regardless of the FIFO status
+#else
     // start DMA link
     if (i2s_out_pulser_status == PASSTHROUGH) {
         I2S0.conf_chan.tx_chan_mod = 3;  // 3:right+constant 4:left+constant (when tx_msb_right = 1)
@@ -305,6 +346,7 @@ static int i2s_out_start() {
     // Wait for the first FIFO data to prevent the unintentional generation of 0 data
     ets_delay_us(20);
     I2S0.conf1.tx_stop_en = 0;  // BCK and WCK are generated regardless of the FIFO status
+#endif
 
     I2S_OUT_EXIT_CRITICAL();
 
@@ -391,6 +433,9 @@ static void IRAM_ATTR i2s_out_intr_handler(void* arg) {
     lldesc_t*     finish_desc;
     portBASE_TYPE high_priority_task_awoken = pdFALSE;
 
+#ifdef CONFIG_IDF_TARGET_ESP32S3
+#warning I2S DMA configuration not updated for ESP32-S3!
+#else
     if (I2S0.int_st.out_eof || I2S0.int_st.out_total_eof) {
         if (I2S0.int_st.out_total_eof) {
             // This is tail of the DMA descriptors
@@ -432,6 +477,7 @@ static void IRAM_ATTR i2s_out_intr_handler(void* arg) {
         // Send a DMA complete event to the I2S bitstreamer task with finished buffer
         xQueueSendFromISR(o_dma.queue, &finish_desc, &high_priority_task_awoken);
     }
+#endif
 
     if (high_priority_task_awoken == pdTRUE) {
         portYIELD_FROM_ISR();
@@ -711,6 +757,87 @@ int i2s_out_init(i2s_out_init_t& init_param) {
     o_dma.current = NULL;
     o_dma.queue   = xQueueCreate(I2S_OUT_DMABUF_COUNT, sizeof(uint32_t*));
 
+#ifdef CONFIG_IDF_TARGET_ESP32S3
+#warning I2S DMA and missing configuration not updated for ESP32-S3!
+
+    // stop i2s
+    I2S0.tx_conf.tx_start = 0;
+
+    I2S0.int_clr.val = I2S0.int_st.val;  //clear pending interrupt
+
+    //
+    // i2s_param_config
+    //
+
+    // configure I2S data port interface.
+
+    //reset i2s
+    I2S0.tx_conf.tx_reset = 1;
+    I2S0.tx_conf.tx_reset = 0;
+    I2S0.rx_conf.rx_reset = 1;
+    I2S0.rx_conf.rx_reset = 0;
+
+    // A lot of the stuff below could probably be replaced by i2s_set_clk();
+
+    i2s_out_reset_fifo_without_lock();
+
+#ifdef SOC_I2S_SUPPORTS_PDM_TX
+    // i2s_ll_tx_enable_pdm(dev, false);
+    // i2s_ll_tx_enable_pdm(dev2, false);
+    I2S0.tx_pcm2pdm_conf.pcm2pdm_conv_en = 0;
+#endif
+
+    if (i2s_out_pulser_status == STEPPING) {
+        // Channel output mode
+        I2S0.tx_conf.tx_chan_mod    = 4;  // 3:right+constant 4:left+constant (when tx_msb_right = 1)
+        I2S0.conf_single_data       = 0;
+    } else {
+        // Static output mode
+        I2S0.tx_conf.tx_chan_mod    = 3;  // 3:right+constant 4:left+constant (when tx_msb_right = 1)
+        I2S0.conf_single_data       = init_param.init_val;
+    }
+
+    I2S0.tx_conf1.tx_bits_mod = 31;
+    I2S0.rx_conf1.rx_bits_mod = 31;
+
+    I2S0.tx_conf.tx_mono = 0;  // Set this bit to enable transmitter’s mono mode in PCM standard mode.
+
+    I2S0.rx_conf.rx_mono      = 0;
+
+    I2S0.tx_conf.tx_start     = 0;
+    I2S0.rx_conf.rx_start     = 0;
+
+    I2S0.tx_conf.tx_slave_mod              = 0;  // Master
+#ifdef SOC_I2S_SUPPORTS_PDM_RX
+    //i2s_ll_rx_enable_pdm(dev, false);
+    I2S0.rx_conf.rx_pdm_en = 0;  // Set this bit to enable receiver’s PDM mode.
+#endif
+#ifdef SOC_I2S_SUPPORTS_PDM_TX
+    //i2s_ll_tx_enable_pdm(dev, false);
+    I2S0.tx_conf.tx_pdm_en = 0;  // Set this bit to enable transmitter’s PDM mode.
+#endif
+
+    // I2S_COMM_FORMAT_I2S_LSB
+    I2S0.tx_conf1.tx_msb_shift  = 0;  // Do not use the Philips standard to avoid bit-shifting
+    I2S0.rx_conf1.rx_msb_shift  = 0;  // Do not use the Philips standard to avoid bit-shifting
+
+    //
+    // i2s_set_clk
+    //
+
+    // set clock (fi2s) 160MHz / 5
+#ifdef CONFIG_IDF_TARGET_ESP32
+    // i2s_ll_rx_clk_set_src(dev, I2S_CLK_D2CLK);
+    I2S0.clkm_conf.clka_en = 0;  // Use 160 MHz PLL_D2_CLK as reference
+#endif
+        // N + b/a = 0
+
+    // Bit clock configuration bit in transmitter mode.
+    // fbck = fi2s / tx_bck_div_num = (160 MHz / 5) / 2 = 16 MHz
+    I2S0.tx_conf1.tx_bck_div_num = 2;  // minimum value of 2 defaults to 6
+    I2S0.rx_conf1.rx_bck_div_num = 2;
+
+#else
     // Set the first DMA descriptor
     I2S0.out_link.addr = (uint32_t)o_dma.desc[0];
 
@@ -846,7 +973,7 @@ int i2s_out_init(i2s_out_init_t& init_param) {
     I2S0.int_ena.out_dscr_err  = 0;  // Triggered when invalid rxlink descriptors are encountered.
     I2S0.int_ena.out_total_eof = 1;  // Triggered when all transmitting linked lists are used up.
     I2S0.int_ena.out_done      = 0;  // Triggered when all transmitted and buffered data have been read.
-
+#endif
     // default pulse callback period (μsec)
     i2s_out_pulse_period = init_param.pulse_period;
 
