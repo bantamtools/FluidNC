@@ -4,6 +4,7 @@
 #include "DebugPinDetail.h"
 
 #include "../UartChannel.h"
+#include "../UsbChannel.h"
 #include <esp32-hal.h>  // millis()
 #include <cstdio>       // vsnprintf
 #include <cstdarg>
@@ -17,7 +18,11 @@ namespace Pins {
         va_copy(copy, arg);
         size_t len = vsnprintf(buf, 50, format, arg);
         va_end(copy);
+#ifdef ARDUINO_USB_CDC_ON_BOOT
+        log_msg_to(Usb0, buf);
+#else
         log_msg_to(Uart0, buf);
+#endif
         va_end(arg);
     }
 
