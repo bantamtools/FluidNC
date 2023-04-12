@@ -4,8 +4,6 @@
 
 #pragma once
 
-#include "Config.h"
-
 #include "Usb.h"
 #include "Channel.h"
 #include "lineedit.h"
