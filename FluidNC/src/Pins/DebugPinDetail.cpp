@@ -4,9 +4,28 @@
 #include "DebugPinDetail.h"
 
 #include "../UartChannel.h"
+#include "../UsbChannel.h"
 #include <esp32-hal.h>  // millis()
 
 namespace Pins {
+<<<<<<< HEAD
+=======
+    inline void WriteSerial(const char* format, ...) {
+        char    buf[50];
+        va_list arg;
+        va_list copy;
+        va_start(arg, format);
+        va_copy(copy, arg);
+        size_t len = vsnprintf(buf, 50, format, arg);
+        va_end(copy);
+#ifdef ARDUINO_USB_CDC_ON_BOOT
+        log_msg_to(Usb0, buf);
+#else
+        log_msg_to(Uart0, buf);
+#endif
+        va_end(arg);
+    }
+>>>>>>> c851b464 (Initial USB Serial JTAG console support added)
 
     // I/O:
     void DebugPinDetail::write(int high) {
