@@ -6,23 +6,21 @@
 
 #include "Config.h"
 
-#include "Configuration/Configurable.h"
-#include "Configuration/GenericFactory.h"
-
-#include <freertos/FreeRTOS.h>  // TickType_T
+#include "Usb.h"
 #include "Channel.h"
 #include "lineedit.h"
 
 class UsbChannel : public Channel, public Configuration::Configurable {
 private:
     Lineedit* _lineedit;
+    Usb*     _usb;
 
     int _usb_num = 0;
 
 public:
     UsbChannel(bool addCR = false);
 
-    void init();
+    void init(Usb* usb);
 
     // Print methods (Stream inherits from Print)
     size_t write(uint8_t c) override;

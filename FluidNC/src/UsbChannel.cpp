@@ -2,6 +2,7 @@
 // Copyright (c) 2023 -  Mitch Bradley
 // Use of this source code is governed by a GPLv3 license that can be found in the LICENSE file.
 
+#include "Usb.h"
 #include "UsbChannel.h"
 #include "Machine/MachineConfig.h"  // config
 #include "Serial.h"                 // allChannels
@@ -11,12 +12,13 @@ UsbChannel::UsbChannel(bool addCR) : Channel("usb", addCR) {
     _lineedit = new Lineedit(this, _line, Channel::maxLine - 1);
 }
 
-void UsbChannel::init() {
+void UsbChannel::init(Usb* usb) {
+    _usb = usb;
     allChannels.registration(this);
 }
 
 size_t UsbChannel::write(uint8_t c) {
-    return Serial.write(c);
+    return _usb->write(c);
 }
 
 size_t UsbChannel::write(const uint8_t* buffer, size_t length) {
@@ -39,24 +41,24 @@ size_t UsbChannel::write(const uint8_t* buffer, size_t length) {
                 modbuf[k++] = c;
                 --rem;
             }
-            Serial.write(modbuf, k);
+            _usb->write(modbuf, k);
         }
         return length;
     } else {
-        return Serial.write(buffer, length);
+        return _usb->write(buffer, length);
     }
 }
 
 int UsbChannel::available() {
-    return Serial.available();
+    return _usb->available();
 }
 
 int UsbChannel::peek() {
-    return Serial.peek();
+    return _usb->peek();
 }
 
 int UsbChannel::rx_buffer_available() {
-    return (256 - available()); //  Based on default buffer size in HW CDC
+    return _usb->rx_buffer_available();
 }
 
 bool UsbChannel::realtimeOkay(char c) {
@@ -82,11 +84,11 @@ Channel* UsbChannel::pollLine(char* line) {
 }
 
 int UsbChannel::read() {
-    return Serial.read();
+    return _usb->read();
 }
 
 void UsbChannel::flushRx() {
-    Serial.flush();
+    _usb->flushRx();
     Channel::flushRx();
 }
 
@@ -100,8 +102,7 @@ size_t UsbChannel::timedReadBytes(char* buffer, size_t length, TickType_t timeou
         _queue.pop();
     }
 
-    Serial.setTimeout(timeout);   
-    int res = Serial.readBytes(buffer, remlen);
+    int res = _usb->timedReadBytes(buffer, remlen, timeout);
     // If res < 0, no bytes were read
     remlen -= (res < 0) ? 0 : res;
     return length - remlen;
@@ -110,6 +111,7 @@ size_t UsbChannel::timedReadBytes(char* buffer, size_t length, TickType_t timeou
 UsbChannel Usb0(true);  // Primary USB serial channel with LF to CRLF conversion
 
 void usbInit() {
-    Serial.begin();  // HWCDC is mapped to Serial internally
-    Usb0.init();
+    auto usb0 = new Usb();
+    usb0->begin();
+    Usb0.init(usb0);
 }
