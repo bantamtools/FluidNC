@@ -15,6 +15,7 @@
 #    include "Protocol.h"
 #    include "System.h"
 #    include "UartChannel.h"
+#    include "UsbChannel.h"
 #    include "MotionControl.h"
 #    include "Platform.h"
 #    include "StartupLog.h"
@@ -30,8 +31,13 @@ extern void make_user_commands();
 void setup() {
     disableCore0WDT();
     try {
+#ifdef ARDUINO_USB_CDC_ON_BOOT
+        usbInit();       // Setup serial port
+        Usb0.println();  // create some white space after ESP32 boot info
+#else
         uartInit();       // Setup serial port
         Uart0.println();  // create some white space after ESP32 boot info
+#endif
 
         // Setup input polling loop after loading the configuration,
         // because the polling may depend on the config

@@ -9,6 +9,10 @@
 #include <WString.h>
 #include <cstdint>
 #include <esp_attr.h>
+#ifdef CONFIG_IDF_TARGET_ESP32S3
+#include <esp32/clk.h>
+#include "FreeRTOSConfig.h"
+#endif
 #include <xtensa/core-macros.h>
 #include "Logging.h"
 
@@ -104,12 +108,18 @@ inline int32_t IRAM_ATTR getCpuTicks() {
     return XTHAL_GET_CCOUNT();
 }
 
+#ifdef CONFIG_IDF_TARGET_ESP32S3
+inline int32_t IRAM_ATTR usToCpuTicks(int32_t us) {
+    return ((us * (int32_t)(configTICK_RATE_HZ)) / ((int32_t)(1000000U)));
+}
+#else
 extern uint32_t g_ticks_per_us_pro;  // For CPU 0 - typically 240 MHz
 extern uint32_t g_ticks_per_us_app;  // For CPU 1 - typically 240 MHz
 
 inline int32_t IRAM_ATTR usToCpuTicks(int32_t us) {
     return us * g_ticks_per_us_pro;
 }
+#endif
 
 inline int32_t IRAM_ATTR usToEndTicks(int32_t us) {
     return getCpuTicks() + usToCpuTicks(us);
