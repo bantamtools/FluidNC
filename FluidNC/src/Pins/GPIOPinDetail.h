@@ -20,8 +20,11 @@ namespace Pins {
         static void gpioAction(int, void*, bool);
 
     public:
+#ifdef SERAMA
+        static const int nGPIOPins = 48;
+#else
         static const int nGPIOPins = 40;
-
+#endif
         GPIOPinDetail(pinnum_t index, PinOptionsParser options);
 
         PinCapabilities capabilities() const override;

@@ -1,0 +1,101 @@
+name: "Serama"
+board: "Serama"
+
+stepping:
+  engine: RMT
+  idle_ms: 255
+  dir_delay_us: 1
+  pulse_us: 4
+  disable_delay_us: 0
+
+axes:
+  shared_stepper_disable_pin: NO_PIN
+  shread_stepper_reset_pin: NO_PIN
+  
+  x:
+    steps_per_mm: 36.3636
+    max_rate_mm_per_min: 1000
+    acceleration_mm_per_sec2: 25
+    max_travel_mm: 1000
+    homing:
+      cycle: 2
+      mpos_mm: 0
+      positive_direction: true
+    
+    motor0:
+      limit_neg_pin: gpio.1:high:pu
+      stepstick:
+        disable_pin: gpio.15:low
+        direction_pin: gpio.16
+        step_pin: gpio.17
+    motor1:
+      null_motor:
+
+  y:
+    steps_per_mm: 34.0426
+    max_rate_mm_per_min: 1000
+    acceleration_mm_per_sec2: 25
+    max_travel_mm: 1000
+    homing:
+      cycle: 3
+      mpos_mm: 0
+      positive_direction: true
+
+    motor0:
+      limit_neg_pin: gpio.2:high:pu
+      stepstick:
+        disable_pin: gpio.18:low
+        direction_pin: gpio.21
+        step_pin: gpio.26
+    motor1:
+      null_motor:
+
+  z:
+    steps_per_mm: 27.1186
+    max_rate_mm_per_min: 1000
+    acceleration_mm_per_sec2: 25
+    max_travel_mm: 1000
+    homing:
+      cycle: 1
+      mpos_mm: 0
+      positive_direction: true
+
+    motor0:
+      limit_neg_pin: gpio.4:high:pu
+      stepstick:
+        disable_pin: gpio.47:low
+        direction_pin: gpio.33
+        step_pin: gpio.34
+    motor1:
+      null_motor:
+
+# OLED
+i2c0:
+   sda_pin: gpio.41
+   scl_pin: gpio.40
+        
+oled:
+   i2c_num: 0
+   i2c_address: 60
+   width: 128
+   height: 64
+   radio_delay_ms: 1000
+
+# Configure SD card in SPI mode
+spi:
+  miso_pin: gpio.8
+  mosi_pin: gpio.9
+  sck_pin: gpio.10
+
+sdcard:
+  cs_pin: gpio.12
+  card_detect_pin: gpio.14
+  frequency_hz: 8000000
+
+# LED (0) and expansion IOs (1-4)
+user_outputs:
+  digital0_pin: gpio.5
+  digital1_pin: gpio.39
+  digital2_pin: gpio.40
+  digital3_pin: gpio.42
+  digital4_pin: gpio.6

@@ -16,6 +16,72 @@ namespace Pins {
 
     PinCapabilities GPIOPinDetail::GetDefaultCapabilities(pinnum_t index) {
         // See https://randomnerdtutorials.com/esp32-pinout-reference-gpios/ for an overview:
+#ifdef SERAMA
+        switch (index) {
+
+            case 1: // Normal pins with ADC support
+            case 2:
+            case 3:
+            case 4:
+            case 5:
+            case 6: 
+            case 7:
+            case 8:
+            case 9:
+            case 10:
+            case 11:
+            case 12:
+            case 13:
+            case 14:
+            case 17:
+            case 18:
+            case 19:
+            case 20:
+                return PinCapabilities::Native | PinCapabilities::Input | PinCapabilities::Output | PinCapabilities::PullUp |
+                       PinCapabilities::PullDown | PinCapabilities::ADC | PinCapabilities::PWM | PinCapabilities::ISR |
+                       PinCapabilities::UART;
+
+            case 0:  // Normal pins
+            case 15:
+            case 16:
+            case 21:
+            case 26:
+            case 33:
+            case 34:
+            case 35:
+            case 36:
+            case 37:
+            case 38:
+            case 39: 
+            case 40:
+            case 41:
+            case 42:
+            case 43:
+            case 44:
+            case 45:
+            case 46:
+            case 47:
+            case 48:
+                return PinCapabilities::Native | PinCapabilities::Input | PinCapabilities::Output | PinCapabilities::PullUp |
+                       PinCapabilities::PullDown | PinCapabilities::PWM | PinCapabilities::ISR | PinCapabilities::UART;
+
+            case 22:  // SPI flash integrated
+            case 23:
+            case 24:
+            case 25:
+            case 27:
+            case 28:
+            case 29: 
+            case 30:
+            case 31:
+            case 32:
+                return PinCapabilities::Reserved;
+                break;
+
+            default:  // Not mapped to actual GPIO pins
+                return PinCapabilities::None;
+        }
+#else
         switch (index) {
             case 0:  // Outputs PWM signal at boot
                 return PinCapabilities::Native | PinCapabilities::Input | PinCapabilities::Output | PinCapabilities::PullUp |
@@ -80,6 +146,7 @@ namespace Pins {
             default:  // Not mapped to actual GPIO pins
                 return PinCapabilities::None;
         }
+#endif
     }
 
     GPIOPinDetail::GPIOPinDetail(pinnum_t index, PinOptionsParser options) :
