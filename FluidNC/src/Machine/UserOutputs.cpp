@@ -93,5 +93,8 @@ namespace Machine {
         handler.item("digital1_pin", _digitalOutput[1]);
         handler.item("digital2_pin", _digitalOutput[2]);
         handler.item("digital3_pin", _digitalOutput[3]);
+#ifdef SERAMA
+        handler.item("digital4_pin", _digitalOutput[4]);
+#endif
     }
 }
