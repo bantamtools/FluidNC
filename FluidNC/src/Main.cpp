@@ -31,6 +31,7 @@ extern void make_user_commands();
 void setup() {
     disableCore0WDT();
     try {
+    	timing_init();
 #ifdef ARDUINO_USB_CDC_ON_BOOT
         usbInit();       // Setup serial port
         Usb0.println();  // create some white space after ESP32 boot info
