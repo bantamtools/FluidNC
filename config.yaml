@@ -73,6 +73,7 @@ axes:
 i2c0:
    sda_pin: gpio.41
    scl_pin: gpio.40
+   frequency: 400000
         
 oled:
    i2c_num: 0
