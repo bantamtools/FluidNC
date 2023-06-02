@@ -13,9 +13,9 @@ axes:
   shared_stepper_reset_pin: NO_PIN
   
   x:
-    steps_per_mm: 36.3636
-    max_rate_mm_per_min: 1000
-    acceleration_mm_per_sec2: 25
+    steps_per_mm: 400
+    max_rate_mm_per_min: 15000
+    acceleration_mm_per_sec2: 100000
     max_travel_mm: 1000
     homing:
       cycle: 2
@@ -32,9 +32,9 @@ axes:
       null_motor:
 
   y:
-    steps_per_mm: 34.0426
-    max_rate_mm_per_min: 1000
-    acceleration_mm_per_sec2: 25
+    steps_per_mm: 400
+    max_rate_mm_per_min: 13000
+    acceleration_mm_per_sec2: 100000
     max_travel_mm: 1000
     homing:
       cycle: 3
@@ -51,9 +51,9 @@ axes:
       null_motor:
 
   z:
-    steps_per_mm: 27.1186
-    max_rate_mm_per_min: 1000
-    acceleration_mm_per_sec2: 25
+    steps_per_mm: 400
+    max_rate_mm_per_min: 13000
+    acceleration_mm_per_sec2: 100000
     max_travel_mm: 1000
     homing:
       cycle: 1
