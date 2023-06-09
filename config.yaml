@@ -1,6 +1,12 @@
 name: "Serama"
 board: "Serama"
 
+start:
+  must_home: false
+
+control:
+    feed_hold_pin: gpio.36:low
+
 stepping:
   engine: RMT
   idle_ms: 255
@@ -27,6 +33,7 @@ axes:
     
     motor0:
       limit_neg_pin: gpio.1:high
+      pulloff_mm: 2
       stepstick:
         disable_pin: gpio.15:low
         direction_pin: gpio.16
