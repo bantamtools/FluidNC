@@ -43,7 +43,7 @@ axes:
     homing:
       cycle: 3
       mpos_mm: 5
-      positive_direction: false
+      positive_direction: true
       feed_mm_per_min: 500
       seek_mm_per_min: 2000
 
@@ -51,7 +51,7 @@ axes:
       limit_neg_pin: gpio.2:low
       stepstick:
         disable_pin: gpio.18:low
-        direction_pin: gpio.21
+        direction_pin: gpio.21:low
         step_pin: gpio.26
     motor1:
       null_motor:
