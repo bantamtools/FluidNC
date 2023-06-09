@@ -66,11 +66,12 @@ axes:
       cycle: 1
       mpos_mm: 2
       positive_direction: true
-      feed_mm_per_min: 100
-      seek_mm_per_min: 500
+      feed_mm_per_min: 500
+      seek_mm_per_min: 1000
 
     motor0:
       limit_pos_pin: gpio.4:high
+      pulloff_mm: 4
       stepstick:
         disable_pin: gpio.47:low
         direction_pin: gpio.33
