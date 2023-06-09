@@ -55,7 +55,7 @@ axes:
       null_motor:
 
   z:
-    steps_per_mm: 16
+    steps_per_mm: 22
     max_rate_mm_per_min: 10000
     acceleration_mm_per_sec2: 10000
     max_travel_mm: 16
@@ -67,7 +67,7 @@ axes:
       seek_mm_per_min: 500
 
     motor0:
-      limit_neg_pin: gpio.4:high
+      limit_pos_pin: gpio.4:high
       stepstick:
         disable_pin: gpio.47:low
         direction_pin: gpio.33
