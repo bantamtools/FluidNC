@@ -17,6 +17,7 @@ axes:
     max_rate_mm_per_min: 10000
     acceleration_mm_per_sec2: 10000
     max_travel_mm: 200
+    soft_limits: true
     homing:
       cycle: 2
       mpos_mm: 4
@@ -38,6 +39,7 @@ axes:
     max_rate_mm_per_min: 10000
     acceleration_mm_per_sec2: 10000
     max_travel_mm: 230
+    soft_limits: true
     homing:
       cycle: 3
       mpos_mm: 5
@@ -59,6 +61,7 @@ axes:
     max_rate_mm_per_min: 10000
     acceleration_mm_per_sec2: 10000
     max_travel_mm: 16
+    soft_limits: true
     homing:
       cycle: 1
       mpos_mm: 2
