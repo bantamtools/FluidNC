@@ -42,7 +42,7 @@ axes:
       null_motor:
 
   y:
-    steps_per_mm: 32
+    steps_per_mm: 31.5
     max_rate_mm_per_min: 10000
     acceleration_mm_per_sec2: 10000
     max_travel_mm: 230
