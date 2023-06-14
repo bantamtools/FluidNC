@@ -9,26 +9,26 @@ control:
 
 stepping:
   engine: RMT
-  idle_ms: 254
-  dir_delay_us: 1
-  pulse_us: 4
-  disable_delay_us: 0
+  idle_ms: 255
+  dir_delay_us: 4
+  pulse_us: 8
+  disable_delay_us: 4
 
 axes:
   shared_stepper_disable_pin: NO_PIN
   shared_stepper_reset_pin: NO_PIN
   
   x:
-    steps_per_mm: 53
-    max_rate_mm_per_min: 5000
-    acceleration_mm_per_sec2: 5000
+    steps_per_mm: 26.5
+    max_rate_mm_per_min: 10000
+    acceleration_mm_per_sec2: 10000
     max_travel_mm: 200
     soft_limits: false
     homing:
       cycle: 2
       mpos_mm: 4
       positive_direction: false
-      feed_mm_per_min: 500
+      feed_mm_per_min: 200
       seek_mm_per_min: 2000
     
     motor0:
@@ -42,9 +42,9 @@ axes:
       null_motor:
 
   y:
-    steps_per_mm: 47
-    max_rate_mm_per_min: 5000
-    acceleration_mm_per_sec2: 5000
+    steps_per_mm: 23.5
+    max_rate_mm_per_min: 10000
+    acceleration_mm_per_sec2: 10000
     max_travel_mm: 230
     soft_limits: false
     homing:
@@ -61,7 +61,7 @@ axes:
       null_motor:
 
   z:
-    steps_per_mm: 22
+    steps_per_mm: 11
     max_rate_mm_per_min: 5000
     acceleration_mm_per_sec2: 5000
     max_travel_mm: 16
