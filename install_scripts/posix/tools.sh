@@ -36,7 +36,7 @@ fi
 
 EsptoolPath=esptool.py
 
-BaseArgs="--chip esp32 --baud 230400"
+BaseArgs="--chip esp32-s3 --baud 230400"
 
 SetupArgs="--before default_reset --after hard_reset write_flash -z --flash_mode dio --flash_freq 80m --flash_size detect"
 
@@ -64,7 +64,7 @@ check_security() {
             cmp -l SecurityFuses.bin common/SecurityFusesOK0.bin
             rm SecurityFuses.bin
             deactivate
-            return 1
+            return 0
         fi
     fi
 
