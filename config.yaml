@@ -48,11 +48,7 @@ axes:
     max_travel_mm: 230
     soft_limits: false
     homing:
-      cycle: 3
-      mpos_mm: 5
-      positive_direction: true
-      feed_mm_per_min: 500
-      seek_mm_per_min: 2000
+      cycle: -1
 
     motor0:
       limit_neg_pin: gpio.2:low
