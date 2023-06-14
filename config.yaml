@@ -9,7 +9,7 @@ control:
 
 stepping:
   engine: RMT
-  idle_ms: 255
+  idle_ms: 254
   dir_delay_us: 1
   pulse_us: 4
   disable_delay_us: 0
@@ -20,10 +20,10 @@ axes:
   
   x:
     steps_per_mm: 53
-    max_rate_mm_per_min: 10000
-    acceleration_mm_per_sec2: 10000
+    max_rate_mm_per_min: 5000
+    acceleration_mm_per_sec2: 5000
     max_travel_mm: 200
-    soft_limits: true
+    soft_limits: false
     homing:
       cycle: 2
       mpos_mm: 4
@@ -43,10 +43,10 @@ axes:
 
   y:
     steps_per_mm: 47
-    max_rate_mm_per_min: 10000
-    acceleration_mm_per_sec2: 10000
+    max_rate_mm_per_min: 5000
+    acceleration_mm_per_sec2: 5000
     max_travel_mm: 230
-    soft_limits: true
+    soft_limits: false
     homing:
       cycle: 3
       mpos_mm: 5
@@ -56,7 +56,7 @@ axes:
 
     motor0:
       limit_neg_pin: gpio.2:low
-      pulloff_mm: 4
+      pulloff_mm: 10
       stepstick:
         disable_pin: gpio.18:low
         direction_pin: gpio.21:low
@@ -66,10 +66,10 @@ axes:
 
   z:
     steps_per_mm: 22
-    max_rate_mm_per_min: 10000
-    acceleration_mm_per_sec2: 10000
+    max_rate_mm_per_min: 5000
+    acceleration_mm_per_sec2: 5000
     max_travel_mm: 16
-    soft_limits: true
+    soft_limits: false
     homing:
       cycle: 1
       mpos_mm: 2
