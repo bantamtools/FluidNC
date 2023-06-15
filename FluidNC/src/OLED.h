@@ -25,7 +25,6 @@ public:
     static Layout filenameLayout;
     static Layout percentLayout128;
     static Layout percentLayout64;
-    static Layout limitLabelLayout;
     static Layout posLabelLayout;
     static Layout radioAddrLayout;
 
@@ -57,6 +56,7 @@ private:
     void   parse_numbers(std::string s, float* nums, int maxnums);
 
     void show_limits(bool probe, const bool* limits);
+    void show_main_menu();
     void show_state();
     void show_file();
     void show_dro(const float* axes, bool isMpos, bool* limits);

@@ -11,15 +11,14 @@ void OLED::show(Layout& layout, const String& msg) {
     _oled->drawString(layout._x, layout._y, msg);
 }
 
-OLED::Layout OLED::bannerLayout128  = { 0, 0, 0, ArialMT_Plain_24, TEXT_ALIGN_CENTER };
+OLED::Layout OLED::bannerLayout128  = { 0, 0, 0, ArialMT_Plain_16, TEXT_ALIGN_CENTER };
 OLED::Layout OLED::bannerLayout64   = { 0, 0, 0, ArialMT_Plain_16, TEXT_ALIGN_CENTER };
-OLED::Layout OLED::stateLayout      = { 0, 0, 0, ArialMT_Plain_16, TEXT_ALIGN_LEFT };
+OLED::Layout OLED::stateLayout      = { 0, 0, 0, ArialMT_Plain_10, TEXT_ALIGN_LEFT };
 OLED::Layout OLED::tickerLayout     = { 63, 0, 128, ArialMT_Plain_10, TEXT_ALIGN_CENTER };
 OLED::Layout OLED::filenameLayout   = { 63, 13, 128, ArialMT_Plain_10, TEXT_ALIGN_CENTER };
 OLED::Layout OLED::percentLayout128 = { 128, 0, 128, ArialMT_Plain_16, TEXT_ALIGN_RIGHT };
 OLED::Layout OLED::percentLayout64  = { 64, 0, 64, ArialMT_Plain_16, TEXT_ALIGN_RIGHT };
-OLED::Layout OLED::limitLabelLayout = { 80, 14, 128, ArialMT_Plain_10, TEXT_ALIGN_LEFT };
-OLED::Layout OLED::posLabelLayout   = { 60, 14, 128, ArialMT_Plain_10, TEXT_ALIGN_RIGHT };
+OLED::Layout OLED::posLabelLayout   = { 110, 12, 128, ArialMT_Plain_10, TEXT_ALIGN_RIGHT };
 OLED::Layout OLED::radioAddrLayout  = { 50, 0, 128, ArialMT_Plain_10, TEXT_ALIGN_LEFT };
 
 void OLED::afterParse() {
@@ -76,7 +75,7 @@ void OLED::init() {
 
     _oled->clear();
 
-    show((_width == 128) ? bannerLayout128 : bannerLayout64, "FluidNC");
+    show((_width == 128) ? bannerLayout128 : bannerLayout64, "Bantam Tools");
 
     _oled->display();
 
@@ -107,6 +106,16 @@ void OLED::show_limits(bool probe, const bool* limits) {
         draw_checkbox(80, 27 + (axis * 10), 7, 7, limits[axis]);
     }
 }
+
+void OLED::show_main_menu() {
+
+    _oled->setTextAlignment(TEXT_ALIGN_LEFT);
+    _oled->setFont(ArialMT_Plain_16);
+    _oled->drawString(0, 12, "Home");
+    _oled->drawString(0, 30, "Jog");
+    _oled->drawString(0, 48, "Run File");
+}
+
 void OLED::show_file() {
     int pct = int(_percent);
     if (_filename.length() == 0) {
@@ -145,7 +154,6 @@ void OLED::show_dro(const float* axes, bool isMpos, bool* limits) {
     auto n_axis = config->_axes->_numberAxis;
     char axisVal[20];
 
-    show(limitLabelLayout, "L");
     show(posLabelLayout, isMpos ? "M Pos" : "W Pos");
 
     _oled->setFont(ArialMT_Plain_10);
@@ -162,11 +170,11 @@ void OLED::show_dro(const float* axes, bool isMpos, bool* limits) {
             axis_letter += limits[axis] ? "L" : ":";
         }
         _oled->setTextAlignment(TEXT_ALIGN_LEFT);
-        _oled->drawString(0, oled_y_pos, axis_letter);
+        _oled->drawString(68 + 0, oled_y_pos, axis_letter);
 
         _oled->setTextAlignment(TEXT_ALIGN_RIGHT);
         snprintf(axisVal, 20 - 1, "%.3f", axes[axis]);
-        _oled->drawString((_width == 128) ? 60 : 63, oled_y_pos, axisVal);
+        _oled->drawString((_width == 128) ? 68 + 60 : 68 + 63, oled_y_pos, axisVal);
     }
     _oled->display();
 }
@@ -347,7 +355,7 @@ void OLED::parse_status_report() {
     _oled->clear();
     show_state();
     show_file();
-    show_limits(probe, limits);
+    show_main_menu();
     show_dro(axes, isMpos, limits);
     show_radio_info();
     _oled->display();
