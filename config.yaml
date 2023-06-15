@@ -86,7 +86,7 @@ axes:
       null_motor:
 
   z:
-    steps_per_mm: 11
+    steps_per_mm: 12.25
     max_rate_mm_per_min: 5000
     acceleration_mm_per_sec2: 5000
     max_travel_mm: 16
