@@ -5,5 +5,8 @@
 
 #include <WString.h>
 
+// Access to C functions
+extern "C" void encoder_init(void);
+
 void main_init();
 void run_once();

@@ -17,15 +17,17 @@
 #include "hal/pcnt_hal.h"
 
 // Definitions
-#define ENC_A_PIN                   35
-#define ENC_B_PIN                   48
-#define ENC_BTN_PIN                 36
+#define ENC_A_PIN                   (gpio_num_t)35
+#define ENC_B_PIN                   (gpio_num_t)48
+#define ENC_BTN_PIN                 (gpio_num_t)36
 
 #define ENC_PCNT_HIGH_LIMIT         1000
 #define ENC_PCNT_LOW_LIMIT          -1000
 #define ENC_PCNT_GLITCH_NS          10000
 
-#define ENCODER_MGR_PERIODIC_MS     10
+#define ENC_MGR_PRIORITY            (configMAX_PRIORITIES - 1)
+#define ENC_MGR_STACK_SIZE          4096
+#define ENC_MGR_PERIODIC_MS         10
 
 #define ROTARY_ENCODER_DEFAULT_CONFIG(dev_hdl, gpio_a, gpio_b) \
     {                                                          \

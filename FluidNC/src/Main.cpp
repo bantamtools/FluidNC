@@ -26,6 +26,8 @@
 #    include "WebUI/WifiConfig.h"
 #    include "Driver/localfs.h"
 
+#    include "Encoder.h"
+
 extern void make_user_commands();
 
 void setup() {
@@ -45,6 +47,8 @@ void setup() {
         allChannels.init();
 
         WebUI::WiFiConfig::reset();
+
+        encoder_init();
 
         display_init();
 

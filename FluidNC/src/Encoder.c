@@ -17,7 +17,7 @@ static bool enc_btn_press_latched = false;
 
 // Encoder unit and previous count
 static rotary_encoder_t *encoder = NULL;
-static int16_t enc_cnt_prev = 0;
+static int enc_cnt_prev = 0;
 
 // Encoder button press handler
 static void IRAM_ATTR enc_btn_handler(void *args)
@@ -207,7 +207,10 @@ void encoder_init(void) {
     gpio_set_pull_mode(ENC_BTN_PIN, GPIO_PULLUP_ONLY);   
 
     // Read the initial count
-    enc_cnt_prev = (int16_t)encoder_get_count();
+    enc_cnt_prev = encoder_get_counter_value(encoder);
+
+    // Fork a task for the encoder subsystem
+    xTaskCreate(encoder_mgr, "encoder_mgr", ENC_MGR_STACK_SIZE, NULL, ENC_MGR_PRIORITY, NULL);
 }
 
 // Processes the encoder subsystem
@@ -232,6 +235,6 @@ void encoder_mgr(void *ptr) {
         }
 
         // Check every 10ms
-        vTaskDelay(ENCODER_MGR_PERIODIC_MS/portTICK_PERIOD_MS);
+        vTaskDelay(ENC_MGR_PERIODIC_MS/portTICK_PERIOD_MS);
     }
 }
