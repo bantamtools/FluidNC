@@ -1,6 +1,6 @@
 // Copyright (c) 2023 Matt Staniszewski, Bantam Tools
 
-#include "encoder.h"
+#include "Encoder.h"
 
 static const char *TAG = "encoder";
 
