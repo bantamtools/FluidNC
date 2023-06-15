@@ -8,18 +8,18 @@ control:
     feed_hold_pin: gpio.36:low
 
 stepping:
-  engine: RMT
+  engine: TIMED
   idle_ms: 255
-  dir_delay_us: 4
-  pulse_us: 8
-  disable_delay_us: 4
+  dir_delay_us: 1
+  pulse_us: 4
+  disable_delay_us: 1
 
 axes:
   shared_stepper_disable_pin: NO_PIN
   shared_stepper_reset_pin: NO_PIN
   
   x:
-    steps_per_mm: 36
+    steps_per_mm: 38.5
     max_rate_mm_per_min: 7500
     acceleration_mm_per_sec2: 5000
     max_travel_mm: 200
@@ -42,7 +42,7 @@ axes:
       null_motor:
 
   y:
-    steps_per_mm: 31.5
+    steps_per_mm: 34.5
     max_rate_mm_per_min: 7500
     acceleration_mm_per_sec2: 5000
     max_travel_mm: 230
