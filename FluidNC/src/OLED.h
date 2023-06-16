@@ -7,7 +7,31 @@
 #include "Channel.h"
 #include "SSD1306_I2C.h"
 
+#define MENU_NAME_MAX_STR 10
+#define MENU_MAX_ACTIVE_ENTRIES 3
+
 typedef const uint8_t* font_t;
+
+typedef struct MenuNodeType
+{
+    // Menu neighbor attributes
+    struct MenuNodeType *prev;
+    struct MenuNodeType *next;
+
+    // Submenu attributes
+    struct MenuType *child;
+
+    // Menu entry characteristics
+    char display_name[MENU_NAME_MAX_STR];
+    bool selected;
+
+} MenuNodeType;
+
+typedef struct MenuType {
+    struct MenuType *parent;
+    struct MenuNodeType *head;
+    struct MenuNodeType *active_head;
+} MenuType;
 
 class OLED : public Channel, public Configuration::Configurable {
 public:
@@ -29,6 +53,9 @@ public:
     static Layout radioAddrLayout;
 
 private:
+    MenuType *main_menu, *current_menu;
+    int enc_diff = 0;
+
     std::string _report;
 
     String _radio_info;
@@ -44,6 +71,13 @@ private:
 
     uint8_t _i2c_num = 0;
 
+    struct MenuNodeType *menu_get_active_tail(MenuType *);
+    void menu_initialize(MenuType *, MenuType *);
+    void menu_add(MenuType *, MenuType *, const char *);
+    void menu_delete(MenuType *);
+    void menu_init();
+    struct MenuNodeType *menu_update_selection();
+
     void parse_report();
     void parse_status_report();
     void parse_gcode_report();
@@ -51,12 +85,13 @@ private:
     void parse_IP();
     void parse_AP();
     void parse_BT();
+    void parse_encoder();
 
     float* parse_axes(std::string s);
     void   parse_numbers(std::string s, float* nums, int maxnums);
 
     void show_limits(bool probe, const bool* limits);
-    void show_main_menu();
+    void show_menu();
     void show_state();
     void show_file();
     void show_dro(const float* axes, bool isMpos, bool* limits);

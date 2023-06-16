@@ -310,6 +310,13 @@ void protocol_main_loop() {
             idleEndTime = 0;  //
             config->_axes->set_disable(true);
         }
+
+        //TEMP
+        int16_t enc_diff = config->_encoder->get_difference();
+        if (enc_diff != 0) {
+            log_info("Encoder difference -> " << enc_diff);
+        }
+
     }
     return; /* Never reached */
 }

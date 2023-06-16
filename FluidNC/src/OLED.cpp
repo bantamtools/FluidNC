@@ -2,6 +2,167 @@
 
 #include "Machine/MachineConfig.h"
 
+// Helper function to return the active tail
+struct MenuNodeType *OLED::menu_get_active_tail(MenuType *menu) {
+
+    bool active_area = false;
+    struct MenuNodeType *entry;
+    int num_active_nodes = 0;
+
+    // Traverse the linked list
+    entry = menu->head;  // Reset to head
+    while (entry->next && num_active_nodes < (MENU_MAX_ACTIVE_ENTRIES - 1)) {
+
+        // Count the active window nodes
+        if (entry == menu->active_head) {
+            active_area = true;
+        }
+        if (active_area) {
+          num_active_nodes++;  
+        }
+
+        // Go to the next entry
+        entry = entry->next;
+    }
+    return entry;
+}
+
+// Initializes a menu with default settings
+void OLED::menu_initialize(MenuType *menu, MenuType *parent) {
+    
+    // Initialize the menu to empty with no active window
+    menu->head = menu->active_head = NULL;
+
+    // Set the parent menu if one exists
+    menu->parent = parent;
+}
+
+// Adds a node entry to the given menu
+void OLED::menu_add(MenuType *menu, MenuType *submenu, const char *display_name) {
+
+    // Allocate memory for the new entry
+    struct MenuNodeType* new_entry = (MenuNodeType*)malloc(sizeof(struct MenuNodeType));
+
+    // Populate the entry
+    new_entry->prev = NULL;
+    new_entry->next = NULL;
+
+    new_entry->child = submenu;
+
+    strncpy(new_entry->display_name, display_name, MENU_NAME_MAX_STR);  // Cuts off long display names
+    new_entry->selected = false;
+
+    // No menu entries, insert as the head, set as active window head and select it
+    if (menu->head == NULL) {
+        new_entry->prev = NULL;
+        new_entry->selected = true;
+        menu->head = new_entry;
+        menu->active_head = new_entry;
+        return;
+    }
+
+    // List not empty, traverse to the end to add menu item
+    struct MenuNodeType* temp = menu->head;
+
+    // Looking for tail
+    while (temp->next != NULL) {
+        temp = temp->next;
+    }
+
+    // Add menu item at the tail
+    temp->next = new_entry;
+    new_entry->prev = temp;
+}
+
+// Deletes all nodes in the given menu
+void OLED::menu_delete(MenuType *menu) {
+
+    struct MenuNodeType* entry = menu->head;
+
+    // Traverse the menu until empty, clearing the memory for the nodes
+    while(entry) {
+
+        // Attach menu head to next node
+        menu->head = entry->next;
+
+        // Set new node to head unless it's empty
+        if (menu->head) {
+            menu->head->prev = NULL;
+        }
+
+        // Free the old node memory
+        free(entry);
+        entry = NULL;
+
+        // Advance the pointer
+        entry = menu->head;
+    }
+
+    // Mark the head and active head NULL to prevent use-after-free
+    menu->head = menu->active_head = NULL;
+}
+
+// Initializes the menu subsystem
+void OLED::menu_init(void) {
+
+    // Allocate memory for the menus
+    this->main_menu = (MenuType*)malloc(sizeof(struct MenuType));
+
+    // Initialize the menus
+    menu_initialize(this->main_menu, NULL);
+
+    // Set main menu as current
+    this->current_menu = this->main_menu;
+
+    // Create the interface, load and debug/info buttons
+    menu_add(this->main_menu, NULL, "Home");
+    menu_add(this->main_menu, NULL, "Jog");
+    menu_add(this->main_menu, NULL, "Run File");
+}
+
+// Updates the current menu selection
+struct MenuNodeType *OLED::menu_update_selection(void) {
+
+    MenuNodeType *entry = current_menu->head;  // Start at the top of the active menu
+    MenuNodeType *selected_entry = entry;
+    MenuNodeType *active_tail;
+
+    while (entry) {
+        
+        // Found selected entry and we have scrolled
+        if (entry->selected && (this->enc_diff != 0)) {
+
+            // Adjust menu selection and active window as needed
+            if (this->enc_diff > 0 && entry->next != NULL) {        // Forwards until hit tail
+                selected_entry = entry->next;
+                entry->next->selected = true;
+                entry->selected = false;
+                active_tail = this->menu_get_active_tail(current_menu);
+                if (active_tail->next && active_tail->next->selected) {  // Shift the window once scroll past max entries
+                    current_menu->active_head = current_menu->active_head->next;
+                }
+
+            } else if (this->enc_diff < 0 && entry->prev != NULL) { // Backwards until hit head
+                selected_entry = entry->prev;
+                entry->prev->selected = true;
+                entry->selected = false;
+                if (current_menu->active_head->prev && current_menu->active_head->prev->selected) {  // Shift the window once scroll past max entries
+                    current_menu->active_head = current_menu->active_head->prev;
+                }
+            }
+            break;
+
+        // No update or operation in progress, set current selection entry
+        } else if (entry->selected) {
+            selected_entry = entry;
+            break;
+        }
+        entry = entry->next;      
+    }
+
+    return selected_entry;
+}
+
 void OLED::show(Layout& layout, const String& msg) {
     if (_width < layout._width_required) {
         return;
@@ -81,6 +242,8 @@ void OLED::init() {
 
     allChannels.registration(this);
     setReportInterval(500);
+
+    this->menu_init();
 }
 
 Channel* OLED::pollLine(char* line) {
@@ -107,16 +270,32 @@ void OLED::show_limits(bool probe, const bool* limits) {
     }
 }
 
-void OLED::show_main_menu() {
+void OLED::show_menu() {
 
     _oled->setTextAlignment(TEXT_ALIGN_LEFT);
     _oled->setFont(ArialMT_Plain_16);
-    _oled->fillRect(0, 12, 60, 16);
-    _oled->setColor(BLACK);
-    _oled->drawString(0, 12, "Home");
-    _oled->setColor(WHITE);
-    _oled->drawString(0, 30, "Jog");
-    _oled->drawString(0, 48, "Run File");
+
+    // Update the menu selection
+    MenuNodeType *selected_entry = this->menu_update_selection();
+
+    // Traverse the list and print out each menu entry name
+    MenuNodeType *entry = current_menu->active_head; // Start at the beginning of the active window
+    int i = 0;
+    while (entry && entry->display_name && i < MENU_MAX_ACTIVE_ENTRIES) {
+
+        // Highlight selected entry
+        (entry->selected) ? _oled->setColor(WHITE) : _oled->setColor(BLACK);
+        _oled->fillRect(0, 12 + (18 * i), 64, 18);
+        (entry->selected) ? _oled->setColor(BLACK) : _oled->setColor(WHITE);
+
+        // Write out the entry name
+        _oled->drawString(0, 12 + (18 * i), (String)(entry->display_name));
+
+        // Advance the line and pointer
+        entry = entry->next;
+        i++;
+    }
+    _oled->display();
 }
 
 void OLED::show_file() {
@@ -358,7 +537,7 @@ void OLED::parse_status_report() {
     _oled->clear();
     show_state();
     show_file();
-    show_main_menu();
+    show_menu();
     show_dro(axes, isMpos, limits);
     show_radio_info();
     _oled->display();
@@ -453,6 +632,19 @@ void OLED::parse_BT() {
     delay_ms(_radio_delay);
 }
 
+//[MSG:INFO: Encoder difference -> 1]
+void OLED::parse_encoder() {
+
+    size_t  start   = strlen("[MSG:INFO: Encoder difference -> ");
+    size_t  end     = _report.rfind("]");
+    
+    // Save off the encoder difference to update the menu
+    this->enc_diff = stoi(_report.substr(start, end - start));
+
+    // Refresh the menu
+    this->show_menu();
+}
+
 void OLED::parse_report() {
     if (_report.length() == 0) {
         return;
@@ -479,6 +671,10 @@ void OLED::parse_report() {
     }
     if (_report.rfind("[MSG:INFO: BT Started with ", 0) == 0) {
         parse_BT();
+        return;
+    }
+    if (_report.rfind("[MSG:INFO: Encoder difference -> ", 0) == 0) {
+        parse_encoder();
         return;
     }
 }
