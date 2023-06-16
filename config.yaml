@@ -5,7 +5,7 @@ start:
   must_home: false
 
 control:
-    enter_pin: gpio.36:low
+  enter_pin: gpio.36:low
 
 stepping:
   engine: RMT
