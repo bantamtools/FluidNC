@@ -30,6 +30,8 @@
 
 extern void make_user_commands();
 
+Encoder *encoder = new Encoder();
+
 void setup() {
     disableCore0WDT();
     try {
@@ -48,7 +50,7 @@ void setup() {
 
         WebUI::WiFiConfig::reset();
 
-        encoder_init();
+        encoder->init();
 
         display_init();
 
