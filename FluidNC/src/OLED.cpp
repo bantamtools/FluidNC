@@ -2,6 +2,25 @@
 
 #include "Machine/MachineConfig.h"
 
+// Returns the selected entry
+struct MenuNodeType *OLED::menu_get_selected(void) {
+
+    // Traverse the list and print out each menu entry name
+    MenuNodeType *entry = current_menu->active_head; // Start at the beginning of the active window
+    int i = 0;
+    while (entry) {
+
+        // Found selected entry
+        if (entry->selected)
+            break;
+
+        // Advance the line and pointer
+        entry = entry->next;
+    }
+
+    return entry;
+}
+
 // Helper function to return the active tail
 struct MenuNodeType *OLED::menu_get_active_tail(MenuType *menu) {
 
@@ -121,10 +140,9 @@ void OLED::menu_init(void) {
 }
 
 // Updates the current menu selection
-struct MenuNodeType *OLED::menu_update_selection(void) {
+void OLED::menu_update_selection(void) {
 
     MenuNodeType *entry = current_menu->head;  // Start at the top of the active menu
-    MenuNodeType *selected_entry = entry;
     MenuNodeType *active_tail;
 
     while (entry) {
@@ -134,7 +152,6 @@ struct MenuNodeType *OLED::menu_update_selection(void) {
 
             // Adjust menu selection and active window as needed
             if (this->enc_diff > 0 && entry->next != NULL) {        // Forwards until hit tail
-                selected_entry = entry->next;
                 entry->next->selected = true;
                 entry->selected = false;
                 active_tail = this->menu_get_active_tail(current_menu);
@@ -143,7 +160,6 @@ struct MenuNodeType *OLED::menu_update_selection(void) {
                 }
 
             } else if (this->enc_diff < 0 && entry->prev != NULL) { // Backwards until hit head
-                selected_entry = entry->prev;
                 entry->prev->selected = true;
                 entry->selected = false;
                 if (current_menu->active_head->prev && current_menu->active_head->prev->selected) {  // Shift the window once scroll past max entries
@@ -154,13 +170,10 @@ struct MenuNodeType *OLED::menu_update_selection(void) {
 
         // No update or operation in progress, set current selection entry
         } else if (entry->selected) {
-            selected_entry = entry;
             break;
         }
         entry = entry->next;      
     }
-
-    return selected_entry;
 }
 
 void OLED::show(Layout& layout, const String& msg) {
@@ -276,7 +289,7 @@ void OLED::show_menu() {
     _oled->setFont(ArialMT_Plain_16);
 
     // Update the menu selection
-    MenuNodeType *selected_entry = this->menu_update_selection();
+    this->menu_update_selection();
 
     // Traverse the list and print out each menu entry name
     MenuNodeType *entry = current_menu->active_head; // Start at the beginning of the active window

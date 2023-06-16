@@ -52,6 +52,8 @@ public:
     static Layout posLabelLayout;
     static Layout radioAddrLayout;
 
+    struct MenuNodeType *menu_get_selected();
+
 private:
     MenuType *main_menu, *current_menu;
     int enc_diff = 0;
@@ -76,7 +78,7 @@ private:
     void menu_add(MenuType *, MenuType *, const char *);
     void menu_delete(MenuType *);
     void menu_init();
-    struct MenuNodeType *menu_update_selection();
+    void menu_update_selection();
 
     void parse_report();
     void parse_status_report();

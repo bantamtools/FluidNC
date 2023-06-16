@@ -1023,21 +1023,7 @@ static void protocol_do_limit(void* arg) {
 
 static void protocol_do_enter() {
     
-    log_info("protocol_do_enter " << state_name());
-
-    switch (sys.state) {
-        case State::ConfigAlarm:
-        case State::Alarm:
-        case State::CheckMode:
-        case State::SafetyDoor:
-        case State::Sleep:
-        case State::Homing:
-        case State::Hold:
-        case State::Idle:
-        case State::Cycle:
-        case State::Jog:
-        default: return;
-    }
+    log_info("RUN OPERATION -> " << config->_oled->menu_get_selected()->display_name);
 }
 
 ArgEvent feedOverrideEvent { protocol_do_feed_override };
