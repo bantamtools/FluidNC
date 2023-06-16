@@ -1039,7 +1039,11 @@ static void protocol_do_enter() {
 
         // Run selected operation when IDLE
         case State::Idle:
-            log_info("RUN OPERATION -> " << config->_oled->menu_get_selected()->display_name);
+            
+            // Home command
+            if (strcmp(config->_oled->menu_get_selected()->display_name, "Home") == 0) {
+                Machine::Homing::run_cycles(Machine::Homing::AllCycles);
+            }
             break;
 
         default: break;
