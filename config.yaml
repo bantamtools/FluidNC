@@ -4,9 +4,6 @@ board: "Serama"
 start:
   must_home: false
 
-control:
-    feed_hold_pin: gpio.36:low
-
 stepping:
   engine: RMT
   idle_ms: 255

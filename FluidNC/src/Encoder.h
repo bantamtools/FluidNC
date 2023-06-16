@@ -11,6 +11,7 @@
 #include "driver/pcnt.h"
 #include "esp_attr.h"
 #include "esp_log.h"
+#include "Logging.h"
 #include <limits>
 
 // Definitions
@@ -31,17 +32,13 @@ public:
     bool is_pressed();
 	int16_t get_value();
     int16_t get_difference();
-    void mgr(void *);
 
 protected:
 
-    void IRAM_ATTR btn_handler(void *);
+    static void mgr(void*);
 
     gpio_num_t a_pin, b_pin;
 	pcnt_unit_t pcnt_unit;
-
-    volatile bool enc_btn_pressed;
-    bool enc_btn_press_latched;
 
 	int previous_value;
 };
