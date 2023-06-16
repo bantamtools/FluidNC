@@ -1023,7 +1023,27 @@ static void protocol_do_limit(void* arg) {
 
 static void protocol_do_enter() {
     
-    log_info("RUN OPERATION -> " << config->_oled->menu_get_selected()->display_name);
+    switch (sys.state) {
+
+        // Button press does nothing in these states
+        case State::Alarm:
+        case State::ConfigAlarm:
+        case State::CheckMode:
+        case State::Cycle:
+        case State::Jog:
+        case State::Homing:
+        case State::Sleep:
+        case State::Hold:
+        case State::SafetyDoor:
+            break;
+
+        // Run selected operation when IDLE
+        case State::Idle:
+            log_info("RUN OPERATION -> " << config->_oled->menu_get_selected()->display_name);
+            break;
+
+        default: break;
+    }
 }
 
 ArgEvent feedOverrideEvent { protocol_do_feed_override };
