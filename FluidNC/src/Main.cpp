@@ -50,8 +50,6 @@ void setup() {
 
         WebUI::WiFiConfig::reset();
 
-        encoder->init();
-
         display_init();
 
         protocol_init();
@@ -107,6 +105,8 @@ void setup() {
             if (config->_oled) {
                 config->_oled->init();
             }
+            
+            config->_encoder->init();
 
             config->_stepping->init();  // Configure stepper interrupt timers
 

@@ -12,6 +12,8 @@
 #include "esp_attr.h"
 #include "esp_log.h"
 #include "Logging.h"
+#include "Config.h"
+#include "Configuration/Configurable.h"
 #include <limits>
 
 // Definitions
@@ -23,14 +25,20 @@
 #define ENC_MGR_PERIODIC_MS         10
 
 // Class
-class Encoder {
+class Encoder : public Configuration::Configurable {
 
 public:
-	Encoder(gpio_num_t a_pin  = ENC_A_PIN, gpio_num_t b_pin = ENC_B_PIN, pcnt_unit_t pcnt_unit = PCNT_UNIT_0);
-	void init();
+	Encoder();
+    ~Encoder();
+
+    void init();
 	int16_t get_value();
     int16_t get_difference();
 
+    // Configuration handlers.
+    void validate() override;
+    void group(Configuration::HandlerBase& handler) override;
+    
 protected:
     gpio_num_t a_pin, b_pin;
 	pcnt_unit_t pcnt_unit;

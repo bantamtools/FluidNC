@@ -5,12 +5,15 @@
 static const char *TAG = "encoder";
 
 // Encoder constructor
-Encoder::Encoder(gpio_num_t a_pin, gpio_num_t b_pin, pcnt_unit_t pcnt_unit) {
+Encoder::Encoder() {
 
-	this->a_pin = a_pin;
-	this->b_pin = b_pin;
-	this->pcnt_unit = pcnt_unit;
+	this->a_pin = ENC_A_PIN;
+	this->b_pin = ENC_B_PIN;
+	this->pcnt_unit = PCNT_UNIT_0;
 }
+
+// Encoder destructor
+Encoder::~Encoder() {}
 
 // Initializes the encoder subsystem
 void Encoder::init() {
@@ -25,7 +28,7 @@ void Encoder::init() {
 	pcnt_config.pulse_gpio_num = this->b_pin;   // TEMP: Flip this->a_pin;
 	pcnt_config.ctrl_gpio_num = this->a_pin;   // TEMP: Flip this->b_pin;
 	pcnt_config.channel = PCNT_CHANNEL_0;
-	pcnt_config.unit = pcnt_unit;
+	pcnt_config.unit = this->pcnt_unit;
 
 	// What to do on the positive / negative edge of pulse input?
 	pcnt_config.pos_mode = PCNT_COUNT_DIS;      // Keep the counter value on the positive edge
@@ -79,3 +82,8 @@ int16_t Encoder::get_difference() {
     // Return the difference
     return difference;
 }
+
+// Configurable functions
+void Encoder::validate() {}
+
+void Encoder::group(Configuration::HandlerBase& handler) {}
