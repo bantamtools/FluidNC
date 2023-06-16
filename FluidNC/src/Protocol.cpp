@@ -1013,6 +1013,26 @@ static void protocol_do_limit(void* arg) {
         return;
     }
 }
+
+static void protocol_do_enter() {
+    
+    log_info("protocol_do_enter " << state_name());
+
+    switch (sys.state) {
+        case State::ConfigAlarm:
+        case State::Alarm:
+        case State::CheckMode:
+        case State::SafetyDoor:
+        case State::Sleep:
+        case State::Homing:
+        case State::Hold:
+        case State::Idle:
+        case State::Cycle:
+        case State::Jog:
+        default: return;
+    }
+}
+
 ArgEvent feedOverrideEvent { protocol_do_feed_override };
 ArgEvent rapidOverrideEvent { protocol_do_rapid_override };
 ArgEvent spindleOverrideEvent { protocol_do_spindle_override };
@@ -1028,6 +1048,7 @@ NoArgEvent cycleStopEvent { protocol_do_cycle_stop };
 NoArgEvent motionCancelEvent { protocol_do_motion_cancel };
 NoArgEvent sleepEvent { protocol_do_sleep };
 NoArgEvent debugEvent { report_realtime_debug };
+NoArgEvent enterEvent { protocol_do_enter };
 
 // Only mc_reset() is permitted to set rtReset.
 NoArgEvent resetEvent { mc_reset };

@@ -4,17 +4,6 @@
 
 static const char *TAG = "encoder";
 
-// Encoder flags
-static volatile bool enc_btn_pressed = false;
-static bool enc_btn_press_latched = false;
-
-// Encoder button press handler
-static void IRAM_ATTR enc_btn_handler(void *args) {
-
-    log_info("PRESS");
-    enc_btn_pressed = true;
-}
-
 // Encoder constructor
 Encoder::Encoder(gpio_num_t a_pin, gpio_num_t b_pin, pcnt_unit_t pcnt_unit) {
 
@@ -27,15 +16,6 @@ Encoder::Encoder(gpio_num_t a_pin, gpio_num_t b_pin, pcnt_unit_t pcnt_unit) {
 void Encoder::init() {
 
 	pcnt_config_t pcnt_config;
-
-    // Set up the encoder button detect to tell if we've pressed it or not.
-    enc_btn_pressed = false;
-    enc_btn_press_latched = false;
-    gpio_reset_pin(ENC_BTN_PIN); 
-    gpio_set_direction(ENC_BTN_PIN, GPIO_MODE_INPUT);
-    gpio_set_pull_mode(ENC_BTN_PIN, GPIO_PULLUP_ONLY);
-    gpio_set_intr_type(ENC_BTN_PIN, GPIO_INTR_NEGEDGE);
-    gpio_isr_handler_add(ENC_BTN_PIN, enc_btn_handler, (void *)ENC_BTN_PIN);
 
     // Set up encoder A/B pins
 	gpio_set_pull_mode(this->a_pin, GPIO_PULLUP_ONLY);
@@ -75,9 +55,6 @@ void Encoder::init() {
 
     // Store the current encoder value
 	this->previous_value = this->get_value();
-
-    // Fork a task for the encoder subsystem
-    xTaskCreate(mgr, "encoder_mgr", ENC_MGR_STACK_SIZE, NULL, ENC_MGR_PRIORITY, NULL);
 }
 
 // Get the current encoder value
@@ -101,50 +78,4 @@ int16_t Encoder::get_difference() {
 
     // Return the difference
     return difference;
-}
-
-// Checks if the encoder button is pressed
-bool Encoder::is_pressed(void) {
-
-    // Latched (debounced) button press, clear flag and return true
-    if (enc_btn_press_latched) {
-
-        // Clear flag
-        enc_btn_press_latched = false;
-
-        return true;
-    }
-
-    // No button press or bounce, return false
-    return false;
-}
-
-// Processes the encoder subsystem
-void Encoder::mgr(void *ptr) {
-
-    // Loop forever
-    while(1) {
-        
-        // Detected encoder button press, check for bounce and set latched value to true for LVGL
-        if (enc_btn_pressed) {
-
-            // Clear flag
-            enc_btn_pressed = false;
-
-            // Debounce 10ms in firmware
-            vTaskDelay(10 /portTICK_PERIOD_MS);
-
-            if (gpio_get_level(ENC_BTN_PIN) == 0) {
-
-                enc_btn_press_latched = true;
-            }
-        }
-
-        //int16_t value;
-        //pcnt_get_counter_value(PCNT_UNIT_0, &value);
-        //log_info("Encoder value =" << value);
-
-        // Check every 10ms
-        vTaskDelay(100/portTICK_PERIOD_MS);
-    }
 }

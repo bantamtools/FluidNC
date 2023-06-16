@@ -16,6 +16,7 @@ Control::Control() {
     _pins.push_back(new ControlPin(&macro1Event, "macro1_pin", '1'));
     _pins.push_back(new ControlPin(&macro2Event, "macro2_pin", '2'));
     _pins.push_back(new ControlPin(&macro3Event, "macro3_pin", '3'));
+    _pins.push_back(new ControlPin(&enterEvent, "enter_pin", 'E'));
 }
 
 void Control::init() {

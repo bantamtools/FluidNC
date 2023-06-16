@@ -17,7 +17,6 @@
 // Definitions
 #define ENC_A_PIN                   (gpio_num_t)35
 #define ENC_B_PIN                   (gpio_num_t)48
-#define ENC_BTN_PIN                 (gpio_num_t)36
 
 #define ENC_MGR_PRIORITY            (configMAX_PRIORITIES - 1)
 #define ENC_MGR_STACK_SIZE          4096
@@ -29,23 +28,11 @@ class Encoder {
 public:
 	Encoder(gpio_num_t a_pin  = ENC_A_PIN, gpio_num_t b_pin = ENC_B_PIN, pcnt_unit_t pcnt_unit = PCNT_UNIT_0);
 	void init();
-    bool is_pressed();
 	int16_t get_value();
     int16_t get_difference();
 
 protected:
-
-    static void mgr(void*);
-
     gpio_num_t a_pin, b_pin;
 	pcnt_unit_t pcnt_unit;
-
 	int previous_value;
 };
-
-/*
-// Function Prototypes
-int16_t encoder_get_diff(void);
-bool encoder_is_pressed(void);
-void encoder_mgr(void*);
-*/

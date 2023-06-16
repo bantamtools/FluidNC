@@ -94,6 +94,7 @@ extern NoArgEvent motionCancelEvent;
 extern NoArgEvent sleepEvent;
 extern NoArgEvent resetEvent;
 extern NoArgEvent debugEvent;
+extern NoArgEvent enterEvent;
 
 // extern NoArgEvent statusReportEvent;
 
