@@ -111,7 +111,10 @@ void OLED::show_main_menu() {
 
     _oled->setTextAlignment(TEXT_ALIGN_LEFT);
     _oled->setFont(ArialMT_Plain_16);
+    _oled->fillRect(0, 12, 60, 16);
+    _oled->setColor(BLACK);
     _oled->drawString(0, 12, "Home");
+    _oled->setColor(WHITE);
     _oled->drawString(0, 30, "Jog");
     _oled->drawString(0, 48, "Run File");
 }

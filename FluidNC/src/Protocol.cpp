@@ -310,12 +310,6 @@ void protocol_main_loop() {
             idleEndTime = 0;  //
             config->_axes->set_disable(true);
         }
-
-        //TEMP
-        if (config->_encoder->get_difference() != 0) {
-            log_info("encoder -> " << config->_encoder->get_value());
-        }
-
     }
     return; /* Never reached */
 }
