@@ -7,8 +7,6 @@ static const char *TAG = "encoder";
 // Encoder constructor
 Encoder::Encoder() {
 
-	this->a_pin = ENC_A_PIN;
-	this->b_pin = ENC_B_PIN;
 	this->pcnt_unit = PCNT_UNIT_0;
 }
 
@@ -21,12 +19,12 @@ void Encoder::init() {
 	pcnt_config_t pcnt_config;
 
     // Set up encoder A/B pins
-	gpio_set_pull_mode(this->a_pin, GPIO_PULLUP_ONLY);
-	gpio_set_pull_mode(this->b_pin, GPIO_PULLUP_ONLY);
+    _a_pin.setAttr(Pin::Attr::PullUp);
+    _b_pin.setAttr(Pin::Attr::PullUp);
 
     // Configure PCNT unit for encoder
-	pcnt_config.pulse_gpio_num = this->b_pin;   // TEMP: Flip this->a_pin;
-	pcnt_config.ctrl_gpio_num = this->a_pin;   // TEMP: Flip this->b_pin;
+    pcnt_config.pulse_gpio_num = _b_pin.getNative(Pin::Capabilities::Input);
+    pcnt_config.ctrl_gpio_num = _a_pin.getNative(Pin::Capabilities::Input);
 	pcnt_config.channel = PCNT_CHANNEL_0;
 	pcnt_config.unit = this->pcnt_unit;
 
@@ -86,4 +84,8 @@ int16_t Encoder::get_difference() {
 // Configurable functions
 void Encoder::validate() {}
 
-void Encoder::group(Configuration::HandlerBase& handler) {}
+void Encoder::group(Configuration::HandlerBase& handler) {
+
+    handler.item("a_pin", _a_pin);
+    handler.item("b_pin", _b_pin);
+}

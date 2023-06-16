@@ -105,8 +105,10 @@ void setup() {
             if (config->_oled) {
                 config->_oled->init();
             }
-            
-            config->_encoder->init();
+
+            if (config->_encoder) {
+                config->_encoder->init();
+            }
 
             config->_stepping->init();  // Configure stepper interrupt timers
 

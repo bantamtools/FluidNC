@@ -96,6 +96,11 @@ oled:
    height: 64
    radio_delay_ms: 1000
 
+# Encoder
+encoder:
+  a_pin: gpio.35
+  b_pin: gpio.48
+
 # Configure SD card in SPI mode
 spi:
   miso_pin: gpio.8
