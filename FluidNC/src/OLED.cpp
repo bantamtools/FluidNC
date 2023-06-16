@@ -145,6 +145,11 @@ void OLED::menu_update_selection(void) {
     MenuNodeType *entry = current_menu->head;  // Start at the top of the active menu
     MenuNodeType *active_tail;
 
+    // Lock out scrolling during operation
+    if (sys.state != State::Idle) {
+        return;
+    }
+    
     while (entry) {
         
         // Found selected entry and we have scrolled
