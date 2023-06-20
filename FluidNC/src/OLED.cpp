@@ -216,15 +216,8 @@ void OLED::menu_init(void) {
 
     // Create the interface, load and debug/info buttons
     menu_add(this->main_menu, NULL, "Home");
-    menu_add(this->main_menu, NULL, "Jog");
-    menu_add(this->main_menu, this->files_menu, "Run File");
-
-    //TEST
-    menu_add(this->files_menu, NULL, "< Back");
-    menu_add(this->files_menu, NULL, "FILE2");
-    menu_add(this->files_menu, NULL, "FILE3");
-    menu_add(this->files_menu, NULL, "FILE4");
-    menu_add(this->files_menu, NULL, "FILE5");
+    menu_add(this->main_menu, NULL, "Jogging");
+    menu_add(this->main_menu, this->files_menu, "Run from SD");
 }
 
 // Updates the current menu selection
@@ -285,7 +278,7 @@ OLED::Layout OLED::tickerLayout     = { 63, 0, 128, ArialMT_Plain_10, TEXT_ALIGN
 OLED::Layout OLED::filenameLayout   = { 63, 13, 128, ArialMT_Plain_10, TEXT_ALIGN_CENTER };
 OLED::Layout OLED::percentLayout128 = { 128, 0, 128, ArialMT_Plain_16, TEXT_ALIGN_RIGHT };
 OLED::Layout OLED::percentLayout64  = { 64, 0, 64, ArialMT_Plain_16, TEXT_ALIGN_RIGHT };
-OLED::Layout OLED::posLabelLayout   = { 110, 12, 128, ArialMT_Plain_10, TEXT_ALIGN_RIGHT };
+OLED::Layout OLED::posLabelLayout   = { 110, 13, 128, ArialMT_Plain_10, TEXT_ALIGN_RIGHT };
 OLED::Layout OLED::radioAddrLayout  = { 50, 0, 128, ArialMT_Plain_10, TEXT_ALIGN_LEFT };
 
 void OLED::afterParse() {
@@ -359,6 +352,7 @@ Channel* OLED::pollLine(char* line) {
 
 void OLED::show_state() {
     show(stateLayout, _state);
+    _oled->drawLine(0, 11, 128, 11);
 }
 
 void OLED::show_limits(bool probe, const bool* limits) {
@@ -384,18 +378,16 @@ void OLED::show_menu() {
 
     _oled->setTextAlignment(TEXT_ALIGN_LEFT);
 
-    // Use smaller font and larger width for file list
-    if (current_menu == files_menu) {
-        _oled->setFont(ArialMT_Plain_10);
-        menu_height = 13;
-        menu_width = 128;
-        menu_max_active_entries = 4;
-    } else {
-        _oled->setFont(ArialMT_Plain_16);
-        menu_height = 18;
-        menu_width = 64;
-        menu_max_active_entries = 3;
-    }
+    // Set up font and menu window
+    _oled->setFont(ArialMT_Plain_10);
+    menu_height = 13;
+    (current_menu == files_menu) ? menu_width = 128 : menu_width = 64;
+    menu_max_active_entries = 4;
+
+    // Clear any highlighting left in menu area
+    _oled->setColor(BLACK);
+    _oled->fillRect(0, 13, 64, 64);
+    _oled->setColor(WHITE);
 
     // Update the menu selection
     menu_update_selection(menu_max_active_entries);
@@ -407,11 +399,11 @@ void OLED::show_menu() {
 
         // Highlight selected entry
         (entry->selected) ? _oled->setColor(WHITE) : _oled->setColor(BLACK);
-        _oled->fillRect(0, 12 + (menu_height * i), menu_width, menu_height);
+        _oled->fillRect(0, 13 + (menu_height * i), menu_width, menu_height);
         (entry->selected) ? _oled->setColor(BLACK) : _oled->setColor(WHITE);
 
         // Write out the entry name
-        _oled->drawString(0, 12 + (menu_height * i), (String)(entry->display_name));
+        _oled->drawString(0, 13 + (menu_height * i), (String)(entry->display_name));
 
         // Advance the line and pointer
         entry = entry->next;
