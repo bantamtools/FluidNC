@@ -1043,6 +1043,14 @@ static void protocol_do_enter() {
             // Home command
             if (strcmp(config->_oled->menu_get_selected()->display_name, "Home") == 0) {
                 Machine::Homing::run_cycles(Machine::Homing::AllCycles);
+
+            // Back button
+            } else if (strcmp(config->_oled->menu_get_selected()->display_name, "< Back") == 0) {
+                config->_oled->menu_exit_submenu();
+            
+            // Otherwise, enter the submenu if it exists
+            } else {
+                config->_oled->menu_enter_submenu();
             }
             break;
 

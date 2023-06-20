@@ -21,6 +21,36 @@ struct MenuNodeType *OLED::menu_get_selected(void) {
     return entry;
 }
 
+// Helper function to enter a submenu
+void OLED::menu_enter_submenu(void) {
+
+    MenuNodeType *selected_entry = this->menu_get_selected();
+
+    // Check if entry has a submenu
+    if (selected_entry->child) {
+
+        // Make the submenu active
+        current_menu = selected_entry->child;         
+        
+        // Update the menu display
+        this->show_menu();
+    }
+}
+
+// Helper function to exit a submenu
+void OLED::menu_exit_submenu(void) {
+
+    // Check if submenu has an upper menu
+    if (current_menu->parent) {
+    
+        // Make the upper menu active
+        current_menu = current_menu->parent;
+
+        // Update the menu display
+        this->show_menu();
+    }
+}
+
 // Helper function to return the active tail
 struct MenuNodeType *OLED::menu_get_active_tail(MenuType *menu) {
 
@@ -126,9 +156,11 @@ void OLED::menu_init(void) {
 
     // Allocate memory for the menus
     this->main_menu = (MenuType*)malloc(sizeof(struct MenuType));
+    this->files_menu = (MenuType*)malloc(sizeof(struct MenuType));
 
     // Initialize the menus
     menu_initialize(this->main_menu, NULL);
+    menu_initialize(this->files_menu, this->main_menu);
 
     // Set main menu as current
     this->current_menu = this->main_menu;
@@ -136,7 +168,14 @@ void OLED::menu_init(void) {
     // Create the interface, load and debug/info buttons
     menu_add(this->main_menu, NULL, "Home");
     menu_add(this->main_menu, NULL, "Jog");
-    menu_add(this->main_menu, NULL, "Run File");
+    menu_add(this->main_menu, this->files_menu, "Run File");
+
+    //TEST
+    menu_add(this->files_menu, NULL, "< Back");
+    menu_add(this->files_menu, NULL, "FILE2");
+    menu_add(this->files_menu, NULL, "FILE3");
+    menu_add(this->files_menu, NULL, "FILE4");
+    menu_add(this->files_menu, NULL, "FILE5");
 }
 
 // Updates the current menu selection
