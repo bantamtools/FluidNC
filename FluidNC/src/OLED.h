@@ -53,6 +53,7 @@ public:
     static Layout posLabelLayout;
     static Layout radioAddrLayout;
 
+    bool menu_is_files_list(void);
     struct MenuNodeType *menu_get_selected();
     void menu_enter_submenu();
     void menu_exit_submenu();

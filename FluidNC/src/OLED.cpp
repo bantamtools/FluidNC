@@ -2,6 +2,11 @@
 
 #include "Machine/MachineConfig.h"
 
+// Returns true if the current menu is the files menu
+ bool OLED::menu_is_files_list(void) {
+    return (current_menu == files_menu);
+}
+
 // Returns the selected entry
 struct MenuNodeType *OLED::menu_get_selected(void) {
 

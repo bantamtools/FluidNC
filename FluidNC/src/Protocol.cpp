@@ -1047,6 +1047,11 @@ static void protocol_do_enter() {
             // Back button
             } else if (strcmp(config->_oled->menu_get_selected()->display_name, "< Back") == 0) {
                 config->_oled->menu_exit_submenu();
+
+            // Run files command if files menu
+            } else if (config->_oled->menu_is_files_list()) {
+
+                log_info("Run file " << config->_oled->menu_get_selected()->display_name);
             
             // Otherwise, enter the submenu if it exists
             } else {
