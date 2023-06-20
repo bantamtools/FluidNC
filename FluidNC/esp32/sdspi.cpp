@@ -19,6 +19,7 @@
 
 static FileListType sd_files;
 static const String allowed_file_ext[SD_NUM_ALLOWED_EXT] = {".gcode", ".nc", ".txt"};
+static bool sd_is_mounted = false;
 
 static esp_err_t mount_to_vfs_fat(int max_files, sdmmc_card_t* card, uint8_t pdrv, const char* base_path) {
     FATFS*    fs = NULL;
@@ -112,8 +113,9 @@ bool sd_init_slot(uint32_t freq_hz, int cs_pin, int cd_pin, int wp_pin) {
         CHECK_EXECUTE_RESULT(err, "set slot clock speed failed");
     }
 
-    // Clear file count on file list
+    // Clear file count on file list and mount flag
     sd_files.num_files = 0;
+    sd_is_mounted = false;
 
     return true;
 
@@ -172,10 +174,8 @@ std::error_code sd_mount(int max_files) {
     err = mount_to_vfs_fat(max_files, card, pdrv, base_path);
     CHECK_EXECUTE_RESULT(err, "mount_to_vfs failed");
 
-    // save file list for use with menu system
-    if (err == ESP_OK) {
-        sd_list_files();
-    }
+    // set flag
+    sd_is_mounted = true;
 
     return {};
 cleanup:
@@ -203,8 +203,8 @@ void sd_unmount() {
     free(card);
     card = NULL;
 
-    // clear file list for use with menu system
-    sd_list_files();
+    // clear flag
+    sd_is_mounted = false;
 }
 
 void sd_deinit_slot() {
@@ -230,10 +230,15 @@ unmount2() {
 void sd_list_files() {
 
     std::error_code ec;
-    FluidPath fpath { "", "sd", ec };
+    const std::filesystem::path fpath{base_path};
     char file_ext[SD_MAX_STR];
 
-    // Error opening SD, mark zero files
+    // SD not mounted, attempt to mount
+    if (!sd_is_mounted) {
+        ec = sd_mount();
+    }
+
+    // Could not mount SD (error or not found), set to zero files
     if (ec) {
 
         log_warn("SD card not mounted, clearing file list");
@@ -242,7 +247,7 @@ void sd_list_files() {
     } else {
 
         // Iterate through the top level directory
-        auto iter = stdfs::directory_iterator { fpath, ec };
+        auto iter = std::filesystem::directory_iterator { fpath, ec };
         if (!ec) {
 
             for (auto const& dir_entry : iter) {
@@ -272,13 +277,14 @@ void sd_list_files() {
                 }
             }
         }
-    }
 
-    // Send update message on channel (to alert OLED to refres)
-    log_info("File list updated");
+        // Unmount the SD card
+        sd_unmount();
+    }
 }
 
 FileListType *sd_get_filelist(void) {
 
+    sd_list_files();
     return &sd_files;
 }

@@ -30,10 +30,19 @@ void OLED::menu_enter_submenu(void) {
     if (selected_entry->child) {
 
         // Make the submenu active
-        current_menu = selected_entry->child;         
+        current_menu = selected_entry->child;      
+
+        // Populate the files list if SD file menu
+        if (current_menu == files_menu) {
+
+            menu_populate_files_list();
+        }   
         
-        // Update the menu display
-        this->show_menu();
+        // Refresh the display
+        if (current_menu != files_menu && saved_axes != NULL) {
+            show_dro(saved_axes, saved_isMpos, saved_limits); // Refresh the screen with saved dro values
+        }
+        show_menu(); 
     }
 }
 
@@ -46,13 +55,16 @@ void OLED::menu_exit_submenu(void) {
         // Make the upper menu active
         current_menu = current_menu->parent;
 
-        // Update the menu display
-        this->show_menu();
+        // Refresh the display
+        if (current_menu != files_menu && saved_axes != NULL) {
+            show_dro(saved_axes, saved_isMpos, saved_limits); // Refresh the screen with saved dro values
+        }
+        show_menu();       
     }
 }
 
 // Helper function to return the active tail
-struct MenuNodeType *OLED::menu_get_active_tail(MenuType *menu) {
+struct MenuNodeType *OLED::menu_get_active_tail(MenuType *menu, int menu_max_active_entries) {
 
     bool active_area = false;
     struct MenuNodeType *entry;
@@ -60,7 +72,7 @@ struct MenuNodeType *OLED::menu_get_active_tail(MenuType *menu) {
 
     // Traverse the linked list
     entry = menu->head;  // Reset to head
-    while (entry->next && num_active_nodes < (MENU_MAX_ACTIVE_ENTRIES - 1)) {
+    while (entry->next && num_active_nodes < (menu_max_active_entries - 1)) {
 
         // Count the active window nodes
         if (entry == menu->active_head) {
@@ -216,7 +228,7 @@ void OLED::menu_init(void) {
 }
 
 // Updates the current menu selection
-void OLED::menu_update_selection(void) {
+void OLED::menu_update_selection(int menu_max_active_entries) {
 
     MenuNodeType *entry = current_menu->head;  // Start at the top of the active menu
     MenuNodeType *active_tail;
@@ -235,7 +247,7 @@ void OLED::menu_update_selection(void) {
             if (this->enc_diff > 0 && entry->next != NULL) {        // Forwards until hit tail
                 entry->next->selected = true;
                 entry->selected = false;
-                active_tail = this->menu_get_active_tail(current_menu);
+                active_tail = this->menu_get_active_tail(current_menu, menu_max_active_entries);
                 if (active_tail->next && active_tail->next->selected) {  // Shift the window once scroll past max entries
                     current_menu->active_head = current_menu->active_head->next;
                 }
@@ -366,29 +378,40 @@ void OLED::show_limits(bool probe, const bool* limits) {
 
 void OLED::show_menu() {
 
-    _oled->setTextAlignment(TEXT_ALIGN_LEFT);
-    _oled->setFont(ArialMT_Plain_16);
+    int16_t menu_width;
+    int16_t menu_height;
+    int menu_max_active_entries;
 
-    // Populate the files list if SD file menu
+    _oled->setTextAlignment(TEXT_ALIGN_LEFT);
+
+    // Use smaller font and larger width for file list
     if (current_menu == files_menu) {
-        menu_populate_files_list();
+        _oled->setFont(ArialMT_Plain_10);
+        menu_height = 13;
+        menu_width = 128;
+        menu_max_active_entries = 4;
+    } else {
+        _oled->setFont(ArialMT_Plain_16);
+        menu_height = 18;
+        menu_width = 64;
+        menu_max_active_entries = 3;
     }
 
     // Update the menu selection
-    menu_update_selection();
+    menu_update_selection(menu_max_active_entries);
 
     // Traverse the list and print out each menu entry name
     MenuNodeType *entry = current_menu->active_head; // Start at the beginning of the active window
     int i = 0;
-    while (entry && entry->display_name && i < MENU_MAX_ACTIVE_ENTRIES) {
+    while (entry && entry->display_name && i < menu_max_active_entries) {
 
         // Highlight selected entry
         (entry->selected) ? _oled->setColor(WHITE) : _oled->setColor(BLACK);
-        _oled->fillRect(0, 12 + (18 * i), 64, 18);
+        _oled->fillRect(0, 12 + (menu_height * i), menu_width, menu_height);
         (entry->selected) ? _oled->setColor(BLACK) : _oled->setColor(WHITE);
 
         // Write out the entry name
-        _oled->drawString(0, 12 + (18 * i), (String)(entry->display_name));
+        _oled->drawString(0, 12 + (menu_height * i), (String)(entry->display_name));
 
         // Advance the line and pointer
         entry = entry->next;
@@ -423,7 +446,7 @@ void OLED::show_file() {
         show(percentLayout64, String(pct) + '%');
     }
 }
-void OLED::show_dro(const float* axes, bool isMpos, bool* limits) {
+void OLED::show_dro(float* axes, bool isMpos, bool* limits) {
     if (_state == "Alarm") {
         return;
     }
@@ -434,6 +457,11 @@ void OLED::show_dro(const float* axes, bool isMpos, bool* limits) {
 
     auto n_axis = config->_axes->_numberAxis;
     char axisVal[20];
+
+    // Clear any highlighting left in DRO area
+    _oled->setColor(BLACK);
+    _oled->fillRect(64, 12, 64, 64);
+    _oled->setColor(WHITE);
 
     show(posLabelLayout, isMpos ? "M Pos" : "W Pos");
 
@@ -458,6 +486,11 @@ void OLED::show_dro(const float* axes, bool isMpos, bool* limits) {
         _oled->drawString((_width == 128) ? 68 + 60 : 68 + 63, oled_y_pos, axisVal);
     }
     _oled->display();
+
+    // Save off dro values in case we need to refresh display with current data
+    saved_axes = axes;
+    saved_isMpos = isMpos;
+    saved_limits = limits;
 }
 
 void OLED::show_radio_info() {
@@ -774,12 +807,6 @@ void OLED::parse_report() {
     }
     if (_report.rfind("[MSG:INFO: Encoder difference -> ", 0) == 0) {
         parse_encoder();
-        return;
-    }
-
-    // Update the menu if we receieved new files list
-    if ((_report.rfind("[MSG:INFO: File list updated", 0) == 0) && (current_menu == files_menu)) {
-        show_menu();  
         return;
     }
 }
