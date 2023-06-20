@@ -10,6 +10,7 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/queue.h>
 #include "Config.h"
+#include "Driver/sdspi.h"
 
 // Line buffer size from the serial input stream to be executed.Also, governs the size of
 // each of the startup blocks, as they are each stored as a string of this size.

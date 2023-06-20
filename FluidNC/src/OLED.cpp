@@ -151,6 +151,43 @@ void OLED::menu_delete(MenuType *menu) {
     menu->head = menu->active_head = NULL;
 }
 
+// Populates the file list from SD card
+void OLED::menu_populate_files_list(void) {
+
+    MenuNodeType *entry = current_menu->head;  // Start at the top of the active menu
+    
+    // If not in the files menu, find the node attached the the files menu
+    while (current_menu != files_menu && entry) {
+
+        // Found the load files node
+        if (entry->child == files_menu) {
+            break;
+        }
+
+        // Advance the pointer
+        entry = entry->next;
+    }
+
+    // Get the file listing
+    FileListType *files = sd_get_filelist();
+
+    // Clear out the menu nodes if they already exist
+    if ((current_menu == files_menu && current_menu->head) ||
+        (current_menu != files_menu && entry->child->head)) {
+        menu_delete(files_menu);
+    }
+
+    // Add the back button to top of menu
+    menu_add(this->files_menu, NULL, "< Back");
+
+    // Create a submenu of files
+    for (auto i = 0; i < files->num_files; i++) {
+        
+        // Initialize the files menu and attach nodes
+        menu_add(files_menu, NULL, files->filename[i]);
+    }
+}
+
 // Initializes the menu subsystem
 void OLED::menu_init(void) {
 
@@ -332,8 +369,13 @@ void OLED::show_menu() {
     _oled->setTextAlignment(TEXT_ALIGN_LEFT);
     _oled->setFont(ArialMT_Plain_16);
 
+    // Populate the files list if SD file menu
+    if (current_menu == files_menu) {
+        menu_populate_files_list();
+    }
+
     // Update the menu selection
-    this->menu_update_selection();
+    menu_update_selection();
 
     // Traverse the list and print out each menu entry name
     MenuNodeType *entry = current_menu->active_head; // Start at the beginning of the active window
@@ -732,6 +774,12 @@ void OLED::parse_report() {
     }
     if (_report.rfind("[MSG:INFO: Encoder difference -> ", 0) == 0) {
         parse_encoder();
+        return;
+    }
+
+    // Update the menu if we receieved new files list
+    if ((_report.rfind("[MSG:INFO: File list updated", 0) == 0) && (current_menu == files_menu)) {
+        show_menu();  
         return;
     }
 }

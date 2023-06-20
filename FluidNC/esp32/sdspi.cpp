@@ -17,6 +17,9 @@
         }                                                                                                                                  \
     } while (0)
 
+static FileListType sd_files;
+static const String allowed_file_ext[SD_NUM_ALLOWED_EXT] = {".gcode", ".nc", ".txt"};
+
 static esp_err_t mount_to_vfs_fat(int max_files, sdmmc_card_t* card, uint8_t pdrv, const char* base_path) {
     FATFS*    fs = NULL;
     esp_err_t err;
@@ -109,6 +112,9 @@ bool sd_init_slot(uint32_t freq_hz, int cs_pin, int cd_pin, int wp_pin) {
         CHECK_EXECUTE_RESULT(err, "set slot clock speed failed");
     }
 
+    // Clear file count on file list
+    sd_files.num_files = 0;
+
     return true;
 
 cleanup:
@@ -135,7 +141,7 @@ bool init_spi_bus(int mosi_pin, int miso_pin, int clk_pin) {
 
 // adapted from vfs_fat_sdmmc.c:esp_vfs_fat_sdmmc_mount()
 std::error_code sd_mount(int max_files) {
-    log_verbose("Mount_sd");
+    log_info("Mount_sd");
     esp_err_t err;
 
     // mount_prepare_mem() ... minus the strdup of base_path
@@ -166,6 +172,11 @@ std::error_code sd_mount(int max_files) {
     err = mount_to_vfs_fat(max_files, card, pdrv, base_path);
     CHECK_EXECUTE_RESULT(err, "mount_to_vfs failed");
 
+    // save file list for use with menu system
+    if (err == ESP_OK) {
+        sd_list_files();
+    }
+
     return {};
 cleanup:
     free(card);
@@ -174,7 +185,7 @@ cleanup:
 }
 
 void sd_unmount() {
-    log_verbose("Unmount_sd");
+    log_info("Unmount_sd");
     BYTE pdrv = ff_diskio_get_pdrv_card(card);
     if (pdrv == 0xff) {
         return;
@@ -191,6 +202,9 @@ void sd_unmount() {
 
     free(card);
     card = NULL;
+
+    // clear file list for use with menu system
+    sd_list_files();
 }
 
 void sd_deinit_slot() {
@@ -212,3 +226,59 @@ unmount2() {
     f_mount(NULL, drv, 0);
 }
 #endif
+
+void sd_list_files() {
+
+    std::error_code ec;
+    FluidPath fpath { "", "sd", ec };
+    char file_ext[SD_MAX_STR];
+
+    // Error opening SD, mark zero files
+    if (ec) {
+
+        log_warn("SD card not mounted, clearing file list");
+        sd_files.num_files = 0;
+
+    } else {
+
+        // Iterate through the top level directory
+        auto iter = stdfs::directory_iterator { fpath, ec };
+        if (!ec) {
+
+            for (auto const& dir_entry : iter) {
+
+                // Get the file extension and convert to lowercase
+                strncpy(file_ext, dir_entry.path().extension().c_str(), SD_MAX_STR);
+                for (auto i = 0; file_ext[i]; i++) {
+                    file_ext[i] = tolower(file_ext[i]);
+                }
+
+                // Iterate through allowed file extensions
+                for (auto i = 0; i < SD_NUM_ALLOWED_EXT; i++) {
+
+                    // Found a matching extension, list file
+                    if (strcmp(file_ext, allowed_file_ext[i].c_str()) == 0) {
+
+                        // Reached maximum file list, display error and exit listing loop
+                        if (sd_files.num_files == SD_MAX_FILES) {
+                            log_warn("Maximum file list reached, stopped listing files");
+                            break;
+                        }
+
+                        // Save file name to list and increment count
+                        strncpy(sd_files.filename[sd_files.num_files], dir_entry.path().filename().c_str(), SD_MAX_STR);
+                        sd_files.num_files++;
+                    }    
+                }
+            }
+        }
+    }
+
+    // Send update message on channel (to alert OLED to refres)
+    log_info("File list updated");
+}
+
+FileListType *sd_get_filelist(void) {
+
+    return &sd_files;
+}

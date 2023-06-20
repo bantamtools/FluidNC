@@ -7,6 +7,8 @@
 #include "Channel.h"
 #include "SSD1306_I2C.h"
 
+#include "Driver/sdspi.h"
+
 #define MENU_NAME_MAX_STR 10
 #define MENU_MAX_ACTIVE_ENTRIES 3
 
@@ -79,6 +81,7 @@ private:
     void menu_initialize(MenuType *, MenuType *);
     void menu_add(MenuType *, MenuType *, const char *);
     void menu_delete(MenuType *);
+    void menu_populate_files_list();
     void menu_init();
     void menu_update_selection();
 
