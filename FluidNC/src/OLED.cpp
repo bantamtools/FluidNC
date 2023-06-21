@@ -47,7 +47,7 @@ void OLED::menu_enter_submenu(void) {
         if (current_menu != files_menu && saved_axes != NULL) {
             show_dro(saved_axes, saved_isMpos, saved_limits); // Refresh the screen with saved dro values
         }
-        show_menu(); 
+        show_menu();
     }
 }
 
@@ -64,7 +64,7 @@ void OLED::menu_exit_submenu(void) {
         if (current_menu != files_menu && saved_axes != NULL) {
             show_dro(saved_axes, saved_isMpos, saved_limits); // Refresh the screen with saved dro values
         }
-        show_menu();       
+        show_menu();
     }
 }
 
@@ -281,8 +281,8 @@ OLED::Layout OLED::bannerLayout64   = { 0, 0, 0, ArialMT_Plain_16, TEXT_ALIGN_CE
 OLED::Layout OLED::stateLayout      = { 0, 0, 0, ArialMT_Plain_10, TEXT_ALIGN_LEFT };
 OLED::Layout OLED::tickerLayout     = { 63, 0, 128, ArialMT_Plain_10, TEXT_ALIGN_CENTER };
 OLED::Layout OLED::filenameLayout   = { 63, 13, 128, ArialMT_Plain_10, TEXT_ALIGN_CENTER };
-OLED::Layout OLED::percentLayout128 = { 128, 0, 128, ArialMT_Plain_16, TEXT_ALIGN_RIGHT };
-OLED::Layout OLED::percentLayout64  = { 64, 0, 64, ArialMT_Plain_16, TEXT_ALIGN_RIGHT };
+OLED::Layout OLED::percentLayout128 = { 128, 0, 128, ArialMT_Plain_10, TEXT_ALIGN_RIGHT };
+OLED::Layout OLED::percentLayout64  = { 64, 0, 64, ArialMT_Plain_10, TEXT_ALIGN_RIGHT };
 OLED::Layout OLED::posLabelLayout   = { 110, 13, 128, ArialMT_Plain_10, TEXT_ALIGN_RIGHT };
 OLED::Layout OLED::radioAddrLayout  = { 50, 0, 128, ArialMT_Plain_10, TEXT_ALIGN_LEFT };
 
@@ -381,6 +381,11 @@ void OLED::show_menu() {
     int16_t menu_height;
     int menu_max_active_entries;
 
+    // Don't show menu during Run state
+    if (_state == "Run") {
+        return;
+    }
+
     _oled->setTextAlignment(TEXT_ALIGN_LEFT);
 
     // Set up font and menu window
@@ -388,11 +393,6 @@ void OLED::show_menu() {
     menu_height = 13;
     (current_menu == files_menu) ? menu_width = 128 : menu_width = 64;
     menu_max_active_entries = 4;
-
-    // Clear any highlighting left in menu area
-    _oled->setColor(BLACK);
-    _oled->fillRect(0, 13, 64, 64);
-    _oled->setColor(WHITE);
 
     // Update the menu selection
     menu_update_selection(menu_max_active_entries);
@@ -427,6 +427,7 @@ void OLED::show_file() {
         // but shows one last SD report
         return;
     }
+
     if (_width == 128) {
         show(percentLayout128, String(pct) + '%');
 
@@ -436,7 +437,7 @@ void OLED::show_file() {
         }
         show(tickerLayout, _ticker);
 
-        wrapped_draw_string(14, _filename.c_str(), ArialMT_Plain_16);
+        wrapped_draw_string(14, _filename.c_str(), ArialMT_Plain_10);
 
         _oled->drawProgressBar(0, 45, 120, 10, pct);
     } else {
@@ -454,11 +455,6 @@ void OLED::show_dro(float* axes, bool isMpos, bool* limits) {
 
     auto n_axis = config->_axes->_numberAxis;
     char axisVal[20];
-
-    // Clear any highlighting left in DRO area
-    _oled->setColor(BLACK);
-    _oled->fillRect(64, 12, 64, 64);
-    _oled->setColor(WHITE);
 
     show(posLabelLayout, isMpos ? "M Pos" : "W Pos");
 
@@ -507,6 +503,19 @@ void OLED::show_radio_info() {
             wrapped_draw_string(28, _radio_addr, ArialMT_Plain_10);
         }
     }
+}
+
+void OLED::show_all(float *axes, bool isMpos, bool *limits) {
+
+    _oled->clear();
+    show_state();
+    show_file();
+    show_menu();
+    if (current_menu != files_menu) {
+        show_dro(axes, isMpos, limits);
+    }
+    show_radio_info();
+    _oled->display();
 }
 
 void OLED::parse_numbers(std::string s, float* nums, int maxnums) {
@@ -663,13 +672,7 @@ void OLED::parse_status_report() {
             continue;
         }
     }
-    _oled->clear();
-    show_state();
-    show_file();
-    show_menu();
-    show_dro(axes, isMpos, limits);
-    show_radio_info();
-    _oled->display();
+    show_all(axes, isMpos, limits);
 }
 
 void OLED::parse_gcode_report() {
@@ -771,7 +774,7 @@ void OLED::parse_encoder() {
     this->enc_diff = stoi(_report.substr(start, end - start));
 
     // Refresh the menu
-    this->show_menu();
+    show_menu();
 }
 
 void OLED::parse_report() {
@@ -804,6 +807,12 @@ void OLED::parse_report() {
     }
     if (_report.rfind("[MSG:INFO: Encoder difference -> ", 0) == 0) {
         parse_encoder();
+        return;
+    }
+
+    // Refresh the display at the end of a job
+    if (_report.find("job succeeded]") != std::string::npos) {
+        show_all(saved_axes, saved_isMpos, saved_limits);
         return;
     }
 }

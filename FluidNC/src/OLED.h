@@ -108,6 +108,8 @@ private:
     void show_file();
     void show_dro(float* axes, bool isMpos, bool* limits);
     void show_radio_info();
+    void show_all(float *axes, bool isMpos, bool *limits);
+
     void draw_checkbox(int16_t x, int16_t y, int16_t width, int16_t height, bool checked);
 
     void wrapped_draw_string(int16_t y, const String& s, font_t font);
