@@ -1051,7 +1051,8 @@ static void protocol_do_enter() {
             // Run files command if files menu
             } else if (config->_oled->menu_is_files_list()) {
 
-                log_info("Run file " << config->_oled->menu_get_selected()->display_name);
+                InputFile *infile = new InputFile("sd", config->_oled->menu_get_selected()->display_name, WebUI::AuthenticationLevel::LEVEL_ADMIN, *activeChannel);
+                allChannels.registration(infile);
             
             // Otherwise, enter the submenu if it exists
             } else {

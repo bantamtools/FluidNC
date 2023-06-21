@@ -10,6 +10,8 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/queue.h>
 #include "Config.h"
+#include "WebUI/Authentication.h"
+#include "InputFile.h"
 #include "Driver/sdspi.h"
 
 // Line buffer size from the serial input stream to be executed.Also, governs the size of
