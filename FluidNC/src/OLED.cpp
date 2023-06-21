@@ -450,10 +450,11 @@ void OLED::show_dro(float* axes, bool isMpos, bool* limits) {
     saved_axes = axes;
     saved_isMpos = isMpos;
     saved_limits = limits;
-    
-    if (_state == "Alarm") {
+
+    if (_state == "Alarm" || current_menu == files_menu) {
         return;
     }
+
     if (_state == "Run" && _width == 128 && _filename.length()) {
         // wide displays will show a progress bar instead of DROs
         return;
@@ -523,9 +524,7 @@ void OLED::show_all(float *axes, bool isMpos, bool *limits) {
     show_state();
     show_file();
     show_menu();   
-    if (current_menu != files_menu && axes != NULL) {
-        show_dro(axes, isMpos, limits);
-    }
+    show_dro(axes, isMpos, limits);
     show_radio_info();
     _oled->display();
 }
@@ -645,7 +644,7 @@ void OLED::parse_status_report() {
         }
         if (tag == "WCO") {
             // x,y,z,...
-            auto wcos = parse_axes(value);
+            //auto wcos = parse_axes(value);
             continue;
         }
         if (tag == "Ov") {

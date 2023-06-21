@@ -128,7 +128,7 @@ private:
     uint8_t font_height(font_t font);
     size_t  char_width(char s, font_t font);
 
-    OLEDDISPLAY_GEOMETRY _geometry = GEOMETRY_64_48;
+    OLEDDISPLAY_GEOMETRY _geometry = GEOMETRY_128_64;
 
     bool _error = false;
 
