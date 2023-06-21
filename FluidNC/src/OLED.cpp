@@ -493,10 +493,15 @@ void OLED::show_dro(float* axes, bool isMpos, bool* limits) {
 }
 
 void OLED::show_radio_info() {
-    if (_filename.length()) {
+    if (_state == "Run" && _filename.length()) {
         return;
     }
+
+    // Clear anything left in radio area
+    _oled->setColor(BLACK);
+    _oled->fillRect(50, 0, 78, 11);
     _oled->setColor(WHITE);
+
     if (_width == 128) {
         if (_state == "Alarm") {
             wrapped_draw_string(18, _radio_info, ArialMT_Plain_10);
@@ -814,12 +819,6 @@ void OLED::parse_report() {
     }
     if (_report.rfind("[MSG:INFO: Encoder difference -> ", 0) == 0) {
         parse_encoder();
-        return;
-    }
-
-    // Refresh the display at the end of a job
-    if (_report.find("job succeeded]") != std::string::npos) {
-        show_all(saved_axes, saved_isMpos, saved_limits);
         return;
     }
 }
