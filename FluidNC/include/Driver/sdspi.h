@@ -2,6 +2,7 @@
 
 #include <system_error>
 #include <filesystem>
+#include "fluidnc_gpio.h"
 
 // Definitions
 #define SD_MAX_STR          255 // Max string length for paths

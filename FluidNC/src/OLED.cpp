@@ -395,7 +395,7 @@ void OLED::show_menu() {
 
     // Clear any highlighting left in menu area
     _oled->setColor(BLACK);
-    _oled->fillRect(0, 13, 64, 64);
+    _oled->fillRect(0, 13, menu_width, 64);
     _oled->setColor(WHITE);
 
     // Update the menu selection
@@ -827,6 +827,13 @@ void OLED::parse_report() {
         parse_encoder();
         return;
     }
+
+    // Refresh the screen on card detect event to update file list
+     if ((_report.rfind("[MSG:INFO: SD Card Detect Event]", 0) == 0) && (current_menu == files_menu)) {
+        menu_populate_files_list();
+        show_menu();
+        return;
+    }   
 }
 
 // This is how the OLED driver receives channel data
