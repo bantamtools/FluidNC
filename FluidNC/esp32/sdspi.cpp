@@ -233,18 +233,16 @@ void sd_list_files() {
     const std::filesystem::path fpath{base_path};
     char file_ext[SD_MAX_STR];
 
+    // Clear the file list to start
+    sd_files.num_files = 0;
+
     // SD not mounted, attempt to mount
     if (!sd_is_mounted) {
         ec = sd_mount();
     }
 
-    // Could not mount SD (error or not found), set to zero files
-    if (ec) {
-
-        log_warn("SD card not mounted, clearing file list");
-        sd_files.num_files = 0;
-
-    } else {
+    // Iterate through files if no errors (i.e. SD not found or corrupt)
+    if (!ec) {
 
         // Iterate through the top level directory
         auto iter = std::filesystem::directory_iterator { fpath, ec };
