@@ -44,10 +44,7 @@ void OLED::menu_enter_submenu(void) {
         }   
         
         // Refresh the display
-        if (current_menu != files_menu && saved_axes != NULL) {
-            show_dro(saved_axes, saved_isMpos, saved_limits); // Refresh the screen with saved dro values
-        }
-        show_menu();
+        show_all(saved_axes, saved_isMpos, saved_limits);
     }
 }
 
@@ -61,10 +58,7 @@ void OLED::menu_exit_submenu(void) {
         current_menu = current_menu->parent;
 
         // Refresh the display
-        if (current_menu != files_menu && saved_axes != NULL) {
-            show_dro(saved_axes, saved_isMpos, saved_limits); // Refresh the screen with saved dro values
-        }
-        show_menu();
+        show_all(saved_axes, saved_isMpos, saved_limits);
     }
 }
 
@@ -356,6 +350,7 @@ Channel* OLED::pollLine(char* line) {
 }
 
 void OLED::show_state() {
+    _oled->setColor(WHITE);
     show(stateLayout, _state);
     _oled->drawLine(0, 11, 128, 11);
 }
@@ -393,6 +388,11 @@ void OLED::show_menu() {
     menu_height = 13;
     (current_menu == files_menu) ? menu_width = 128 : menu_width = 64;
     menu_max_active_entries = 4;
+
+    // Clear any highlighting left in menu area
+    _oled->setColor(BLACK);
+    _oled->fillRect(0, 13, 64, 64);
+    _oled->setColor(WHITE);
 
     // Update the menu selection
     menu_update_selection(menu_max_active_entries);
@@ -445,16 +445,27 @@ void OLED::show_file() {
     }
 }
 void OLED::show_dro(float* axes, bool isMpos, bool* limits) {
+
+    // Save off dro values in case we need to refresh display with current data
+    saved_axes = axes;
+    saved_isMpos = isMpos;
+    saved_limits = limits;
+    
     if (_state == "Alarm") {
         return;
     }
-    if (_width == 128 && _filename.length()) {
+    if (_state == "Run" && _width == 128 && _filename.length()) {
         // wide displays will show a progress bar instead of DROs
         return;
     }
 
     auto n_axis = config->_axes->_numberAxis;
     char axisVal[20];
+
+    // Clear any highlighting left in DRO area
+    _oled->setColor(BLACK);
+    _oled->fillRect(64, 13, 64, 64);
+    _oled->setColor(WHITE);
 
     show(posLabelLayout, isMpos ? "M Pos" : "W Pos");
 
@@ -479,17 +490,13 @@ void OLED::show_dro(float* axes, bool isMpos, bool* limits) {
         _oled->drawString((_width == 128) ? 68 + 60 : 68 + 63, oled_y_pos, axisVal);
     }
     _oled->display();
-
-    // Save off dro values in case we need to refresh display with current data
-    saved_axes = axes;
-    saved_isMpos = isMpos;
-    saved_limits = limits;
 }
 
 void OLED::show_radio_info() {
     if (_filename.length()) {
         return;
     }
+    _oled->setColor(WHITE);
     if (_width == 128) {
         if (_state == "Alarm") {
             wrapped_draw_string(18, _radio_info, ArialMT_Plain_10);
@@ -510,8 +517,8 @@ void OLED::show_all(float *axes, bool isMpos, bool *limits) {
     _oled->clear();
     show_state();
     show_file();
-    show_menu();
-    if (current_menu != files_menu) {
+    show_menu();   
+    if (current_menu != files_menu && axes != NULL) {
         show_dro(axes, isMpos, limits);
     }
     show_radio_info();
