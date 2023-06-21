@@ -380,8 +380,8 @@ void OLED::show_menu() {
     int16_t menu_height;
     int menu_max_active_entries;
 
-    // Don't show menu during Run state
-    if (_state == "Run") {
+    // Don't show menu during Alarm or Run state
+    if (_state == "Alarm" || _state == "Run") {
         return;
     }
 
