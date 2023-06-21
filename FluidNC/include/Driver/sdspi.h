@@ -4,13 +4,13 @@
 #include <filesystem>
 
 // Definitions
-#define SD_MAX_STR          40  // Max string length for names
+#define SD_MAX_STR          255 // Max string length for paths
 #define SD_MAX_FILES        100 // Max number of files in a directory listing
 #define SD_NUM_ALLOWED_EXT  3   // Number of allowed file extensions
 
 // Type Definitions
 typedef struct {
-    char filename[SD_MAX_FILES][SD_MAX_STR];
+    char path[SD_MAX_FILES][SD_MAX_STR];
     int num_files;
 } FileListType;
 

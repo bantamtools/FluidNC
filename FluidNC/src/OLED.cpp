@@ -98,7 +98,7 @@ void OLED::menu_initialize(MenuType *menu, MenuType *parent) {
 }
 
 // Adds a node entry to the given menu
-void OLED::menu_add(MenuType *menu, MenuType *submenu, const char *display_name) {
+void OLED::menu_add(MenuType *menu, MenuType *submenu, const char *path, const char *display_name) {
 
     // Allocate memory for the new entry
     struct MenuNodeType* new_entry = (MenuNodeType*)malloc(sizeof(struct MenuNodeType));
@@ -109,7 +109,8 @@ void OLED::menu_add(MenuType *menu, MenuType *submenu, const char *display_name)
 
     new_entry->child = submenu;
 
-    strncpy(new_entry->display_name, display_name, MENU_NAME_MAX_STR);  // Cuts off long display names
+    if (display_name) strncpy(new_entry->display_name, display_name, MENU_NAME_MAX_STR);    // Cuts off long display names
+    if (path) strncpy(new_entry->path, path, MENU_NAME_MAX_PATH);                           // Cuts off long file paths
     new_entry->selected = false;
 
     // No menu entries, insert as the head, set as active window head and select it
@@ -189,13 +190,16 @@ void OLED::menu_populate_files_list(void) {
     }
 
     // Add the back button to top of menu
-    menu_add(this->files_menu, NULL, "< Back");
+    menu_add(this->files_menu, NULL, NULL, "< Back");
 
     // Create a submenu of files
     for (auto i = 0; i < files->num_files; i++) {
+
+        // Extract the display name from the full path
+        char *filename = strrchr(files->path[i], '/') + 1;
         
         // Initialize the files menu and attach nodes
-        menu_add(files_menu, NULL, files->filename[i]);
+        menu_add(files_menu, NULL, files->path[i], filename);
     }
 }
 
@@ -214,9 +218,9 @@ void OLED::menu_init(void) {
     this->current_menu = this->main_menu;
 
     // Create the interface, load and debug/info buttons
-    menu_add(this->main_menu, NULL, "Home");
-    menu_add(this->main_menu, NULL, "Jogging");
-    menu_add(this->main_menu, this->files_menu, "Run from SD");
+    menu_add(this->main_menu, NULL, NULL, "Home");
+    menu_add(this->main_menu, NULL, NULL, "Jogging");
+    menu_add(this->main_menu, this->files_menu, NULL, "Run from SD");
 }
 
 // Updates the current menu selection
@@ -680,6 +684,9 @@ void OLED::parse_status_report() {
             auto commaPos = value.find_first_of(",");
             _percent      = std::strtof(value.substr(0, commaPos).c_str(), nullptr);
             _filename     = value.substr(commaPos + 1);
+
+            // Trim to just the file name (no path)
+            _filename     = _filename.substr(_filename.rfind('/') + 1);
             continue;
         }
     }

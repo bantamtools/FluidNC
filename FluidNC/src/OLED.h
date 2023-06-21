@@ -9,7 +9,8 @@
 
 #include "Driver/sdspi.h"
 
-#define MENU_NAME_MAX_STR 40
+#define MENU_NAME_MAX_STR   40
+#define MENU_NAME_MAX_PATH  255
 
 typedef const uint8_t* font_t;
 
@@ -24,6 +25,7 @@ typedef struct MenuNodeType
 
     // Menu entry characteristics
     char display_name[MENU_NAME_MAX_STR];
+    char path[MENU_NAME_MAX_PATH];
     bool selected;
 
 } MenuNodeType;
@@ -84,7 +86,7 @@ private:
 
     struct MenuNodeType *menu_get_active_tail(MenuType *, int);
     void menu_initialize(MenuType *, MenuType *);
-    void menu_add(MenuType *, MenuType *, const char *);
+    void menu_add(MenuType *, MenuType *, const char *, const char *);
     void menu_delete(MenuType *);
     void menu_populate_files_list();
     void menu_init();

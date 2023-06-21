@@ -245,7 +245,7 @@ void sd_list_files() {
     if (!ec) {
 
         // Iterate through the top level directory
-        auto iter = std::filesystem::directory_iterator { fpath, ec };
+        auto iter = std::filesystem::recursive_directory_iterator { fpath, ec };
         if (!ec) {
 
             for (auto const& dir_entry : iter) {
@@ -269,7 +269,10 @@ void sd_list_files() {
                         }
 
                         // Save file name to list and increment count
-                        strncpy(sd_files.filename[sd_files.num_files], dir_entry.path().filename().c_str(), SD_MAX_STR);
+                        std::string full_path = dir_entry.path().c_str();
+                        std::string short_path = full_path.substr(strlen(base_path));
+
+                        strncpy(sd_files.path[sd_files.num_files], short_path.c_str(), SD_MAX_STR);
                         sd_files.num_files++;
                     }    
                 }
