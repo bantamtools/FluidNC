@@ -1026,7 +1026,6 @@ static void protocol_do_enter() {
     switch (sys.state) {
 
         // Button press does nothing in these states
-        case State::Alarm:
         case State::ConfigAlarm:
         case State::CheckMode:
         case State::Cycle:
@@ -1035,6 +1034,12 @@ static void protocol_do_enter() {
         case State::Sleep:
         case State::Hold:
         case State::SafetyDoor:
+            break;
+
+        // Clear alarm when in ALARM state
+        case State::Alarm:
+
+            sys.state = State::Idle;
             break;
 
         // Run selected operation when IDLE
