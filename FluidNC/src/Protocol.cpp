@@ -1049,6 +1049,11 @@ static void protocol_do_enter() {
             if (strcmp(config->_oled->menu_get_selected()->display_name, "Home") == 0) {
                 Machine::Homing::run_cycles(Machine::Homing::AllCycles);
 
+            // Display homing error if try to jog unhomed
+            } else if (strstr(config->_oled->menu_get_selected()->display_name, "Jog") && Machine::Homing::_phase == Machine::Homing::Phase::None)   {
+
+                // Do nothing...
+
             // Jog command
             } else if (strstr(config->_oled->menu_get_selected()->display_name, "Jog ")) {
 
