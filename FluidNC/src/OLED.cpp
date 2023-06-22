@@ -895,11 +895,29 @@ void OLED::parse_encoder() {
             ESP_ERROR_CHECK(esp_timer_start_once(jog_timer, JOG_TIMER_MS * 1000));
         }
 
-        // Set the selected axis to the increment value
+        // Set the selected axis to the increment value and clamp to extents
         switch (axis[0]) {
-            case 'X': saved_axes[X_AXIS] += (JOG_X_STEP * (float)enc_diff); break;
-            case 'Y': saved_axes[Y_AXIS] += (JOG_Y_STEP * (float)enc_diff); break;
-            case 'Z': saved_axes[Z_AXIS] += (JOG_Z_STEP * (float)enc_diff); break;
+            case 'X': 
+            
+                saved_axes[X_AXIS] += (JOG_X_STEP * (float)enc_diff); 
+                if (saved_axes[X_AXIS] < limitsMinPosition(X_AXIS)) saved_axes[X_AXIS] = limitsMinPosition(X_AXIS);
+                if (saved_axes[X_AXIS] > limitsMaxPosition(X_AXIS)) saved_axes[X_AXIS] = limitsMaxPosition(X_AXIS);
+                break;
+            
+            case 'Y': 
+            
+                saved_axes[Y_AXIS] += (JOG_Y_STEP * (float)enc_diff);
+                if (saved_axes[Y_AXIS] < limitsMinPosition(Y_AXIS)) saved_axes[Y_AXIS] = limitsMinPosition(Y_AXIS);
+                if (saved_axes[Y_AXIS] > limitsMaxPosition(Y_AXIS)) saved_axes[Y_AXIS] = limitsMaxPosition(Y_AXIS);
+                break;
+
+            case 'Z': 
+            
+                saved_axes[Z_AXIS] += (JOG_Z_STEP * (float)enc_diff); 
+                if (saved_axes[Z_AXIS] < limitsMinPosition(Z_AXIS)) saved_axes[Z_AXIS] = limitsMinPosition(Z_AXIS);
+                if (saved_axes[Z_AXIS] > limitsMaxPosition(Z_AXIS)) saved_axes[Z_AXIS] = limitsMaxPosition(Z_AXIS);
+                break;
+            
             default: break;
         }
 

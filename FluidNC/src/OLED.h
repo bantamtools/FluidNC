@@ -8,6 +8,7 @@
 
 #include "Channel.h"
 #include "SSD1306_I2C.h"
+#include "Limits.h"
 
 #include "Driver/sdspi.h"
 
