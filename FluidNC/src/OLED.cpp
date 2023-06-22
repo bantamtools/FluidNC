@@ -457,8 +457,8 @@ void OLED::show_menu() {
     int16_t menu_height;
     int menu_max_active_entries;
 
-    // Don't show menu during Alarm or Run state
-    if (_state == "Alarm" || _state == "Run") {
+    // Don't show menu during Alarm, Run or Hold states
+    if (_state == "Alarm" || _state == "Run" || _state == "Hold:0" || _state == "Hold:1") {
         return;
     }
 
@@ -527,11 +527,18 @@ void OLED::show_file() {
         }
         show(tickerLayout, _ticker);
 
-        wrapped_draw_string(14, _filename.c_str(), ArialMT_Plain_10);
+        wrapped_draw_string(13, _filename.c_str(), ArialMT_Plain_10);
 
-        _oled->drawProgressBar(0, 45, 120, 10, pct);
+        _oled->drawProgressBar(0, 39, 120, 10, pct);
     } else {
         show(percentLayout64, String(pct) + '%');
+    }
+
+    // Display pause/resume message at bottom
+    if (_state == "Hold:0" || _state == "Hold:1") {
+        _oled->drawString(0, 52, "Press button to RESUME");
+    } else {
+        _oled->drawString(0, 52, "Press button to PAUSE");
     }
 }
 void OLED::show_dro(float* axes, bool isMpos, bool* limits) {
@@ -584,7 +591,7 @@ void OLED::show_dro(float* axes, bool isMpos, bool* limits) {
 }
 
 void OLED::show_radio_info() {
-    if (_state == "Run" && _filename.length()) {
+    if ((_state == "Run" && _filename.length()) || _state == "Hold:0" || _state == "Hold:1") {
         return;
     }
 

@@ -1028,12 +1028,28 @@ static void protocol_do_enter() {
         // Button press does nothing in these states
         case State::ConfigAlarm:
         case State::CheckMode:
-        case State::Cycle:
         case State::Jog:
         case State::Homing:
         case State::Sleep:
-        case State::Hold:
         case State::SafetyDoor:
+            break;
+
+        // Feedhold during a cycle
+        case State::Cycle:
+            protocol_start_holding();
+            sys.state = State::Hold;
+            break;
+
+        // Resume from feedhold
+        case State::Hold:
+            // Cycle start only when IDLE or when a hold is complete and ready to resume.
+            if (sys.suspend.bit.holdComplete) {
+                if (spindle_stop_ovr.value) {
+                    spindle_stop_ovr.bit.restoreCycle = true;  // Set to restore in suspend routine and cycle start after.
+                } else {
+                    protocol_do_initiate_cycle();
+                }
+            }
             break;
 
         // Clear alarm when in ALARM state
