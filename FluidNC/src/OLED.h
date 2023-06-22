@@ -22,6 +22,9 @@
 #define JOG_TIMER_MS            250
 #define JOG_FEEDRATE            1000.0
 
+extern const char* bantam_version;
+extern const char* git_info_short;
+
 typedef const uint8_t* font_t;
 
 typedef struct MenuNodeType
@@ -81,7 +84,7 @@ public:
     void menu_show_error(String);
 
 private:
-    MenuType *main_menu, *files_menu, *jogging_menu, *settings_menu, *current_menu;
+    MenuType *main_menu, *files_menu, *jogging_menu, *settings_menu, *version_menu, *current_menu;
     int enc_diff = 0;
 
     std::string _report;

@@ -264,12 +264,14 @@ void OLED::menu_init(void) {
     files_menu = (MenuType*)malloc(sizeof(struct MenuType));
     jogging_menu = (MenuType*)malloc(sizeof(struct MenuType));
     settings_menu = (MenuType*)malloc(sizeof(struct MenuType));
+    version_menu = (MenuType*)malloc(sizeof(struct MenuType));
 
     // Initialize the menus
     menu_initialize(main_menu, NULL);
     menu_initialize(files_menu, main_menu);
     menu_initialize(jogging_menu, main_menu);
     menu_initialize(settings_menu, main_menu);
+    menu_initialize(version_menu, settings_menu);
 
     // Set main menu as current
     current_menu = main_menu;
@@ -289,7 +291,17 @@ void OLED::menu_init(void) {
     // Settings Menu
     menu_add(settings_menu, NULL, NULL, "< Back");
     //menu_add(settings_menu, NULL, NULL, "Update");  // WebUI already includes OTA functionality
-    menu_add(settings_menu, NULL, NULL, "Version");
+    menu_add(settings_menu, version_menu, NULL, "Version");
+
+    // Version Menu
+    char bantam_ver_str[MENU_NAME_MAX_STR] = (char*)"Bantam: " ;
+    char fluidnc_ver_str[MENU_NAME_MAX_STR] = (char*)"FluidNC: ";
+    strncat(bantam_ver_str, bantam_version, MENU_NAME_MAX_STR);
+    strncat(fluidnc_ver_str, git_info_short, MENU_NAME_MAX_STR);
+
+    menu_add(version_menu, NULL, NULL, "< Back");
+    menu_add(version_menu, NULL, NULL, bantam_ver_str);
+    menu_add(version_menu, NULL, NULL, fluidnc_ver_str);
 
     // Not jogging at init
     jog_state = JogState::Idle;
@@ -467,7 +479,7 @@ void OLED::show_menu() {
     // Set up font and menu window
     _oled->setFont(ArialMT_Plain_10);
     menu_height = 13;
-    (current_menu == files_menu) ? menu_width = 128 : menu_width = 64;
+    (current_menu == files_menu || current_menu == version_menu) ? menu_width = 128 : menu_width = 64;
     menu_max_active_entries = 4;
 
     // Clear any highlighting left in menu area
@@ -548,7 +560,7 @@ void OLED::show_dro(float* axes, bool isMpos, bool* limits) {
     saved_isMpos = isMpos;
     saved_limits = limits;
 
-    if (_state == "Alarm" || current_menu == files_menu) {
+    if (_state == "Alarm" || current_menu == files_menu || current_menu == version_menu) {
         return;
     }
 
