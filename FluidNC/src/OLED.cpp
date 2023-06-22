@@ -288,7 +288,7 @@ void OLED::menu_init(void) {
 
     // Settings Menu
     menu_add(settings_menu, NULL, NULL, "< Back");
-    menu_add(settings_menu, NULL, NULL, "Update");
+    //menu_add(settings_menu, NULL, NULL, "Update");  // WebUI already includes OTA functionality
     menu_add(settings_menu, NULL, NULL, "Version");
 
     // Not jogging at init
