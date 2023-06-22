@@ -2,6 +2,40 @@
 
 #include "Machine/MachineConfig.h"
 
+// Static variables
+static float* saved_axes = NULL;   // Saved dro values for refreshing display
+static bool saved_isMpos = false;
+static bool* saved_limits = NULL;
+
+static volatile JogState jog_state;
+static volatile bool jog_timer_active;
+
+// Jogging timer callback
+static void jog_timer_cb(void* arg)
+{
+    // Extract the axis from arguments
+    char *axis = (char*)(arg);
+
+    // Enter jogging mode
+    jog_state = JogState::Jogging;
+
+    // Construct and run jog command
+    String jog_command;
+    switch (axis[0]) {
+        case 'X': jog_command = "$J=X" + String(saved_axes[X_AXIS], 3) + " F" + String(JOG_FEEDRATE, 3); break;
+        case 'Y': jog_command = "$J=Y" + String(saved_axes[Y_AXIS], 3) + " F" + String(JOG_FEEDRATE, 3); break;
+        case 'Z': jog_command = "$J=Z" + String(saved_axes[Z_AXIS], 3) + " F" + String(JOG_FEEDRATE, 3); break;
+        default: break;
+    }   
+    gc_execute_line((char*)jog_command.c_str());
+
+    // Go back to scrolling mode
+    jog_state = JogState::Scrolling;
+
+    // Clear flag
+    jog_timer_active = false;
+}
+
 // Returns true if the current menu is the files menu
  bool OLED::menu_is_files_list(void) {
     return (current_menu == files_menu);
@@ -427,13 +461,8 @@ void OLED::show_menu() {
     _oled->fillRect(0, 13, menu_width, 64);
     _oled->setColor(WHITE);
 
-    // Jog state set to scrolling, update the jog axis values
-    if (jog_state == JogState::Scrolling) {
-
-        log_info("Scrolling to set jog value...");
-
-    // Otherwise, update the menu selection
-    } else {
+    // Update the menu selection if not jogging
+    if (jog_state == JogState::Idle) {
 
         menu_update_selection(menu_max_active_entries);
     }
@@ -829,6 +858,41 @@ void OLED::parse_encoder() {
     
     // Save off the encoder difference to update the menu
     this->enc_diff = stoi(_report.substr(start, end - start));
+
+    // System IDLE and scrolling to jog
+    if ((sys.state == State::Idle) && (jog_state == JogState::Scrolling)) {
+
+        // Extract axis from menu item
+        char *axis = (strrchr(menu_get_selected()->display_name, ' ') + 1);
+
+        // Start timer if not active
+        if (!jog_timer_active) {
+
+            // Set flag
+            jog_timer_active = true;
+
+            // Set up and start timer
+            const esp_timer_create_args_t jog_timer_args = {
+                .callback = &jog_timer_cb,
+                .arg = (void*)axis,
+                .name = "jog_timer"
+            };
+            esp_timer_handle_t jog_timer;
+            ESP_ERROR_CHECK(esp_timer_create(&jog_timer_args, &jog_timer));
+            ESP_ERROR_CHECK(esp_timer_start_once(jog_timer, JOG_TIMER_MS * 1000));
+        }
+
+        // Set the selected axis to the increment value
+        switch (axis[0]) {
+            case 'X': saved_axes[X_AXIS] += (JOG_X_STEP * (float)enc_diff); break;
+            case 'Y': saved_axes[Y_AXIS] += (JOG_Y_STEP * (float)enc_diff); break;
+            case 'Z': saved_axes[Z_AXIS] += (JOG_Z_STEP * (float)enc_diff); break;
+            default: break;
+        }
+
+        // Update the dro with the jog axis value
+        show_dro(saved_axes, saved_isMpos, saved_limits);
+    }
 
     // Refresh the menu
     show_menu();

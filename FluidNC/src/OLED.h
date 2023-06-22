@@ -1,5 +1,7 @@
 #pragma once
 
+#include "esp_timer.h"
+
 #include "Config.h"
 
 #include "Configuration/Configurable.h"
@@ -11,6 +13,13 @@
 
 #define MENU_NAME_MAX_STR   40
 #define MENU_NAME_MAX_PATH  255
+
+// Jogging settings
+#define JOG_X_STEP              1.0
+#define JOG_Y_STEP              1.0
+#define JOG_Z_STEP              0.5
+#define JOG_TIMER_MS            250
+#define JOG_FEEDRATE            1000.0
 
 typedef const uint8_t* font_t;
 
@@ -71,7 +80,6 @@ public:
 
 private:
     MenuType *main_menu, *files_menu, *jogging_menu, *settings_menu, *current_menu;
-    JogState jog_state;
     int enc_diff = 0;
 
     std::string _report;
@@ -88,11 +96,6 @@ private:
     int _radio_delay = 0;
 
     uint8_t _i2c_num = 0;
-
-    // Saved dro values for refreshing display
-    float* saved_axes = NULL;
-    bool saved_isMpos = false;
-    bool* saved_limits = NULL;
 
     struct MenuNodeType *menu_get_active_tail(MenuType *, int);
     void menu_initialize(MenuType *, MenuType *);

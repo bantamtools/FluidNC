@@ -1052,29 +1052,17 @@ static void protocol_do_enter() {
             // Jog command
             } else if (strstr(config->_oled->menu_get_selected()->display_name, "Jog ")) {
 
-                char *axis = (strrchr(config->_oled->menu_get_selected()->display_name, ' ') + 1);
+                char axis = (strrchr(config->_oled->menu_get_selected()->display_name, ' ') + 1)[0];
 
                 // Enter jogging mode if not active
                 if (config->_oled->menu_get_jog_state() == JogState::Idle) {
-
-                    log_info("Start jogging " << axis);
                     config->_oled->menu_set_jog_state(JogState::Scrolling);
 
                 // Exit jogging mode if press 
                 } else {
-
-                    log_info("Stop jogging " << axis);
                     config->_oled->menu_set_jog_state(JogState::Idle);
-
                 }
 
-             /*   
-                String value = "X10.0 F1000";
-                char jogLine[LINE_BUFFER_SIZE];
-                strcpy(jogLine, "$J=");
-                strcat(jogLine, value.c_str());
-                gc_execute_line(jogLine);
-*/
             // Back button
             } else if (strcmp(config->_oled->menu_get_selected()->display_name, "< Back") == 0) {
                 config->_oled->menu_exit_submenu();
