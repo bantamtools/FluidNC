@@ -106,6 +106,15 @@ void OLED::menu_set_jog_state(JogState state) {
     jog_state = state;
 }
 
+// Display an error message temporarily
+void OLED::menu_show_error(String msg) {
+
+    // Show error message for 2s then restore display
+    show_error(msg);
+    delay_ms(2000);
+    show_all(saved_axes, saved_isMpos, saved_limits);
+}
+
 // Helper function to return the active tail
 struct MenuNodeType *OLED::menu_get_active_tail(MenuType *menu, int menu_max_active_entries) {
 
@@ -599,6 +608,19 @@ void OLED::show_radio_info() {
             wrapped_draw_string(46, "Press button to Clear", ArialMT_Plain_10);
         }
     }
+}
+
+void OLED::show_error(String msg) {
+
+    // Clear anything left in error message area
+    _oled->setColor(BLACK);
+    _oled->fillRect(0, 13, 128, 64);
+    _oled->setColor(WHITE);
+
+    // Draw message
+    _oled->setFont(ArialMT_Plain_10);
+    _oled->drawString(0, 13, msg);
+    _oled->display();
 }
 
 void OLED::show_all(float *axes, bool isMpos, bool *limits) {

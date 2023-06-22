@@ -78,6 +78,7 @@ public:
     void menu_exit_submenu();
     JogState menu_get_jog_state();
     void menu_set_jog_state(JogState);
+    void menu_show_error(String);
 
 private:
     MenuType *main_menu, *files_menu, *jogging_menu, *settings_menu, *current_menu;
@@ -124,6 +125,7 @@ private:
     void show_file();
     void show_dro(float* axes, bool isMpos, bool* limits);
     void show_radio_info();
+    void show_error(String);
     void show_all(float *axes, bool isMpos, bool *limits);
 
     void draw_checkbox(int16_t x, int16_t y, int16_t width, int16_t height, bool checked);

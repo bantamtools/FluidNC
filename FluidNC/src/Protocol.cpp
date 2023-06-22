@@ -1052,7 +1052,8 @@ static void protocol_do_enter() {
             // Display homing error if try to jog unhomed
             } else if (strstr(config->_oled->menu_get_selected()->display_name, "Jog") && Machine::Homing::_phase == Machine::Homing::Phase::None)   {
 
-                // Do nothing...
+                // Display error
+                config->_oled->menu_show_error("Machine not homed");
 
             // Jog command
             } else if (strstr(config->_oled->menu_get_selected()->display_name, "Jog ")) {
