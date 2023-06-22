@@ -26,7 +26,11 @@
 #    include "WebUI/WifiConfig.h"
 #    include "Driver/localfs.h"
 
+#    include "Encoder.h"
+
 extern void make_user_commands();
+
+Encoder *encoder = new Encoder();
 
 void setup() {
     disableCore0WDT();
@@ -100,6 +104,10 @@ void setup() {
 
             if (config->_oled) {
                 config->_oled->init();
+            }
+
+            if (config->_encoder) {
+                config->_encoder->init();
             }
 
             config->_stepping->init();  // Configure stepper interrupt timers

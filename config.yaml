@@ -30,7 +30,7 @@ start:
   must_home: false
 
 control:
-    feed_hold_pin: gpio.36:low
+  enter_pin: gpio.36:low
 
 stepping:
   engine: TIMED
@@ -47,7 +47,7 @@ axes:
     steps_per_mm: 38.5
     max_rate_mm_per_min: 7500
     acceleration_mm_per_sec2: 5000
-    max_travel_mm: 200
+    max_travel_mm: 235
     soft_limits: false
     homing:
       cycle: 2
@@ -120,6 +120,11 @@ oled:
    width: 128
    height: 64
    radio_delay_ms: 1000
+
+# Encoder
+encoder:
+  a_pin: gpio.35
+  b_pin: gpio.48
 
 # Configure SD card in SPI mode
 spi:

@@ -19,7 +19,7 @@ namespace Pins {
 
     public:
 #ifdef SERAMA
-        static const int nGPIOPins = 48;
+        static const int nGPIOPins = 49;
 #else
         static const int nGPIOPins = 40;
 #endif

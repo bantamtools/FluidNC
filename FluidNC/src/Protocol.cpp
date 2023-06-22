@@ -310,6 +310,13 @@ void protocol_main_loop() {
             idleEndTime = 0;  //
             config->_axes->set_disable(true);
         }
+
+        //TEMP
+        int16_t enc_diff = config->_encoder->get_difference();
+        if (enc_diff != 0) {
+            log_info("Encoder difference -> " << enc_diff);
+        }
+
     }
     return; /* Never reached */
 }
@@ -1013,6 +1020,91 @@ static void protocol_do_limit(void* arg) {
         return;
     }
 }
+
+static void protocol_do_enter() {
+    
+    switch (sys.state) {
+
+        // Button press does nothing in these states
+        case State::ConfigAlarm:
+        case State::CheckMode:
+        case State::Jog:
+        case State::Homing:
+        case State::Sleep:
+        case State::SafetyDoor:
+            break;
+
+        // Feedhold during a cycle
+        case State::Cycle:
+            protocol_start_holding();
+            sys.state = State::Hold;
+            break;
+
+        // Resume from feedhold
+        case State::Hold:
+            // Cycle start only when IDLE or when a hold is complete and ready to resume.
+            if (sys.suspend.bit.holdComplete) {
+                if (spindle_stop_ovr.value) {
+                    spindle_stop_ovr.bit.restoreCycle = true;  // Set to restore in suspend routine and cycle start after.
+                } else {
+                    protocol_do_initiate_cycle();
+                }
+            }
+            break;
+
+        // Clear alarm when in ALARM state
+        case State::Alarm:
+
+            sys.state = State::Idle;
+            break;
+
+        // Run selected operation when IDLE
+        case State::Idle:
+            
+            // Home command
+            if (strcmp(config->_oled->menu_get_selected()->display_name, "Home") == 0) {
+                Machine::Homing::run_cycles(Machine::Homing::AllCycles);
+
+            // Display homing error if try to jog unhomed
+            } else if (strstr(config->_oled->menu_get_selected()->display_name, "Jog") && Machine::Homing::_phase == Machine::Homing::Phase::None)   {
+
+                // Display error
+                config->_oled->menu_show_error("Machine not homed");
+
+            // Jog command
+            } else if (strstr(config->_oled->menu_get_selected()->display_name, "Jog ")) {
+
+                char axis = (strrchr(config->_oled->menu_get_selected()->display_name, ' ') + 1)[0];
+
+                // Enter jogging mode if not active
+                if (config->_oled->menu_get_jog_state() == JogState::Idle) {
+                    config->_oled->menu_set_jog_state(JogState::Scrolling);
+
+                // Exit jogging mode if press 
+                } else {
+                    config->_oled->menu_set_jog_state(JogState::Idle);
+                }
+
+            // Back button
+            } else if (strcmp(config->_oled->menu_get_selected()->display_name, "< Back") == 0) {
+                config->_oled->menu_exit_submenu();
+
+            // Run files command if files menu
+            } else if (config->_oled->menu_is_files_list()) {
+
+                InputFile *infile = new InputFile("sd", config->_oled->menu_get_selected()->path, WebUI::AuthenticationLevel::LEVEL_ADMIN, allChannels);
+                allChannels.registration(infile);
+            
+            // Otherwise, enter the submenu if it exists
+            } else {
+                config->_oled->menu_enter_submenu();
+            }
+            break;
+
+        default: break;
+    }
+}
+
 ArgEvent feedOverrideEvent { protocol_do_feed_override };
 ArgEvent rapidOverrideEvent { protocol_do_rapid_override };
 ArgEvent spindleOverrideEvent { protocol_do_spindle_override };
@@ -1028,6 +1120,7 @@ NoArgEvent cycleStopEvent { protocol_do_cycle_stop };
 NoArgEvent motionCancelEvent { protocol_do_motion_cancel };
 NoArgEvent sleepEvent { protocol_do_sleep };
 NoArgEvent debugEvent { report_realtime_debug };
+NoArgEvent enterEvent { protocol_do_enter };
 
 // Only mc_reset() is permitted to set rtReset.
 NoArgEvent resetEvent { mc_reset };

@@ -1,13 +1,60 @@
 #pragma once
 
+#include "esp_timer.h"
+
 #include "Config.h"
 
 #include "Configuration/Configurable.h"
 
 #include "Channel.h"
 #include "SSD1306_I2C.h"
+#include "Limits.h"
+
+#include "Driver/sdspi.h"
+
+#define MENU_NAME_MAX_STR   40
+#define MENU_NAME_MAX_PATH  255
+
+// Jogging settings
+#define JOG_X_STEP              1.0
+#define JOG_Y_STEP              1.0
+#define JOG_Z_STEP              0.5
+#define JOG_TIMER_MS            250
+#define JOG_FEEDRATE            1000.0
+
+extern const char* bantam_version;
+extern const char* git_info_short;
 
 typedef const uint8_t* font_t;
+
+typedef struct MenuNodeType
+{
+    // Menu neighbor attributes
+    struct MenuNodeType *prev;
+    struct MenuNodeType *next;
+
+    // Submenu attributes
+    struct MenuType *child;
+
+    // Menu entry characteristics
+    char display_name[MENU_NAME_MAX_STR];
+    char path[MENU_NAME_MAX_PATH];
+    bool selected;
+
+} MenuNodeType;
+
+typedef struct MenuType {
+    struct MenuType *parent;
+    struct MenuNodeType *head;
+    struct MenuNodeType *active_head;
+} MenuType;
+
+// Jogging states
+enum class JogState : uint8_t {
+    Idle = 0,   // Not jogging
+    Scrolling,  // Scrolling to jog value with encoder
+    Jogging,    // Performing the jog command
+};
 
 class OLED : public Channel, public Configuration::Configurable {
 public:
@@ -25,11 +72,21 @@ public:
     static Layout filenameLayout;
     static Layout percentLayout128;
     static Layout percentLayout64;
-    static Layout limitLabelLayout;
     static Layout posLabelLayout;
     static Layout radioAddrLayout;
 
+    bool menu_is_files_list(void);
+    struct MenuNodeType *menu_get_selected();
+    void menu_enter_submenu();
+    void menu_exit_submenu();
+    JogState menu_get_jog_state();
+    void menu_set_jog_state(JogState);
+    void menu_show_error(String);
+
 private:
+    MenuType *main_menu, *files_menu, *jogging_menu, *settings_menu, *version_menu, *current_menu;
+    int enc_diff = 0;
+
     std::string _report;
 
     String _radio_info;
@@ -45,6 +102,14 @@ private:
 
     uint8_t _i2c_num = 0;
 
+    struct MenuNodeType *menu_get_active_tail(MenuType *, int);
+    void menu_initialize(MenuType *, MenuType *);
+    void menu_add(MenuType *, MenuType *, const char *, const char *);
+    void menu_delete(MenuType *);
+    void menu_populate_files_list();
+    void menu_init();
+    void menu_update_selection(int);
+
     void parse_report();
     void parse_status_report();
     void parse_gcode_report();
@@ -52,15 +117,20 @@ private:
     void parse_IP();
     void parse_AP();
     void parse_BT();
+    void parse_encoder();
 
     float* parse_axes(std::string s);
     void   parse_numbers(std::string s, float* nums, int maxnums);
 
     void show_limits(bool probe, const bool* limits);
+    void show_menu();
     void show_state();
     void show_file();
-    void show_dro(const float* axes, bool isMpos, bool* limits);
+    void show_dro(float* axes, bool isMpos, bool* limits);
     void show_radio_info();
+    void show_error(String);
+    void show_all(float *axes, bool isMpos, bool *limits);
+
     void draw_checkbox(int16_t x, int16_t y, int16_t width, int16_t height, bool checked);
 
     void wrapped_draw_string(int16_t y, const String& s, font_t font);
@@ -79,7 +149,7 @@ private:
     uint8_t font_height(font_t font);
     size_t  char_width(char s, font_t font);
 
-    OLEDDISPLAY_GEOMETRY _geometry = GEOMETRY_64_48;
+    OLEDDISPLAY_GEOMETRY _geometry = GEOMETRY_128_64;
 
     bool _error = false;
 

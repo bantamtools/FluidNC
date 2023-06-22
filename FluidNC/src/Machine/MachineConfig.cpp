@@ -65,7 +65,9 @@ namespace Machine {
         handler.section("user_outputs", _userOutputs);
 
         handler.section("oled", _oled);
-        
+
+        handler.section("encoder", _encoder);
+
         Spindles::SpindleFactory::factory(handler, _spindles);
 
         // TODO: Consider putting these under a gcode: hierarchy level? Or motion control?
