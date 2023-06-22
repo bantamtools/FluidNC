@@ -62,6 +62,16 @@ void OLED::menu_exit_submenu(void) {
     }
 }
 
+// Get the jogging state
+JogState OLED::menu_get_jog_state(void) {
+    return jog_state;
+}
+
+// Set the jogging state
+void OLED::menu_set_jog_state(JogState state) {
+    jog_state = state;
+}
+
 // Helper function to return the active tail
 struct MenuNodeType *OLED::menu_get_active_tail(MenuType *menu, int menu_max_active_entries) {
 
@@ -237,6 +247,9 @@ void OLED::menu_init(void) {
     menu_add(settings_menu, NULL, NULL, "< Back");
     menu_add(settings_menu, NULL, NULL, "Update");
     menu_add(settings_menu, NULL, NULL, "Version");
+
+    // Not jogging at init
+    jog_state = JogState::Idle;
 }
 
 // Updates the current menu selection
@@ -414,8 +427,16 @@ void OLED::show_menu() {
     _oled->fillRect(0, 13, menu_width, 64);
     _oled->setColor(WHITE);
 
-    // Update the menu selection
-    menu_update_selection(menu_max_active_entries);
+    // Jog state set to scrolling, update the jog axis values
+    if (jog_state == JogState::Scrolling) {
+
+        log_info("Scrolling to set jog value...");
+
+    // Otherwise, update the menu selection
+    } else {
+
+        menu_update_selection(menu_max_active_entries);
+    }
 
     // Traverse the list and print out each menu entry name
     MenuNodeType *entry = current_menu->active_head; // Start at the beginning of the active window

@@ -36,6 +36,13 @@ typedef struct MenuType {
     struct MenuNodeType *active_head;
 } MenuType;
 
+// Jogging states
+enum class JogState : uint8_t {
+    Idle = 0,   // Not jogging
+    Scrolling,  // Scrolling to jog value with encoder
+    Jogging,    // Performing the jog command
+};
+
 class OLED : public Channel, public Configuration::Configurable {
 public:
     struct Layout {
@@ -59,9 +66,12 @@ public:
     struct MenuNodeType *menu_get_selected();
     void menu_enter_submenu();
     void menu_exit_submenu();
+    JogState menu_get_jog_state();
+    void menu_set_jog_state(JogState);
 
 private:
     MenuType *main_menu, *files_menu, *jogging_menu, *settings_menu, *current_menu;
+    JogState jog_state;
     int enc_diff = 0;
 
     std::string _report;
