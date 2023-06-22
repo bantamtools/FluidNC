@@ -61,7 +61,7 @@ public:
     void menu_exit_submenu();
 
 private:
-    MenuType *main_menu, *files_menu, *current_menu;
+    MenuType *main_menu, *files_menu, *jogging_menu, *settings_menu, *current_menu;
     int enc_diff = 0;
 
     std::string _report;

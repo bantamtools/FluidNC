@@ -207,20 +207,36 @@ void OLED::menu_populate_files_list(void) {
 void OLED::menu_init(void) {
 
     // Allocate memory for the menus
-    this->main_menu = (MenuType*)malloc(sizeof(struct MenuType));
-    this->files_menu = (MenuType*)malloc(sizeof(struct MenuType));
+    main_menu = (MenuType*)malloc(sizeof(struct MenuType));
+    files_menu = (MenuType*)malloc(sizeof(struct MenuType));
+    jogging_menu = (MenuType*)malloc(sizeof(struct MenuType));
+    settings_menu = (MenuType*)malloc(sizeof(struct MenuType));
 
     // Initialize the menus
-    menu_initialize(this->main_menu, NULL);
-    menu_initialize(this->files_menu, this->main_menu);
+    menu_initialize(main_menu, NULL);
+    menu_initialize(files_menu, main_menu);
+    menu_initialize(jogging_menu, main_menu);
+    menu_initialize(settings_menu, main_menu);
 
     // Set main menu as current
-    this->current_menu = this->main_menu;
+    current_menu = main_menu;
 
-    // Create the interface, load and debug/info buttons
-    menu_add(this->main_menu, NULL, NULL, "Home");
-    menu_add(this->main_menu, NULL, NULL, "Jogging");
-    menu_add(this->main_menu, this->files_menu, NULL, "Run from SD");
+    // Main Menu
+    menu_add(main_menu, NULL, NULL, "Home");
+    menu_add(main_menu, jogging_menu, NULL, "Jogging");
+    menu_add(main_menu, files_menu, NULL, "Run from SD");
+    menu_add(main_menu, settings_menu, NULL, "Settings");
+
+    // Jogging Menu
+    menu_add(jogging_menu, NULL, NULL, "< Back");
+    menu_add(jogging_menu, NULL, NULL, "Jog X");
+    menu_add(jogging_menu, NULL, NULL, "Jog Y");
+    menu_add(jogging_menu, NULL, NULL, "Jog Z");
+
+    // Settings Menu
+    menu_add(settings_menu, NULL, NULL, "< Back");
+    menu_add(settings_menu, NULL, NULL, "Update");
+    menu_add(settings_menu, NULL, NULL, "Version");
 }
 
 // Updates the current menu selection
