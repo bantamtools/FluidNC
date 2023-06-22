@@ -417,7 +417,12 @@ Channel* OLED::pollLine(char* line) {
 }
 
 void OLED::show_state() {
+
+    // Clear anything left in radio area
+    _oled->setColor(BLACK);
+    _oled->fillRect(0, 0, 50, 11);
     _oled->setColor(WHITE);
+
     show(stateLayout, _state);
     _oled->drawLine(0, 11, 128, 11);
 }
@@ -497,6 +502,12 @@ void OLED::show_file() {
         // but shows one last SD report
         return;
     }
+
+    // Clear anything left in file areas
+    _oled->setColor(BLACK);
+    _oled->fillRect(50, 0, 78, 11);
+    _oled->fillRect(0, 13, 128, 64);
+    _oled->setColor(WHITE);
 
     if (_width == 128) {
         show(percentLayout128, String(pct) + '%');
@@ -592,11 +603,13 @@ void OLED::show_radio_info() {
 
 void OLED::show_all(float *axes, bool isMpos, bool *limits) {
 
-    _oled->clear();
+    //_oled->clear();
     show_state();
     show_file();
-    show_menu();   
-    show_dro(axes, isMpos, limits);
+    show_menu();
+    if (((sys.state != State::Jog)) || (jog_state == JogState::Idle)) {  // Don't update dro when jogging to position using the encoder
+        show_dro(axes, isMpos, limits);
+    }
     show_radio_info();
     _oled->display();
 }
