@@ -261,6 +261,19 @@ static void check_startup_state() {
     }
 }
 
+// Reads the encoder input and prints a report if available
+void protocol_read_encoder() {
+    
+    // Read and report the difference if encoder is active
+    if (config->_encoder->is_active()) {
+
+        int16_t enc_diff = config->_encoder->get_difference();
+        if (enc_diff != 0) {
+            log_info("Encoder difference -> " << enc_diff); // Used by display for updates
+        }
+    }
+}
+
 void protocol_main_loop() {
     check_startup_state();
     start_polling();
@@ -311,12 +324,8 @@ void protocol_main_loop() {
             config->_axes->set_disable(true);
         }
 
-        //TEMP
-        int16_t enc_diff = config->_encoder->get_difference();
-        if (enc_diff != 0) {
-            log_info("Encoder difference -> " << enc_diff);
-        }
-
+        // Read encoder
+        protocol_read_encoder();
     }
     return; /* Never reached */
 }

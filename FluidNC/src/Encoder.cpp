@@ -54,13 +54,20 @@ void Encoder::init() {
 	// Everything is set up, now go to counting
 	pcnt_counter_resume(this->pcnt_unit);
 
+    // Set flag
+    this->_is_active = true;
+
     // Store the current encoder value
-	this->previous_value = this->get_value();
+	this->_previous_value = this->get_value();
 }
 
 // Get the current encoder value
 int16_t Encoder::get_value() {
 	int16_t value;
+
+    // Return zero if not active
+    if (!this->_is_active) return 0;
+
 	pcnt_get_counter_value(this->pcnt_unit, &value);
 	return value;
 }
@@ -70,15 +77,23 @@ int16_t Encoder::get_difference() {
 
     int16_t current_value, difference;
 
+    // Return zero if not active
+    if (!this->_is_active) return 0;
+
     // Get the current encoder count and calculate difference
     current_value = (int16_t)this->get_value();
-    difference = current_value - this->previous_value;
+    difference = current_value - this->_previous_value;
 
     // Set previous count to current count
-    this->previous_value = current_value;
+    this->_previous_value = current_value;
 
     // Return the difference
     return difference;
+}
+
+// Returns active flag
+bool Encoder::is_active() {
+    return _is_active;
 }
 
 // Configurable functions

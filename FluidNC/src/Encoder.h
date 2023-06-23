@@ -34,6 +34,7 @@ public:
     void init();
 	int16_t get_value();
     int16_t get_difference();
+    bool is_active();
 
     // Configuration handlers.
     void validate() override;
@@ -41,5 +42,6 @@ public:
     
 protected:
 	pcnt_unit_t pcnt_unit;
-	int previous_value;
+	int _previous_value = 0;
+    bool _is_active = false;
 };
