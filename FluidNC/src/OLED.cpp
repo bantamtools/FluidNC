@@ -557,7 +557,8 @@ void OLED::show_dro(float* axes, bool isMpos, bool* limits) {
     saved_isMpos = isMpos;
     saved_limits = limits;
 
-    if (_state == "Alarm" || current_menu == files_menu || current_menu == version_menu) {
+    if (_state == "Alarm" || _state == "Hold:0" || _state == "Hold:1" ||
+        current_menu == files_menu || current_menu == version_menu) {
         return;
     }
 
