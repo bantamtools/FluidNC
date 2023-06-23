@@ -22,7 +22,6 @@
 #define JOG_TIMER_MS            250
 #define JOG_FEEDRATE            1000.0
 
-extern const char* bantam_version;
 extern const char* git_info_short;
 
 typedef const uint8_t* font_t;

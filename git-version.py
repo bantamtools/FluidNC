@@ -3,11 +3,6 @@ import filecmp, tempfile, shutil, os
 
 # Thank you https://docs.platformio.org/en/latest/projectconf/section_env_build.html !
 
-####################
-## Bantam version ##
-####################
-bantam_version = 'v0.1.0'
-
 gitFail = False
 try:
     subprocess.check_call(["git", "status"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -57,12 +52,11 @@ else:
 
 grbl_version = tag.replace('v','').rpartition('.')[0]
 git_info = '%s%s' % (tag, rev)
-git_info_short = '%s' % (tag)
+git_info_short = '%s' % (tag.replace('bantam_', ''))
 
 provisional = "FluidNC/src/version.cxx"
 final = "FluidNC/src/version.cpp"
 with open(provisional, "w") as fp:
-    fp.write('const char* bantam_version = \"' + bantam_version + '\";\n')
     fp.write('const char* grbl_version = \"' + grbl_version + '\";\n')
     fp.write('const char* git_info     = \"' + git_info + '\";\n')
     fp.write('const char* git_info_short = \"' + git_info_short + '\";\n')
