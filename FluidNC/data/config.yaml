@@ -46,8 +46,8 @@ axes:
   x:
     steps_per_mm: 40
     max_rate_mm_per_min: 7500
-    acceleration_mm_per_sec2: 5000
-    max_travel_mm: 235
+    acceleration_mm_per_sec2: 10000
+    max_travel_mm: 216
     soft_limits: false
     homing:
       cycle: 2
@@ -68,12 +68,13 @@ axes:
 
   y:
     steps_per_mm: 34.5
-    max_rate_mm_per_min: 4000
-    acceleration_mm_per_sec2: 4000
+    max_rate_mm_per_min: 7500
+    acceleration_mm_per_sec2: 10000
     max_travel_mm: 230
     soft_limits: false
     homing:
       cycle: -1
+      mpos_mm: -40
 
     motor0:
       limit_neg_pin: gpio.2:low
@@ -88,7 +89,7 @@ axes:
   z:
     steps_per_mm: 12.25
     max_rate_mm_per_min: 5000
-    acceleration_mm_per_sec2: 5000
+    acceleration_mm_per_sec2: 10000
     max_travel_mm: 16
     soft_limits: false
     homing:
@@ -103,7 +104,7 @@ axes:
       pulloff_mm: 4
       stepstick:
         disable_pin: gpio.47:low
-        direction_pin: gpio.33
+        direction_pin: gpio.33:high
         step_pin: gpio.34
     motor1:
       null_motor:
