@@ -23,9 +23,9 @@ namespace Kinematics {
         void releaseMotors(AxisMask axisMask, MotorMask motors) override;
         bool limitReached(AxisMask& axisMask, MotorMask& motors, MotorMask limited) override;
 
-//        void afterParse() override {}
-//        void group(Configuration::HandlerBase& handler) override;
-//        void validate() override {}
+        void afterParse() override {}
+        virtual void group(Configuration::HandlerBase& handler) override;
+        void validate() override {}
 
         const char* name() const override { return "DifferentialDrive"; }
 
@@ -33,10 +33,15 @@ namespace Kinematics {
         ~DifferentialDrive() {}
 
     private:
-        int _left_motor_axis;
-        int _right_motor_axis;
-        float _wheel_radius;
-        float _distance_between_wheels;
+
+        // State
+        float m_heading; // current forward angle (radians?)
+
+        // Parameters
+        int _left_motor_axis    = 0;
+        int _right_motor_axis   = 1;
+        float _wheel_radius     = 20.0;
+        float _distance_between_wheels = 50.0;
 
     };
 }  
