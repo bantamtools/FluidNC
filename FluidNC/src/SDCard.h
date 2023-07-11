@@ -21,6 +21,7 @@
 #include "Configuration/Configurable.h"
 #include "WebUI/Authentication.h"
 #include "Pin.h"
+#include "Machine/CardDetectPin.h"
 #include "Error.h"
 
 #include <cstdint>

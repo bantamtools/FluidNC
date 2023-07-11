@@ -88,6 +88,7 @@ extern ArgEvent rapidOverrideEvent;
 extern ArgEvent spindleOverrideEvent;
 extern ArgEvent accessoryOverrideEvent;
 extern ArgEvent limitEvent;
+extern ArgEvent cardDetectEvent;
 
 extern ArgEvent reportStatusEvent;
 

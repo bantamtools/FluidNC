@@ -11,6 +11,7 @@
 #include "Driver/sdspi.h"
 #include "src/SettingsDefinitions.h"
 #include "FluidPath.h"
+#include "Protocol.h"
 
 SDCard::SDCard() : _state(State::Idle) {}
 
@@ -43,6 +44,10 @@ void SDCard::init() {
     } else {
         sd_init_slot(_frequency_hz, csPin);
     }
+
+    // Set up an event pin with card detect actions
+    CardDetectPin *cardDetectEventPin = new CardDetectPin(_cardDetect);
+    cardDetectEventPin->init();
 }
 
 void SDCard::afterParse() {

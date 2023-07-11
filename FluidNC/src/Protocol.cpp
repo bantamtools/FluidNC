@@ -1039,6 +1039,11 @@ static void protocol_do_limit(void* arg) {
     }
 }
 
+static void protocol_do_card_detect(void* arg) {
+
+    // Do nothing, use update() in CardDetectPin instead
+}
+
 static void protocol_do_enter() {
     
     switch (sys.state) {
@@ -1128,6 +1133,7 @@ ArgEvent rapidOverrideEvent { protocol_do_rapid_override };
 ArgEvent spindleOverrideEvent { protocol_do_spindle_override };
 ArgEvent accessoryOverrideEvent { protocol_do_accessory_override };
 ArgEvent limitEvent { protocol_do_limit };
+ArgEvent cardDetectEvent { protocol_do_card_detect};
 
 ArgEvent reportStatusEvent { (void (*)(void*))report_realtime_status };
 

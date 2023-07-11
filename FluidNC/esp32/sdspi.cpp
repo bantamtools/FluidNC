@@ -21,13 +21,6 @@ static FileListType sd_files;
 static const String allowed_file_ext[SD_NUM_ALLOWED_EXT] = {".gcode", ".nc", ".txt"};
 static bool sd_is_mounted = false;
 
-// SD card detect handler
-static void IRAM_ATTR card_detect_handler(void *args)
-{
-    // Print message to channel to trigger updates
-    log_info("SD Card Detect Event");
-}
-
 static esp_err_t mount_to_vfs_fat(int max_files, sdmmc_card_t* card, uint8_t pdrv, const char* base_path) {
     FATFS*    fs = NULL;
     esp_err_t err;
@@ -115,10 +108,6 @@ bool sd_init_slot(uint32_t freq_hz, int cs_pin, int cd_pin, int wp_pin) {
         err = sdspi_host_set_card_clk(host_config.slot, freq_hz / 1000);
         CHECK_EXECUTE_RESULT(err, "set slot clock speed failed");
     }
-
-    // Attach card detect interrupt
-    gpio_mode(cd_pin, true, false, false, false, false);
-    //gpio_add_interrupt(cd_pin, Pin::EITHER_EDGE, card_detect_handler, (void *)gpio_num_t(cd_pin));
 
     // Clear file count on file list and mount flag
     sd_files.num_files = 0;
