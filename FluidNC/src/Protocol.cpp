@@ -334,7 +334,9 @@ void protocol_main_loop() {
             }
         }
         // Read encoder
-        protocol_read_encoder();
+        if (config->_encoder) {
+            protocol_read_encoder();
+        }
     }
     return; /* Never reached */
 }

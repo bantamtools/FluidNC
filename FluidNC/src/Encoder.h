@@ -41,7 +41,7 @@ public:
     void group(Configuration::HandlerBase& handler) override;
     
 protected:
-	pcnt_unit_t pcnt_unit;
+	pcnt_unit_t _pcnt_unit;
 	int _previous_value = 0;
     bool _is_active = false;
 };
