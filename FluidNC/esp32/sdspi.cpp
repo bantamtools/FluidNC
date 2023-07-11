@@ -118,7 +118,7 @@ bool sd_init_slot(uint32_t freq_hz, int cs_pin, int cd_pin, int wp_pin) {
 
     // Attach card detect interrupt
     gpio_mode(cd_pin, true, false, false, false, false);
-    gpio_add_interrupt(cd_pin, Pin::EITHER_EDGE, card_detect_handler, (void *)gpio_num_t(cd_pin));
+    //gpio_add_interrupt(cd_pin, Pin::EITHER_EDGE, card_detect_handler, (void *)gpio_num_t(cd_pin));
 
     // Clear file count on file list and mount flag
     sd_files.num_files = 0;
