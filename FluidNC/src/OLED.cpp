@@ -615,17 +615,13 @@ void OLED::show_radio_info() {
 
     if (_width == 128) {
         if (_state == "Alarm") {
-            wrapped_draw_string(18, _radio_info, ArialMT_Plain_10);
-            wrapped_draw_string(30, _radio_addr, ArialMT_Plain_10);
-            wrapped_draw_string(42, "Press button to Clear", ArialMT_Plain_10);
+            show_error("Press button to CLEAR");
         } else if (_state != "Run") {
             show(radioAddrLayout, _radio_addr);
         }
     } else {
         if (_state == "Alarm") {
-            wrapped_draw_string(10, _radio_info, ArialMT_Plain_10);
-            wrapped_draw_string(28, _radio_addr, ArialMT_Plain_10);
-            wrapped_draw_string(46, "Press button to Clear", ArialMT_Plain_10);
+            show_error("Press button to CLEAR");
         }
     }
 }
