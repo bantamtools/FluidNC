@@ -697,7 +697,7 @@ void OLED::parse_status_report() {
     bool probe              = false;
     bool limits[MAX_N_AXIS] = { false };
 
-    float axes[MAX_N_AXIS];
+    static float axes[MAX_N_AXIS];
     bool  isMpos = false;
     _filename    = "";
 
