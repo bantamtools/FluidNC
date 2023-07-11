@@ -358,8 +358,6 @@ void OLED::show(Layout& layout, const char* msg) {
     _oled->drawString(layout._x, layout._y, msg);
 }
 
-OLED::Layout OLED::bannerLayout128  = { 0, 0, 0, ArialMT_Plain_16, TEXT_ALIGN_CENTER };
-OLED::Layout OLED::bannerLayout64   = { 0, 0, 0, ArialMT_Plain_16, TEXT_ALIGN_CENTER };
 OLED::Layout OLED::stateLayout      = { 0, 0, 0, ArialMT_Plain_10, TEXT_ALIGN_LEFT };
 OLED::Layout OLED::tickerLayout     = { 63, 0, 128, ArialMT_Plain_10, TEXT_ALIGN_CENTER };
 OLED::Layout OLED::filenameLayout   = { 63, 13, 128, ArialMT_Plain_10, TEXT_ALIGN_CENTER };
@@ -422,9 +420,11 @@ void OLED::init() {
 
     _oled->clear();
 
-    show((_width == 128) ? bannerLayout128 : bannerLayout64, "Bantam Tools");
+    _oled->setFont(ArialMT_Plain_16);
+    _oled->drawString(0, 0, "Bantam Tools");
 
     _oled->display();
+    delay_ms(1000);
 
     allChannels.registration(this);
     setReportInterval(500);
