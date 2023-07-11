@@ -88,8 +88,8 @@ private:
 
     std::string _report;
 
-    String _radio_info;
-    String _radio_addr;
+    std::string _radio_info;
+    std::string _radio_addr;
 
     std::string _state;
     std::string _filename;
@@ -118,8 +118,8 @@ private:
     void parse_BT();
     void parse_encoder();
 
-    float* parse_axes(std::string s);
-    void   parse_numbers(std::string s, float* nums, int maxnums);
+    void parse_axes(std::string s, float* axes);
+    void parse_numbers(std::string s, float* nums, int maxnums);
 
     void show_limits(bool probe, const bool* limits);
     void show_menu();
@@ -132,17 +132,10 @@ private:
 
     void draw_checkbox(int16_t x, int16_t y, int16_t width, int16_t height, bool checked);
 
-    void wrapped_draw_string(int16_t y, const String& s, font_t font);
+    void wrapped_draw_string(int16_t y, const std::string& s, font_t font);
 
-    void show(Layout& layout, const String& msg);
-    void show(Layout& layout, const char* msg) {
-        String s(msg);
-        show(layout, s);
-    }
-    void show(Layout& layout, const std::string& msg) {
-        String s(msg.c_str());
-        show(layout, s);
-    }
+    void show(Layout& layout, const std::string& msg) { show(layout, msg.c_str()); }
+    void show(Layout& layout, const char* msg);
 
     uint8_t font_width(font_t font);
     uint8_t font_height(font_t font);

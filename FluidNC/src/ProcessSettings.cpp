@@ -580,7 +580,7 @@ static Error motor_control(const char* value, bool disable) {
         char axisName = axes->axisName(i);
 
         if (strchr(value, axisName) || strchr(value, tolower(axisName))) {
-            log_info((disable ? "Dis" : "En") << "abling " << String(axisName) << " motors");
+            log_info((disable ? "Dis" : "En") << "abling " << axisName << " motors");
             axes->set_disable(i, disable);
         }
     }
@@ -634,6 +634,7 @@ static Error xmodem_receive(const char* value, WebUI::AuthenticationLevel auth_l
     } else {
         log_info("Reception failed or was canceled");
     }
+    outfile->fpath().rehash_fs();
     delete outfile;
     return size < 0 ? Error::UploadFailed : Error::Ok;
 }
@@ -748,6 +749,11 @@ static Error setReportInterval(const char* value, WebUI::AuthenticationLevel aut
     return Error::Ok;
 }
 
+static Error showHeap(const char* value, WebUI::AuthenticationLevel auth_level, Channel& out) {
+    log_info("Heap free: " << xPortGetFreeHeapSize() << " min: " << heapLowWater);
+    return Error::Ok;
+}
+
 // Commands use the same syntax as Settings, but instead of setting or
 // displaying a persistent value, a command causes some action to occur.
 // That action could be anything, from displaying a run-time parameter
@@ -758,7 +764,7 @@ void make_user_commands() {
 
     new UserCommand("CI", "Channel/Info", showChannelInfo, anyState);
     new UserCommand("XR", "Xmodem/Receive", xmodem_receive, notIdleOrAlarm);
-    new UserCommand("XS", "Xmodem/Send", xmodem_send, notIdleOrJog);
+    new UserCommand("XS", "Xmodem/Send", xmodem_send, notIdleOrAlarm);
     new UserCommand("CD", "Config/Dump", dump_config, anyState);
     new UserCommand("", "Help", show_help, anyState);
     new UserCommand("T", "State", showState, anyState);
@@ -797,6 +803,7 @@ void make_user_commands() {
     new UserCommand("N", "GCode/StartupLines", report_startup_lines, notIdleOrAlarm);
     new UserCommand("RST", "Settings/Restore", restore_settings, notIdleOrAlarm, WA);
 
+    new UserCommand("Heap", "Heap/Show", showHeap, anyState);
     new UserCommand("SS", "Startup/Show", showStartupLog, anyState);
 
     new UserCommand("RI", "Report/Interval", setReportInterval, anyState);
@@ -927,16 +934,16 @@ Error do_command_or_setting(const char* key, char* value, WebUI::AuthenticationL
     // text form of the name, not to the nnn and ESPnnn forms.
     Error retval = Error::InvalidStatement;
     if (!value) {
-        auto lcKey = String(key);
-        lcKey.toLowerCase();
         bool found = false;
         for (Setting* s = Setting::List; s; s = s->next()) {
-            auto lcTest = String(s->getName());
-            lcTest.toLowerCase();
-
-            if (regexMatch(lcKey.c_str(), lcTest.c_str())) {
+            auto test = s->getName();
+            // The C++ standard regular expression library supports many more
+            // regular expression forms than the simple one in Regex.cpp, but
+            // consumes a lot of FLASH.  The extra capability is rarely useful
+            // especially now that there are only a few NVS settings.
+            if (regexMatch(key, test, false)) {
                 const char* displayValue = auth_failed(s, value, auth_level) ? "<Authentication required>" : s->getStringValue();
-                show_setting(s->getName(), displayValue, NULL, out);
+                show_setting(test, displayValue, NULL, out);
                 found = true;
             }
         }
@@ -985,7 +992,7 @@ Error settings_execute_line(char* line, Channel& out, WebUI::AuthenticationLevel
 void settings_execute_startup() {
     Error status_code;
     for (int i = 0; i < config->_macros->n_startup_lines; i++) {
-        String str = config->_macros->startup_line(i);
+        auto str = config->_macros->startup_line(i);
         if (str.length()) {
             // We have to copy this to a mutable array because
             // gc_execute_line modifies the line while parsing.

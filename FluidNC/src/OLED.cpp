@@ -346,7 +346,7 @@ void OLED::menu_update_selection(int menu_max_active_entries) {
     }
 }
 
-void OLED::show(Layout& layout, const String& msg) {
+void OLED::show(Layout& layout, const char* msg) {
     if (_width < layout._width_required) {
         return;
     }
@@ -528,7 +528,7 @@ void OLED::show_file() {
     _oled->setColor(WHITE);
 
     if (_width == 128) {
-        show(percentLayout128, String(pct) + '%');
+        show(percentLayout128, std::to_string(pct) + '%');
 
         _ticker += "-";
         if (_ticker.length() >= 12) {
@@ -536,11 +536,11 @@ void OLED::show_file() {
         }
         show(tickerLayout, _ticker);
 
-        wrapped_draw_string(13, _filename.c_str(), ArialMT_Plain_10);
+        wrapped_draw_string(14, _filename, ArialMT_Plain_10);
 
         _oled->drawProgressBar(0, 39, 120, 10, pct);
     } else {
-        show(percentLayout64, String(pct) + '%');
+        show(percentLayout64, std::to_string(pct) + '%');
     }
 
     // Display pause/resume message at bottom
@@ -582,16 +582,16 @@ void OLED::show_dro(float* axes, bool isMpos, bool* limits) {
     for (uint8_t axis = X_AXIS; axis < n_axis; axis++) {
         oled_y_pos = ((_height == 64) ? 24 : 17) + (axis * 10);
 
-        String axis_letter = String(Machine::Axes::_names[axis]);
+        std::string axis_msg(1, Machine::Axes::_names[axis]);
         if (_width == 128) {
-            axis_letter += ":";
+            axis_msg += ":";
         } else {
             // For small displays there isn't room for separate limit boxes
             // so we put it after the label
-            axis_letter += limits[axis] ? "L" : ":";
+            axis_msg += limits[axis] ? "L" : ":";
         }
         _oled->setTextAlignment(TEXT_ALIGN_LEFT);
-        _oled->drawString(68 + 0, oled_y_pos, axis_letter);
+        _oled->drawString(68 + 0, oled_y_pos, axis_msg.c_str());
 
         _oled->setTextAlignment(TEXT_ALIGN_RIGHT);
         snprintf(axisVal, 20 - 1, "%.3f", axes[axis]);
@@ -668,9 +668,7 @@ void OLED::parse_numbers(std::string s, float* nums, int maxnums) {
     } while (nextpos != std::string::npos);
 }
 
-float* OLED::parse_axes(std::string s) {
-    static float axes[MAX_N_AXIS];
-
+void OLED::parse_axes(std::string s, float* axes) {
     size_t pos     = 0;
     size_t nextpos = -1;
     size_t axis    = 0;
@@ -682,7 +680,6 @@ float* OLED::parse_axes(std::string s) {
         }
         pos = nextpos + 1;
     } while (nextpos != std::string::npos);
-    return axes;
 }
 
 void OLED::parse_status_report() {
@@ -697,9 +694,9 @@ void OLED::parse_status_report() {
     bool probe              = false;
     bool limits[MAX_N_AXIS] = { false };
 
-    float* axes;
-    bool   isMpos = false;
-    _filename     = "";
+    float axes[MAX_N_AXIS];
+    bool  isMpos = false;
+    _filename    = "";
 
     // ... handle it
     while (nextpos != std::string::npos) {
@@ -712,13 +709,13 @@ void OLED::parse_status_report() {
         auto value = field.substr(colon + 1);
         if (tag == "MPos") {
             // x,y,z,...
-            axes   = parse_axes(value);
+            parse_axes(value, axes);
             isMpos = true;
             continue;
         }
         if (tag == "WPos") {
             // x,y,z...
-            axes   = parse_axes(value);
+            parse_axes(value, axes);
             isMpos = false;
             continue;
         }
@@ -768,7 +765,10 @@ void OLED::parse_status_report() {
         }
         if (tag == "WCO") {
             // x,y,z,...
-            //auto wcos = parse_axes(value);
+            // We do not use the WCO values because the DROs show whichever
+            // position is in the status report
+            // float wcos[MAX_N_AXIS];
+            // auto  wcos = parse_axes(value, wcos);
             continue;
         }
         if (tag == "Ov") {
@@ -846,9 +846,8 @@ void OLED::parse_gcode_report() {
 
 // [MSG:INFO: Connecting to STA:SSID foo]
 void OLED::parse_STA() {
-    size_t      start = strlen("[MSG:INFO: Connecting to STA SSID:");
-    std::string ssid  = _report.substr(start, _report.size() - start - 1);
-    _radio_info       = String(ssid.c_str());
+    size_t start = strlen("[MSG:INFO: Connecting to STA SSID:");
+    _radio_info  = _report.substr(start, _report.size() - start - 1);
 
     _oled->clear();
     auto fh = font_height(ArialMT_Plain_10);
@@ -858,9 +857,8 @@ void OLED::parse_STA() {
 
 // [MSG:INFO: Connected - IP is 192.168.68.134]
 void OLED::parse_IP() {
-    size_t      start  = _report.rfind(" ") + 1;
-    std::string ipaddr = _report.substr(start, _report.size() - start - 1);
-    _radio_addr        = String(ipaddr.c_str());
+    size_t start = _report.rfind(" ") + 1;
+    _radio_addr  = _report.substr(start, _report.size() - start - 1);
 
     _oled->clear();
     auto fh = font_height(ArialMT_Plain_10);
@@ -872,15 +870,14 @@ void OLED::parse_IP() {
 
 // [MSG:INFO: AP SSID foo IP 192.168.68.134 mask foo channel foo]
 void OLED::parse_AP() {
-    size_t      start    = strlen("[MSG:INFO: AP SSID ");
-    size_t      ssid_end = _report.rfind(" IP ");
-    size_t      ip_end   = _report.rfind(" mask ");
-    std::string ssid     = _report.substr(start, ssid_end - start);
-    size_t      ip_start = ssid_end + strlen(" IP ");
-    std::string ipaddr   = _report.substr(ip_start, ip_end - ip_start);
-    _radio_info          = "AP: ";
-    _radio_info += ssid.c_str();
-    _radio_addr = String(ipaddr.c_str());
+    size_t start    = strlen("[MSG:INFO: AP SSID ");
+    size_t ssid_end = _report.rfind(" IP ");
+    size_t ip_end   = _report.rfind(" mask ");
+    size_t ip_start = ssid_end + strlen(" IP ");
+
+    _radio_info = "AP: ";
+    _radio_info += _report.substr(start, ssid_end - start);
+    _radio_addr = _report.substr(ip_start, ip_end - ip_start);
 
     _oled->clear();
     auto fh = font_height(ArialMT_Plain_10);
@@ -1049,7 +1046,7 @@ size_t OLED::char_width(char c, font_t font) {
     return (index < 0) ? 0 : xf->glyphs[index].width;
 }
 
-void OLED::wrapped_draw_string(int16_t y, const String& s, font_t font) {
+void OLED::wrapped_draw_string(int16_t y, const std::string& s, font_t font) {
     _oled->setFont(font);
     _oled->setTextAlignment(TEXT_ALIGN_LEFT);
 
@@ -1063,10 +1060,10 @@ void OLED::wrapped_draw_string(int16_t y, const String& s, font_t font) {
         }
     }
     if (swidth < _width) {
-        _oled->drawString(0, y, s);
+        _oled->drawString(0, y, s.c_str());
     } else {
-        _oled->drawString(0, y, s.substring(0, i));
-        _oled->drawString(0, y + font_height(font) - 1, s.substring(i, slen));
+        _oled->drawString(0, y, s.substr(0, i).c_str());
+        _oled->drawString(0, y + font_height(font) - 1, s.substr(i, slen).c_str());
     }
 }
 

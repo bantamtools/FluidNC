@@ -232,13 +232,13 @@ static void check_startup_state() {
     // NOTE: Sleep mode disables the stepper drivers and position can't be guaranteed.
     // Re-initialize the sleep state as an ALARM mode to ensure user homes or acknowledges.
     if (sys.state == State::ConfigAlarm) {
-        report_feedback_message(Message::ConfigAlarmLock);
+        report_error_message(Message::ConfigAlarmLock);
     } else {
         // Perform some machine checks to make sure everything is good to go.
         if (config->_start->_checkLimits && config->_axes->hasHardLimits()) {
             if (limits_get_state()) {
                 sys.state = State::Alarm;  // Ensure alarm state is active.
-                report_feedback_message(Message::CheckLimits);
+                report_error_message(Message::CheckLimits);
             }
         }
         if (config->_control->startup_check()) {
@@ -274,6 +274,10 @@ void protocol_read_encoder() {
     }
 }
 
+const uint32_t heapWarnThreshold = 15000;
+
+uint32_t heapLowWater = UINT_MAX;
+
 void protocol_main_loop() {
     check_startup_state();
     start_polling();
@@ -288,7 +292,6 @@ void protocol_main_loop() {
 #ifdef DEBUG_REPORT_ECHO_RAW_LINE_RECEIVED
             report_echo_line_received(activeLine, allChannels);
 #endif
-            display("GCODE", activeLine);
 
             Error status_code = execute_line(activeLine, *activeChannel, WebUI::AuthenticationLevel::LEVEL_GUEST);
 
@@ -323,7 +326,13 @@ void protocol_main_loop() {
             idleEndTime = 0;  //
             config->_axes->set_disable(true);
         }
-
+        uint32_t newHeapSize = xPortGetFreeHeapSize();
+        if (newHeapSize < heapLowWater) {
+            heapLowWater = newHeapSize;
+            if (heapLowWater < heapWarnThreshold) {
+                log_warn("Low memory: " << heapLowWater << " bytes");
+            }
+        }
         // Read encoder
         protocol_read_encoder();
     }
@@ -392,7 +401,7 @@ static void protocol_do_alarm() {
     sys.state = State::Alarm;  // Set system alarm state
     alarm_msg(rtAlarm);
     if (rtAlarm == ExecAlarm::HardLimit || rtAlarm == ExecAlarm::SoftLimit) {
-        report_feedback_message(Message::CriticalEvent);
+        report_error_message(Message::CriticalEvent);
         protocol_disable_steppers();
         rtReset = false;  // Disable any existing reset
         do {

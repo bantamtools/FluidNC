@@ -6,7 +6,6 @@
 // #define false 0
 // #define true 1
 
-#include <WString.h>
 #include <cstdint>
 #include "Logging.h"
 #include "Driver/delay_usecs.h"
@@ -128,4 +127,8 @@ bool constrain_with_message(T& value, T min, T max, const char* name = "") {
 
 bool multiple_bits_set(uint32_t val);
 
-String formatBytes(uint64_t bytes);
+std::string formatBytes(uint64_t bytes);
+
+std::string IP_string(uint32_t ipaddr);
+
+void replace_string_in_place(std::string& subject, const std::string& search, const std::string& replace);

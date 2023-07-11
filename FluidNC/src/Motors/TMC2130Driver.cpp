@@ -21,7 +21,7 @@ namespace MotorDrivers {
 
         tmc2130 = new TMC2130Stepper(cs_id, _r_sense, _spi_index);  // TODO hardwired to non daisy chain index
 
-        TrinamicSpiDriver::finalInit();
+        registration();
     }
 
     void TMC2130Driver::config_motor() {
