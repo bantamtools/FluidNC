@@ -23,6 +23,7 @@
 #define JOG_FEEDRATE            1000.0
 
 extern const char* git_info_short;
+extern const char* fluidnc_version;
 
 typedef const uint8_t* font_t;
 

@@ -296,9 +296,12 @@ void OLED::menu_init(void) {
     // Version Menu
     char bantam_ver_str[MENU_NAME_MAX_STR] = {"Version: "};
     strncat(bantam_ver_str, git_info_short, MENU_NAME_MAX_STR - 10);
+    char fluidnc_ver_str[MENU_NAME_MAX_STR] = {"FluidNC: "};
+    strncat(fluidnc_ver_str, fluidnc_version, MENU_NAME_MAX_STR - 10);
 
     menu_add(version_menu, NULL, NULL, "< Back");
     menu_add(version_menu, NULL, NULL, bantam_ver_str);
+    menu_add(version_menu, NULL, NULL, fluidnc_ver_str);
 
     // Not jogging at init
     jog_state = JogState::Idle;
