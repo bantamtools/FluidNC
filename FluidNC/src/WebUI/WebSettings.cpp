@@ -336,9 +336,6 @@ namespace WebUI {
             return err;
         }
 
-        // Turn off reports before running file
-        out.setReportInterval(0);
-        
         allChannels.registration(theFile);
 
         //report_realtime_status(out);

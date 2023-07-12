@@ -6,7 +6,12 @@
 #include "Report.h"
 
 InputFile::InputFile(const char* defaultFs, const char* path, WebUI::AuthenticationLevel auth_level, Channel& out) :
-    FileStream(path, "r", defaultFs), _auth_level(auth_level), _out(out), _line_num(0) {}
+    FileStream(path, "r", defaultFs), _auth_level(auth_level), _out(out), _line_num(0)  {
+
+        // Save off the auto-reporting interval then shut it off
+        _prev_report_interval = _out.getReportInterval();
+        _out.setReportInterval(0);
+    }
 /*
   Read a line from the file
   Returns Error::Ok if a line was read, even if the line was empty.
@@ -46,6 +51,7 @@ void InputFile::ack(Error status) {
             // Stop the file job on other errors
             _notifyf("File job error", "Error:%d in %s at line: %d", status, path(), getLineNumber());
             allChannels.kill(this);
+            _out.setReportInterval(_prev_report_interval);  // restore auto-reporting interval
             return;
         }
     }
@@ -75,11 +81,13 @@ Channel* InputFile::pollLine(char* line) {
             _notifyf("File job done", "%s file job succeeded", path());
             log_msg(path() << " file job succeeded");
             allChannels.kill(this);
+            _out.setReportInterval(_prev_report_interval);  // restore auto-reporting interval
             return nullptr;
         default:
             _progress = "";
             log_error(static_cast<int>(err) << " (" << errorString(err) << ") in " << path() << " at line " << getLineNumber());
             allChannels.kill(this);
+            _out.setReportInterval(_prev_report_interval);  // restore auto-reporting interval
             return nullptr;
     }
 }
@@ -89,6 +97,7 @@ void InputFile::stopJob() {
     _notifyf("File print canceled", "Reset during file job at line: %d", getLineNumber());
     log_info("Reset during file job at line: " << getLineNumber());
     allChannels.kill(this);
+    _out.setReportInterval(_prev_report_interval);  // restore auto-reporting interval
 }
 
 InputFile::~InputFile() {
