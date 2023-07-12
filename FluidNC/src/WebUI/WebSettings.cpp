@@ -335,6 +335,10 @@ namespace WebUI {
         if ((err = openFile(fs, parameter, auth_level, out, theFile)) != Error::Ok) {
             return err;
         }
+
+        // Turn off reports before running file
+        out.setReportInterval(0);
+        
         allChannels.registration(theFile);
 
         //report_realtime_status(out);
