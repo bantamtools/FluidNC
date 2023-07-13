@@ -29,3 +29,4 @@ build/
 dist/
 *.cppx
 *.hx
+/compile_commands.json
