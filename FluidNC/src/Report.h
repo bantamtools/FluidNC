@@ -15,6 +15,12 @@
 #include <cstdint>
 #include <freertos/FreeRTOS.h>  // UBaseType_t
 
+// Turn on memory report output if enabled for serial too
+#ifdef DEBUG_MEM_USAGE
+#define DEBUG_REPORT_HEAP
+#define DEBUG_REPORT_STACK_FREE
+#endif
+
 // Define status reporting boolean enable bit flags in status_report_mask
 enum RtStatus {
     Position = bitnum_to_mask(0),

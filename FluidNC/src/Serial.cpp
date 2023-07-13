@@ -64,6 +64,7 @@ std::mutex AllChannels::_mutex;
 
 static TaskHandle_t channelCheckTaskHandle = 0;
 
+#ifdef DEBUG_MEM_USAGE
 void heapCheckTask(void* pvParameters) {
     static uint32_t heapSize = 0;
     while (true) {
@@ -73,7 +74,7 @@ void heapCheckTask(void* pvParameters) {
             heapSize = newHeapSize;
             log_info("heap " << heapSize);
         }
-        vTaskDelay(3000 / portTICK_RATE_MS);  // Yield to other tasks
+        vTaskDelay(30000 / portTICK_RATE_MS);  // Yield to other tasks
 
         static UBaseType_t uxHighWaterMark = 0;
 #ifdef DEBUG_TASK_STACK
@@ -81,6 +82,7 @@ void heapCheckTask(void* pvParameters) {
 #endif
     }
 }
+#endif
 
 // Act upon a realtime character
 void execute_realtime_command(Cmd command, Channel& channel) {
@@ -188,6 +190,10 @@ bool is_realtime_command(uint8_t data) {
 void AllChannels::init() {
     registration(&WebUI::inputBuffer);  // Macros
     registration(&startupLog);          // Early startup messages for $SS
+#ifdef DEBUG_MEM_USAGE 
+    // Check memory usage
+    xTaskCreate(heapCheckTask, "heapCheckTask", 4096, NULL, 3, NULL);
+#endif
 }
 
 void AllChannels::kill(Channel* channel) {
