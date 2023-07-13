@@ -53,7 +53,7 @@ else:
 grbl_version = tag.replace('v','').rpartition('.')[0]
 git_info = '%s%s' % (tag, rev)
 git_info_short = '%s' % (tag.replace('bantam_', ''))
-fluidnc_version = "v3.7.3"
+fluidnc_version = "v3.7.3-beta"
 
 provisional = "FluidNC/src/version.cxx"
 final = "FluidNC/src/version.cpp"
