@@ -667,7 +667,7 @@ void reportTaskStackSize(UBaseType_t& saved) {
     UBaseType_t newHighWater = uxTaskGetStackHighWaterMark(NULL);
     if (newHighWater != saved) {
         saved = newHighWater;
-        log_debug(pcTaskGetTaskName(NULL) << " Min Stack Space:" << saved);
+        log_info(pcTaskGetTaskName(NULL) << " Min Stack Space:" << saved);
     }
 #endif
 }
