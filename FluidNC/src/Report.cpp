@@ -41,6 +41,7 @@
 #include <sstream>
 #include <iomanip>
 
+#define DEBUG_REPORT_HEAP
 #ifdef DEBUG_REPORT_HEAP
 EspClass esp;
 #endif
