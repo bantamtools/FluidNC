@@ -731,12 +731,18 @@ static Error setReportInterval(const char* value, WebUI::AuthenticationLevel aut
     }
     char*    endptr;
     uint32_t intValue = strtol(value, &endptr, 10);
+    uint32_t actual;
 
     if (endptr == value || *endptr != '\0') {
         return Error::BadNumberFormat;
     }
 
-    uint32_t actual = out.setReportInterval(intValue);
+    // Force interval of 500ms during a run
+    if (sys.state == State::Cycle) {
+        actual = out.setReportInterval(500);
+    } else {
+        actual = out.setReportInterval(intValue);
+    }
 #if 1
     if (actual) {
         log_info("Channel auto report interval set to " << actual << " ms");

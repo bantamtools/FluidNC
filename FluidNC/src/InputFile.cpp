@@ -10,7 +10,7 @@ InputFile::InputFile(const char* defaultFs, const char* path, WebUI::Authenticat
 
         // Save off the auto-reporting interval then shut it off
         _prev_report_interval = _out.getReportInterval();
-        _out.setReportInterval(0);
+        _out.setReportInterval(500);
     }
 /*
   Read a line from the file
