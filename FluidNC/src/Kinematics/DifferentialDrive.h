@@ -35,7 +35,7 @@ namespace Kinematics {
     private:
 
         // State
-        float m_heading; // current forward angle (radians?)
+        float m_heading; // current forward angle (radians)
 
         // Parameters
         int _left_motor_axis    = 0;
@@ -44,4 +44,4 @@ namespace Kinematics {
         float _distance_between_wheels = 50.0;
 
     };
-}  
+}
