@@ -36,6 +36,8 @@ namespace Kinematics {
 
         // State
         float m_heading; // current forward angle (radians)
+        float m_motor_left; // current left (x?) motor position, in mm of motion
+        float m_motor_right; // current right (y?) motor position
 
         // Parameters
         int _left_motor_axis    = 0;

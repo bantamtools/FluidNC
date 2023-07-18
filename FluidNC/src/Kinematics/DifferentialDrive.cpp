@@ -16,6 +16,8 @@ namespace Kinematics {
     void DifferentialDrive::init() {
         log_info("Kinematic system: " << name());
         m_heading = 0.0; // define current heading as zero angle
+        m_motor_left = 0.0;
+        m_motor_right = 0.0;
         init_position();
     }
 
@@ -51,10 +53,15 @@ namespace Kinematics {
         auto n_axis = config->_axes->_numberAxis;
         float motors[n_axis];
 
-        // First check whether we are moving in X/Y at all, if not the below won't make sense
+        // First check whether we are moving in X/Y at all, if not the equations below won't make sense
         float XY_cartesian_distance = vector_distance(position, target, 2);
         if (XY_cartesian_distance == 0) {
-            return mc_move_motors(target, pl_data);
+            motors[0] = m_motor_left; // don't move from current position
+            motors[1] = m_motor_right;
+            for (size_t axis = Z_AXIS; axis < n_axis; axis++) { // pass through any other axis moves (like Z for pen)
+                motors[axis] = target[axis];
+            }
+            return mc_move_motors(motors, pl_data);
         }
 
         // calc new heading
@@ -68,10 +75,13 @@ namespace Kinematics {
         float wheel_turn_dist = turn_angle * _distance_between_wheels / 2.0;
         // Now if we were controlling motors directly, here we'd use
         //      Revs = Dist / wheel_circumference = = Dist / 2*pi*_wheel_radius
-        // BUT we want a motor movement in distance traveled, so I think the radius should be handled downstream?
-        // Also note the below will always turn to the right. Depends how we calc the angle...
-        motors[0] = wheel_turn_dist;
-        motors[1] = -wheel_turn_dist;
+        // BUT we want a motor movement in distance traveled; the radius should be handled by config steps/mm.
+        // Meanwhile, we need to convert these relative distance movements to absolute targets
+        float left_target = m_motor_left + wheel_turn_dist;
+        float right_target = m_motor_right - wheel_turn_dist;
+        // Also note this will always turn to the right. Depends how we calc the angle...
+        motors[0] = left_target;
+        motors[1] = right_target;
         for (size_t axis = Z_AXIS; axis < n_axis; axis++) {
             motors[axis] = 0.0; // dont move other axes during turn
         }
@@ -79,16 +89,25 @@ namespace Kinematics {
         if (!mc_move_motors(motors, pl_data)) {
             return false;
         }
-        // if we're still here, turn move completed so update current angle
+        // if we're still here, turn move completed so update current state
         m_heading = new_heading;
+        m_motor_left = left_target;
+        m_motor_right = right_target;
 
         // Now just move forward the required distance to the target
-        motors[0] = XY_cartesian_distance;
-        motors[1] = XY_cartesian_distance;
+        left_target = m_motor_left + XY_cartesian_distance;
+        right_target = m_motor_right + XY_cartesian_distance;
+        motors[0] = left_target;
+        motors[1] = right_target;
         for (size_t axis = Z_AXIS; axis < n_axis; axis++) { // pass through any other axis moves (like Z for pen)
             motors[axis] = target[axis];
         }
-        return mc_move_motors(target, pl_data);
+        if (!mc_move_motors(motors, pl_data)) {
+            return false;
+        }
+        m_motor_left = left_target;
+        m_motor_right = right_target;
+        return true;
     }
 
     void DifferentialDrive::motors_to_cartesian(float* cartesian, float* motors, int n_axis) {
