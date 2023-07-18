@@ -19,14 +19,14 @@ axes:
   shared_stepper_reset_pin: NO_PIN
   
   x:
-    steps_per_mm: 40.16
-    max_rate_mm_per_min: 7500
-    acceleration_mm_per_sec2: 5000
-    max_travel_mm: 216
+    steps_per_mm: 5
+    max_rate_mm_per_min: 2000
+    acceleration_mm_per_sec2: 1000
+    max_travel_mm: 1000
     soft_limits: false
     homing:
-      cycle: 2
-      mpos_mm: 13.5
+      cycle: -1
+      mpos_mm: 0
       positive_direction: false
       feed_mm_per_min: 200
       seek_mm_per_min: 2000
@@ -36,20 +36,19 @@ axes:
       pulloff_mm: 2
       stepstick:
         disable_pin: gpio.15:low
-        direction_pin: gpio.16:low
+        direction_pin: gpio.16:high
         step_pin: gpio.17
     motor1:
       null_motor:
 
   y:
-    steps_per_mm: 33.28
-    max_rate_mm_per_min: 7500
-    acceleration_mm_per_sec2: 5000
-    max_travel_mm: 230
+    steps_per_mm: 5
+    max_rate_mm_per_min: 2000
+    acceleration_mm_per_sec2: 1000
+    max_travel_mm: 1000
     soft_limits: false
     homing:
       cycle: -1
-      mpos_mm: -78.0
 
     motor0:
       limit_neg_pin: gpio.2:low
@@ -60,29 +59,23 @@ axes:
         step_pin: gpio.26
     motor1:
       null_motor:
-
   z:
-    steps_per_mm: 12.25
-    max_rate_mm_per_min: 3000
-    acceleration_mm_per_sec2: 2000
-    max_travel_mm: 16
+    steps_per_mm: 100.000
+    max_rate_mm_per_min: 5000.000
+    acceleration_mm_per_sec2: 100.000
+    max_travel_mm: 10.000
     soft_limits: false
     homing:
-      cycle: 1
-      mpos_mm: 2
+      cycle: -1
       positive_direction: true
-      feed_mm_per_min: 500
-      seek_mm_per_min: 1000
+      mpos_mm: 0.000
 
     motor0:
-      limit_pos_pin: gpio.4:high
-      pulloff_mm: 4
-      stepstick:
-        disable_pin: gpio.47:low
-        direction_pin: gpio.33:high
-        step_pin: gpio.34
-    motor1:
-      null_motor:
+      rc_servo:
+        pwm_hz: 50
+        output_pin: gpio.39:low
+        min_pulse_us: 1300
+        max_pulse_us: 2300
 
 # OLED
 i2c0:
