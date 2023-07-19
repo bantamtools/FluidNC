@@ -49,8 +49,25 @@ Ultrasonic::~Ultrasonic() {}
 // Initializes the ultrasonic subsystem
 void Ultrasonic::init() {
 
-    // Check pins, settings
-    //TODO
+    // Check if ultrasonic sensor configured
+    if (!_trig_pin.defined() || !_echo_pin.defined() || (_pause_time_ms < 0) || (_pause_distance_cm < 0)) {
+        _is_active = false;
+        return;
+    }
+
+    // Set up ultrasonic trigger and echo pins
+    _trig_pin.setAttr(Pin::Attr::Output);
+    _echo_pin.setAttr(Pin::Attr::Input);
+
+    _trig_pin.write(0);
+
+    // Set flag
+    _is_active = true;
+}
+
+// Returns active flag
+bool Ultrasonic::is_active() {
+    return _is_active;
 }
 
 // Configurable functions
