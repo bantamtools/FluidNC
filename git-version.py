@@ -53,6 +53,7 @@ else:
 grbl_version = tag.replace('v','').rpartition('.')[0]
 git_info = '%s%s' % (tag, rev)
 git_info_short = '%s' % (tag.replace('bantam_', ''))
+fluidnc_version = "v3.7.4"
 
 provisional = "FluidNC/src/version.cxx"
 final = "FluidNC/src/version.cpp"
@@ -60,6 +61,7 @@ with open(provisional, "w") as fp:
     fp.write('const char* grbl_version = \"' + grbl_version + '\";\n')
     fp.write('const char* git_info     = \"' + git_info + '\";\n')
     fp.write('const char* git_info_short = \"' + git_info_short + '\";\n')
+    fp.write('const char* fluidnc_version = \"' + fluidnc_version + '\";\n')
 
 if not os.path.exists(final):
     # No version.cpp so rename version.cxx to version.cpp

@@ -64,6 +64,7 @@ std::mutex AllChannels::_mutex;
 
 static TaskHandle_t channelCheckTaskHandle = 0;
 
+#ifdef DEBUG_MEM_USAGE
 void heapCheckTask(void* pvParameters) {
     static uint32_t heapSize = 0;
     while (true) {
@@ -73,7 +74,7 @@ void heapCheckTask(void* pvParameters) {
             heapSize = newHeapSize;
             log_info("heap " << heapSize);
         }
-        vTaskDelay(3000 / portTICK_RATE_MS);  // Yield to other tasks
+        vTaskDelay(30000 / portTICK_RATE_MS);  // Yield to other tasks
 
         static UBaseType_t uxHighWaterMark = 0;
 #ifdef DEBUG_TASK_STACK
@@ -81,6 +82,7 @@ void heapCheckTask(void* pvParameters) {
 #endif
     }
 }
+#endif
 
 // Act upon a realtime character
 void execute_realtime_command(Cmd command, Channel& channel) {
@@ -188,6 +190,10 @@ bool is_realtime_command(uint8_t data) {
 void AllChannels::init() {
     registration(&WebUI::inputBuffer);  // Macros
     registration(&startupLog);          // Early startup messages for $SS
+#ifdef DEBUG_MEM_USAGE 
+    // Check memory usage
+    xTaskCreate(heapCheckTask, "heapCheckTask", 4096, NULL, 3, NULL);
+#endif
 }
 
 void AllChannels::kill(Channel* channel) {
@@ -212,7 +218,9 @@ void AllChannels::listChannels(Channel& out) {
     _mutex.lock();
     std::string retval;
     for (auto channel : _channelq) {
-        log_to(out, channel->name());
+        if (channel) {
+            log_to(out, channel->name());
+        }
     }
     _mutex.unlock();
 }
@@ -220,7 +228,9 @@ void AllChannels::listChannels(Channel& out) {
 void AllChannels::flushRx() {
     _mutex.lock();
     for (auto channel : _channelq) {
-        channel->flushRx();
+        if (channel) {
+            channel->flushRx();
+        }
     }
     _mutex.unlock();
 }
@@ -228,7 +238,9 @@ void AllChannels::flushRx() {
 size_t AllChannels::write(uint8_t data) {
     _mutex.lock();
     for (auto channel : _channelq) {
-        channel->write(data);
+        if (channel) {
+            channel->write(data);
+        }
     }
     _mutex.unlock();
     return 1;
@@ -236,14 +248,18 @@ size_t AllChannels::write(uint8_t data) {
 void AllChannels::notifyWco(void) {
     _mutex.lock();
     for (auto channel : _channelq) {
-        channel->notifyWco();
+        if (channel) {
+            channel->notifyWco();
+        }
     }
     _mutex.unlock();
 }
 void AllChannels::notifyNgc(CoordIndex coord) {
     _mutex.lock();
     for (auto channel : _channelq) {
-        channel->notifyNgc(coord);
+        if (channel) {
+            channel->notifyNgc(coord);
+        }
     }
     _mutex.unlock();
 }
@@ -251,7 +267,9 @@ void AllChannels::notifyNgc(CoordIndex coord) {
 void AllChannels::stopJob() {
     _mutex.lock();
     for (auto channel : _channelq) {
-        channel->stopJob();
+        if (channel) {
+            channel->stopJob();
+        }
     }
     _mutex.unlock();
 }
@@ -259,7 +277,9 @@ void AllChannels::stopJob() {
 size_t AllChannels::write(const uint8_t* buffer, size_t length) {
     _mutex.lock();
     for (auto channel : _channelq) {
-        channel->write(buffer, length);
+        if (channel) {
+            channel->write(buffer, length);
+        }
     }
     _mutex.unlock();
     return length;
@@ -278,7 +298,7 @@ Channel* AllChannels::pollLine(char* line) {
 
     for (auto channel : _channelq) {
         // Skip the last channel in the loop
-        if (channel != _lastChannel && channel->pollLine(line)) {
+        if (channel != _lastChannel && channel && channel->pollLine(line)) {
             _lastChannel = channel;
             _mutex.unlock();
             return _lastChannel;

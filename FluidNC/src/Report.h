@@ -15,6 +15,12 @@
 #include <cstdint>
 #include <freertos/FreeRTOS.h>  // UBaseType_t
 
+// Turn on memory report output if enabled for serial too
+#ifdef DEBUG_MEM_USAGE
+#define DEBUG_REPORT_HEAP
+#define DEBUG_REPORT_STACK_FREE
+#endif
+
 // Define status reporting boolean enable bit flags in status_report_mask
 enum RtStatus {
     Position = bitnum_to_mask(0),
@@ -51,6 +57,7 @@ void _notifyf(const char* title, const char* format, ...);
 
 // Prints miscellaneous feedback messages.
 void report_feedback_message(Message message);
+void report_error_message(Message message);
 
 // Prints welcome message
 void report_init_message(Channel& channel);
@@ -93,6 +100,5 @@ extern const char* git_info;
 
 // Callout to custom code
 void display_init();
-void display(const char* tag, String s);
 
 extern bool readyNext;

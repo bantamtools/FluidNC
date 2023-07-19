@@ -159,11 +159,7 @@ enum class IoControl : uint8_t {
     SetAnalogImmediate  = 6,  // M68
 };
 
-#ifdef SERAMA
-static const int MaxUserDigitalPin = 5;
-#else
-static const int MaxUserDigitalPin = 4;
-#endif
+static const int MaxUserDigitalPin = 8;
 static const int MaxUserAnalogPin  = 4;
 
 // Modal Group G8: Tool length offset

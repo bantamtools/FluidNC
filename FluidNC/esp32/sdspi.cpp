@@ -12,7 +12,7 @@
 #define CHECK_EXECUTE_RESULT(err, str)                                                                                                     \
     do {                                                                                                                                   \
         if ((err) != ESP_OK) {                                                                                                             \
-            log_error(str << " code 0x" << String(err, 16));                                                                               \
+            log_error(str << " code 0x" << to_hex(err));                                                                                   \
             goto cleanup;                                                                                                                  \
         }                                                                                                                                  \
     } while (0)
@@ -20,13 +20,6 @@
 static FileListType sd_files;
 static const String allowed_file_ext[SD_NUM_ALLOWED_EXT] = {".gcode", ".nc", ".txt"};
 static bool sd_is_mounted = false;
-
-// SD card detect handler
-static void IRAM_ATTR card_detect_handler(void *args)
-{
-    // Print message to channel to trigger updates
-    log_info("SD Card Detect Event");
-}
 
 static esp_err_t mount_to_vfs_fat(int max_files, sdmmc_card_t* card, uint8_t pdrv, const char* base_path) {
     FATFS*    fs = NULL;
@@ -89,10 +82,7 @@ bool sd_init_slot(uint32_t freq_hz, int cs_pin, int cd_pin, int wp_pin) {
 
     sdspi_device_config_t slot_config;
 
-    // If freq_hz is 0, use the system default
-    if (freq_hz) {
-        host_config.max_freq_khz = freq_hz / 1000;
-    }
+    host_config.max_freq_khz = freq_hz / 1000;
 
     err = host_config.init();
     CHECK_EXECUTE_RESULT(err, "host init failed");
@@ -115,14 +105,9 @@ bool sd_init_slot(uint32_t freq_hz, int cs_pin, int cd_pin, int wp_pin) {
     // If you do it only once below, the attempt to change it seems to
     // be ignored, and you get 20 MHz regardless of what you ask for.
     if (freq_hz) {
-        printf("hz = %d\n", freq_hz);
         err = sdspi_host_set_card_clk(host_config.slot, freq_hz / 1000);
         CHECK_EXECUTE_RESULT(err, "set slot clock speed failed");
     }
-
-    // Attach card detect interrupt
-    gpio_mode(cd_pin, true, false, false, false, false);
-    gpio_add_interrupt(cd_pin, Pin::EITHER_EDGE, card_detect_handler, (void *)gpio_num_t(cd_pin));
 
     // Clear file count on file list and mount flag
     sd_files.num_files = 0;
