@@ -70,6 +70,11 @@ namespace Kinematics {
         float new_heading = atan2f((target[1]-position[1]),(target[0]-position[0])); // (radians)
         // angle diff
         float turn_angle = new_heading - m_heading;
+        // Note this would turn in an arbitrary direction based on what atan gave us; may turn 270 when it could turn 90.
+        if (turn_angle > PI) { turn_angle -= 2.0*PI; }
+        if (turn_angle < -PI) { turn_angle += 2.0*PI; }
+        // Now it should be within +- 180
+        // TODO: Further optimization: if angle is further than +-90, turn the supplementary and move backward
         // To turn in place we move each wheel in opposite directions.
         // The distance covered by each wheel is given by the formula
         //      Dist = (angle_radians/2pi)*(wheelbase*pi) = angle*wheelbase/2
@@ -80,7 +85,6 @@ namespace Kinematics {
         // Meanwhile, we need to convert these relative distance movements to absolute targets
         float left_target = m_motor_left + wheel_turn_dist;
         float right_target = m_motor_right - wheel_turn_dist;
-        // Also note this will always turn to the right. Depends how we calc the angle...
         motors[0] = left_target;
         motors[1] = right_target;
         for (size_t axis = Z_AXIS; axis < n_axis; axis++) {
@@ -114,7 +118,10 @@ namespace Kinematics {
     void DifferentialDrive::motors_to_cartesian(float* cartesian, float* motors, int n_axis) {
         // Insert conversion from differential drive kinematics to cartesian here.
 
-        // I don't think this is even possible for DiffDrive - our motor position does not tell us our location.
+        // We cannot derive cartesian position from motors in a vacuum, because it's state dependent.
+        // However, we want this so the WebUI shows position. Solution will have to be to keep up a running
+        //  cartesian XY position state. During linear moves, we'll have to store the starting motor pos and interpolate
+        //  to the current motor pos based on the start and end points. Gonna need lots of state.
     }
 
     void DifferentialDrive::transform_cartesian_to_motors(float* cartesian, float* motors) {

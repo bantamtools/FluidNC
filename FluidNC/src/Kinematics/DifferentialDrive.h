@@ -38,6 +38,7 @@ namespace Kinematics {
         float m_heading; // current forward angle (radians)
         float m_motor_left; // current left (x?) motor position, in mm of motion
         float m_motor_right; // current right (y?) motor position
+        // TODO: also track cartesian position so we can report it back to FluidNC
 
         // Parameters
         int _left_motor_axis    = 0;
