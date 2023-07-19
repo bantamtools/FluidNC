@@ -51,6 +51,7 @@
 #define ULT_PING_TIMEOUT                6000
 #define ULT_ROUNDTRIP_M                 5800.0f
 #define ULT_ROUNDTRIP_CM                58
+#define ULT_MAX_DISTANCE                100
 
 #define ESP_ERR_ULTRASONIC_PING         0x200
 #define ESP_ERR_ULTRASONIC_PING_TIMEOUT 0x201
@@ -71,10 +72,7 @@ public:
 
     void init();
     bool is_active();
-
-    esp_err_t measure_raw(uint32_t max_time_us, uint32_t *time_us);
-    esp_err_t measure_m(float max_distance, float *distance);
-    esp_err_t measure_cm(uint32_t max_distance, uint32_t *distance);
+    bool within_pause_distance();
 
     // Configuration handlers.
     void validate() override;
@@ -82,4 +80,8 @@ public:
     
 protected:
     bool _is_active = false;
+
+    esp_err_t measure_raw(uint32_t max_time_us, uint32_t *time_us);
+    esp_err_t measure_m(float max_distance, float *distance);
+    esp_err_t measure_cm(uint32_t max_distance, uint32_t *distance);
 };

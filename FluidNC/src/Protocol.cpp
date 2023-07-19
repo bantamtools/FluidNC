@@ -272,6 +272,19 @@ void protocol_read_encoder() {
     }
 }
 
+// Reads the ultrasonic sensor and TODO
+void protocol_read_ultrasonic() {
+
+    // Read and report the difference if encoder is active
+    if (config->_ultrasonic->is_active()) {
+
+        // Check if we're within the distance to pause
+        if (config->_ultrasonic->within_pause_distance()) {
+            log_info("PAUSE!");
+        }
+    }
+}
+
 const uint32_t heapWarnThreshold = 15000;
 
 uint32_t heapLowWater = UINT_MAX;
@@ -335,6 +348,10 @@ void protocol_main_loop() {
         if (config->_encoder) {
             protocol_read_encoder();
         }
+        // Read the ultrasonic sensor
+        if (config->_ultrasonic) {
+            protocol_read_ultrasonic();
+        }   
     }
     return; /* Never reached */
 }

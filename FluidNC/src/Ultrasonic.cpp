@@ -177,6 +177,18 @@ esp_err_t Ultrasonic::measure_cm(uint32_t max_distance, uint32_t *distance) {
     return ESP_OK;
 }
 
+// Checks whether we are within the pause distance or not
+bool Ultrasonic::within_pause_distance(void) {
+
+    // Return if no distance set
+    if (_pause_distance_cm < 0) return false;
+
+    uint32_t dist_cm;
+    CHECK(measure_cm(ULT_MAX_DISTANCE, &dist_cm));
+
+    return (dist_cm <= _pause_distance_cm);
+}
+
 
 // Configurable functions
 void Ultrasonic::validate() {}
