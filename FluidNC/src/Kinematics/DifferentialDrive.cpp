@@ -11,6 +11,7 @@ namespace Kinematics {
         handler.item("right_motor_axis", _right_motor_axis);
         handler.item("wheel_radius", _wheel_radius);
         handler.item("distance_between_wheels", _distance_between_wheels);
+        log_info("DD wheel distance: " << _distance_between_wheels);
     }
 
     void DifferentialDrive::init() {
