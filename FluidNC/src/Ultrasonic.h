@@ -37,7 +37,7 @@
  *
  * Copyright (c) 2016 Ruslan V. Uss <unclerus@gmail.com>
  *
- * BSD Licensed as described in the file LICENSE
+ * BSD Licensed as described in the file LICENSE at https://github.com/UncleRus/esp-idf-lib/tree/master/components/ultrasonic
  */
 
 #pragma once
