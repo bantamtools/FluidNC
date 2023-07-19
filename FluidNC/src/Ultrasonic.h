@@ -45,6 +45,17 @@
 #include <stdint.h>
 #include "Configuration/Configurable.h"
 
+// Definitions
+#define ULT_TRIGGER_LOW_DELAY           4
+#define ULT_TRIGGER_HIGH_DELAY          10
+#define ULT_PING_TIMEOUT                6000
+#define ULT_ROUNDTRIP_M                 5800.0f
+#define ULT_ROUNDTRIP_CM                58
+
+#define ESP_ERR_ULTRASONIC_PING         0x200
+#define ESP_ERR_ULTRASONIC_PING_TIMEOUT 0x201
+#define ESP_ERR_ULTRASONIC_ECHO_TIMEOUT 0x202
+
 // Class
 class Ultrasonic : public Configuration::Configurable {
 
@@ -60,7 +71,11 @@ public:
 
     void init();
     bool is_active();
-    
+
+    esp_err_t measure_raw(uint32_t max_time_us, uint32_t *time_us);
+    esp_err_t measure_m(float max_distance, float *distance);
+    esp_err_t measure_cm(uint32_t max_distance, uint32_t *distance);
+
     // Configuration handlers.
     void validate() override;
     void group(Configuration::HandlerBase& handler) override;
