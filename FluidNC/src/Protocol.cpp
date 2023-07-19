@@ -184,6 +184,11 @@ bool pollingPaused = false;
 void polling_loop(void* unused) {
     // Poll the input sources waiting for a complete line to arrive
     for (; true; /*feedLoopWDT(), */ vTaskDelay(0)) {
+
+        // Read encoder and ultrasonic sensor
+        protocol_read_encoder();
+        protocol_read_ultrasonic();
+
         // Polling is paused when xmodem is using a channel for binary upload
         if (pollingPaused) {
             vTaskDelay(100);
@@ -199,10 +204,6 @@ void polling_loop(void* unused) {
         // Polling without an argument both checks for realtime characters and
         // returns a line-oriented command if one is ready.
         activeChannel = pollChannels(activeLine);
-
-        // Read encoder and ultrasonic sensor
-        protocol_read_encoder();
-        protocol_read_ultrasonic();
     }
 }
 
@@ -1148,15 +1149,38 @@ static void protocol_do_enter() {
 // Reads the encoder input and prints a report if available
 void protocol_read_encoder() {
 
+    int16_t enc_diff;
+
     // Bail if encoder not configured
     if (!config->_encoder) return;
     
     // Read and report the difference if encoder is active
     if (config->_encoder->is_active()) {
 
-        int16_t enc_diff = config->_encoder->get_difference();
-        if (enc_diff != 0) {
-            log_info("Encoder difference -> " << enc_diff); // Used by display for updates
+        switch (sys.state) {
+
+            // Encoder does nothing in these states
+            case State::ConfigAlarm:
+            case State::CheckMode:
+            case State::Homing:
+            case State::Sleep:
+            case State::SafetyDoor:
+            case State::Alarm:
+            case State::Cycle:
+            case State::Hold:
+            case State::Jog:
+                break;
+
+            // Read the difference if idle
+            case State::Idle:
+
+                enc_diff = config->_encoder->get_difference();
+                if (enc_diff != 0) {
+                    log_info("Encoder difference -> " << enc_diff); // Used by display for updates
+                }
+                break;
+
+            default: break;
         }
     }
 }
@@ -1195,16 +1219,13 @@ void protocol_read_ultrasonic() {
 
                     // Schedule pause for specified time unless already scheduled
                     if (pauseEndTime == 0) {
-                        pauseEndTime = usToEndTicks(1000 * 1000);
+                        pauseEndTime = usToEndTicks(config->_ultrasonic->get_pause_time_ms() * 1000);
                         // pauseEndTime 0 means that a resume is not scheduled. so if we happen to
                         // land on 0 as an end time, just push it back by one microsecond to get off 0.
                         if (pauseEndTime == 0) {
                             pauseEndTime = 1;
                         }
-                    }   
-
-                    log_info("PAUSE = " << pauseEndTime);
-
+                    }
                     sys.state = State::Hold;
                 }
                 break;
@@ -1212,15 +1233,10 @@ void protocol_read_ultrasonic() {
             // Resume from feedhold after a pause
             case State::Hold:
 
-                log_info("1! Pause End time = " << pauseEndTime);
-                log_info("Time = " << getCpuTicks() - pauseEndTime);
-
                 // Check to see if we should resume from feedhold
                 // If pauseEndTime is 0, no pause is pending.
                 if (pauseEndTime && (getCpuTicks() - pauseEndTime) > 0) {
                     pauseEndTime = 0;
-
-                    log_info("2!");
 
                     // Cycle start only when IDLE or when a hold is complete and ready to resume.
                     if (sys.suspend.bit.holdComplete) {
