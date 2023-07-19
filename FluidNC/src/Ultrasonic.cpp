@@ -2,8 +2,6 @@
 
 #include "Ultrasonic.h"
 
-static const char *TAG = "ultrasonic";
-
 // Ultraonic constructor
 Ultrasonic::Ultrasonic() {}
 
