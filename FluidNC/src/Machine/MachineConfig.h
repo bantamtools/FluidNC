@@ -28,6 +28,8 @@
 #include "UserOutputs.h"
 #include "Macros.h"
 
+#include <string_view>
+
 namespace Machine {
     using ::Kinematics::Kinematics;
 
@@ -95,9 +97,9 @@ namespace Machine {
         // Tracks and reports gcode line numbers. Disabled by default.
         bool _useLineNumbers = false;
 
-        String _board = "None";
-        String _name  = "None";
-        String _meta  = "";
+        std::string _board = "None";
+        std::string _name  = "None";
+        std::string _meta  = "";
 #if 1
         static MachineConfig*& instance() {
             static MachineConfig* instance = nullptr;
@@ -109,8 +111,8 @@ namespace Machine {
         void group(Configuration::HandlerBase& handler) override;
 
         static bool load();
-        static bool load(const char* file);
-        static bool load(StringRange* input);
+        static bool load_file(std::string_view file);
+        static bool load_yaml(std::string_view yaml_string);
 
         ~MachineConfig();
     };

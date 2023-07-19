@@ -1,0 +1,150 @@
+name: "PlotterXY"
+board: "FYSETC E4"
+
+stepping:
+  engine: TIMED
+  idle_ms: 255
+  dir_delay_us: 1
+  pulse_us: 4
+  disable_delay_us: 1
+
+start:
+  must_home: false
+
+planner_blocks: 16
+
+control:
+    feed_hold_pin: gpio.36:low
+
+# uart1:
+#   txd_pin: gpio.22
+#   rxd_pin: gpio.21
+#   baud: 115200
+#   mode: 8N1
+
+kinematics:
+  corexy:
+
+# 20t pulley
+# steps per mm/microsteps   80/16   40/8    20/4    10/2    5/1
+# resolution in mm          0.0125  0.025   0.050   0.100   0.200
+
+# 16t pulley
+# steps per mm/microsteps   100/16  50/8    25/4    12.5/2  6.25/1
+# resolution in mm          0.010   0.020   0.050   0.080   0.160
+
+# 1/4 microsteps gives best torque for a wide range of speeds
+
+# Board stepper driver address and gpio
+# axis  add   step  dir
+# x     1     27    26
+# y     3     33    32
+# z     0     14    12
+# e     2     16    17
+
+axes:
+  shared_stepper_disable_pin: NO_PIN
+  shared_stepper_reset_pin: NO_PIN
+
+  x:
+    steps_per_mm: 40
+    max_rate_mm_per_min: 10000
+    acceleration_mm_per_sec2: 2400
+    max_travel_mm: 1275
+    soft_limits: false
+    homing:
+      cycle: 2
+      allow_single_axis: true
+      mpos_mm: 0
+      positive_direction: false
+      seek_mm_per_min: 4000
+      feed_mm_per_min: 600
+      settle_ms: 200
+      seek_scaler: 1.100
+      feed_scaler: 1.100
+
+    motor0:
+      limit_neg_pin: gpio.1:high
+      pulloff_mm: 10
+      stepstick:
+        disable_pin: gpio.15:low
+        direction_pin: gpio.16:low
+        step_pin: gpio.17
+    motor1:
+      null_motor:
+
+  y:
+    steps_per_mm: 40
+    max_rate_mm_per_min: 10000
+    acceleration_mm_per_sec2: 2400
+    max_travel_mm: 1024
+    soft_limits: false
+    homing:
+      cycle: 1
+      allow_single_axis: true
+      mpos_mm: -1025
+      positive_direction: false
+      seek_mm_per_min: 4000
+      feed_mm_per_min: 600
+      settle_ms: 200
+      seek_scaler: 1.100
+      feed_scaler: 1.100
+
+    motor0:
+      limit_neg_pin: gpio.2:high
+      pulloff_mm: 10
+      stepstick:
+        disable_pin: gpio.18:low
+        direction_pin: gpio.21:low
+        step_pin: gpio.26
+    motor1:
+      null_motor:
+
+  z:
+    steps_per_mm: 16
+    max_rate_mm_per_min: 3000.000
+    acceleration_mm_per_sec2: 2400
+    max_travel_mm: 25
+    soft_limits: false
+    homing:
+      cycle: -1
+
+    motor0:
+      #limit_pos_pin: gpio.4:high
+      pulloff_mm: 4
+      stepstick:
+        disable_pin: gpio.47:low
+        direction_pin: gpio.33:low
+        step_pin: gpio.34
+    motor1:
+      null_motor:
+
+spi:
+  miso_pin: gpio.8
+  mosi_pin: gpio.9
+  sck_pin: gpio.10
+
+sdcard:
+  cs_pin: gpio.12
+  card_detect_pin: gpio.14
+  frequency_hz: 2000000
+
+user_outputs:
+  digital0_pin: gpio.5
+  digital1_pin: gpio.43
+  digital2_pin: gpio.44
+  digital3_pin: gpio.42
+  digital4_pin: gpio.6
+
+# run a fan off the 24V/5V fan header – switch on and off with the WebUI mist button or by issuing an M8 command, turn off with M9
+coolant:
+  mist_pin: gpio.13
+  delay: 0
+
+macros:
+  startup_line0:
+  startup_line1:
+  macro0:
+  macro1:
+  macro2:
+  macro3:

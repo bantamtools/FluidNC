@@ -232,30 +232,23 @@ static void check_startup_state() {
     // NOTE: Sleep mode disables the stepper drivers and position can't be guaranteed.
     // Re-initialize the sleep state as an ALARM mode to ensure user homes or acknowledges.
     if (sys.state == State::ConfigAlarm) {
-        report_feedback_message(Message::ConfigAlarmLock);
+        report_error_message(Message::ConfigAlarmLock);
     } else {
         // Perform some machine checks to make sure everything is good to go.
         if (config->_start->_checkLimits && config->_axes->hasHardLimits()) {
             if (limits_get_state()) {
                 sys.state = State::Alarm;  // Ensure alarm state is active.
-                report_feedback_message(Message::CheckLimits);
+                report_error_message(Message::CheckLimits);
             }
         }
         if (config->_control->startup_check()) {
             rtAlarm = ExecAlarm::ControlPin;
-        }
-
-        if (sys.state == State::Alarm || sys.state == State::Sleep) {
+        } else if (sys.state == State::Alarm || sys.state == State::Sleep) {
             report_feedback_message(Message::AlarmLock);
             sys.state = State::Alarm;  // Ensure alarm state is set.
         } else {
-            // Check if the safety door is open.
-            sys.state = State::Idle;
-            while (config->_control->safety_door_ajar()) {
-                request_safety_door();
-                protocol_execute_realtime();  // Enter safety door mode. Should return as IDLE state.
-            }
             // All systems go!
+            sys.state = State::Idle;
             settings_execute_startup();  // Execute startup script.
         }
     }
@@ -274,6 +267,10 @@ void protocol_read_encoder() {
     }
 }
 
+const uint32_t heapWarnThreshold = 15000;
+
+uint32_t heapLowWater = UINT_MAX;
+
 void protocol_main_loop() {
     check_startup_state();
     start_polling();
@@ -288,7 +285,6 @@ void protocol_main_loop() {
 #ifdef DEBUG_REPORT_ECHO_RAW_LINE_RECEIVED
             report_echo_line_received(activeLine, allChannels);
 #endif
-            display("GCODE", activeLine);
 
             Error status_code = execute_line(activeLine, *activeChannel, WebUI::AuthenticationLevel::LEVEL_GUEST);
 
@@ -323,9 +319,17 @@ void protocol_main_loop() {
             idleEndTime = 0;  //
             config->_axes->set_disable(true);
         }
-
+        uint32_t newHeapSize = xPortGetFreeHeapSize();
+        if (newHeapSize < heapLowWater) {
+            heapLowWater = newHeapSize;
+            if (heapLowWater < heapWarnThreshold) {
+                log_warn("Low memory: " << heapLowWater << " bytes");
+            }
+        }
         // Read encoder
-        protocol_read_encoder();
+        if (config->_encoder) {
+            protocol_read_encoder();
+        }
     }
     return; /* Never reached */
 }
@@ -392,7 +396,7 @@ static void protocol_do_alarm() {
     sys.state = State::Alarm;  // Set system alarm state
     alarm_msg(rtAlarm);
     if (rtAlarm == ExecAlarm::HardLimit || rtAlarm == ExecAlarm::SoftLimit) {
-        report_feedback_message(Message::CriticalEvent);
+        report_error_message(Message::CriticalEvent);
         protocol_disable_steppers();
         rtReset = false;  // Disable any existing reset
         do {
@@ -1030,6 +1034,11 @@ static void protocol_do_limit(void* arg) {
     }
 }
 
+static void protocol_do_card_detect(void* arg) {
+
+    // Do nothing, use update() in CardDetectPin instead
+}
+
 static void protocol_do_enter() {
     
     switch (sys.state) {
@@ -1119,6 +1128,7 @@ ArgEvent rapidOverrideEvent { protocol_do_rapid_override };
 ArgEvent spindleOverrideEvent { protocol_do_spindle_override };
 ArgEvent accessoryOverrideEvent { protocol_do_accessory_override };
 ArgEvent limitEvent { protocol_do_limit };
+ArgEvent cardDetectEvent { protocol_do_card_detect};
 
 ArgEvent reportStatusEvent { (void (*)(void*))report_realtime_status };
 

@@ -7,7 +7,8 @@ static const char *TAG = "encoder";
 // Encoder constructor
 Encoder::Encoder() {
 
-	this->pcnt_unit = PCNT_UNIT_0;
+    _is_active = false;
+	_pcnt_unit = PCNT_UNIT_0;
 }
 
 // Encoder destructor
@@ -18,6 +19,12 @@ void Encoder::init() {
 
 	pcnt_config_t pcnt_config;
 
+    // Check if encoder pins configured
+    if (!_a_pin.defined() || !_b_pin.defined()) {
+        _is_active = false;
+        return;
+    }
+
     // Set up encoder A/B pins
     _a_pin.setAttr(Pin::Attr::PullUp);
     _b_pin.setAttr(Pin::Attr::PullUp);
@@ -26,7 +33,7 @@ void Encoder::init() {
     pcnt_config.pulse_gpio_num = _b_pin.getNative(Pin::Capabilities::Input);
     pcnt_config.ctrl_gpio_num = _a_pin.getNative(Pin::Capabilities::Input);
 	pcnt_config.channel = PCNT_CHANNEL_0;
-	pcnt_config.unit = this->pcnt_unit;
+	pcnt_config.unit = _pcnt_unit;
 
 	// What to do on the positive / negative edge of pulse input?
 	pcnt_config.pos_mode = PCNT_COUNT_DIS;      // Keep the counter value on the positive edge
@@ -44,21 +51,21 @@ void Encoder::init() {
 	pcnt_unit_config(&pcnt_config);
 
 	// Configure and enable the input filter
-	pcnt_set_filter_value(this->pcnt_unit, 1023);
-	pcnt_filter_enable(this->pcnt_unit);
+	pcnt_set_filter_value(_pcnt_unit, 1023);
+	pcnt_filter_enable(_pcnt_unit);
 
 	// Initialize PCNT's counter
-	pcnt_counter_pause(this->pcnt_unit);
-	pcnt_counter_clear(this->pcnt_unit);
+	pcnt_counter_pause(_pcnt_unit);
+	pcnt_counter_clear(_pcnt_unit);
 
 	// Everything is set up, now go to counting
-	pcnt_counter_resume(this->pcnt_unit);
+	pcnt_counter_resume(_pcnt_unit);
 
     // Set flag
-    this->_is_active = true;
+    _is_active = true;
 
     // Store the current encoder value
-	this->_previous_value = this->get_value();
+	_previous_value = get_value();
 }
 
 // Get the current encoder value
@@ -66,9 +73,9 @@ int16_t Encoder::get_value() {
 	int16_t value;
 
     // Return zero if not active
-    if (!this->_is_active) return 0;
+    if (!_is_active) return 0;
 
-	pcnt_get_counter_value(this->pcnt_unit, &value);
+	pcnt_get_counter_value(_pcnt_unit, &value);
 	return value;
 }
 
@@ -78,14 +85,14 @@ int16_t Encoder::get_difference() {
     int16_t current_value, difference;
 
     // Return zero if not active
-    if (!this->_is_active) return 0;
+    if (!_is_active) return 0;
 
     // Get the current encoder count and calculate difference
-    current_value = (int16_t)this->get_value();
-    difference = current_value - this->_previous_value;
+    current_value = (int16_t)get_value();
+    difference = current_value - _previous_value;
 
     // Set previous count to current count
-    this->_previous_value = current_value;
+    _previous_value = current_value;
 
     // Return the difference
     return difference;

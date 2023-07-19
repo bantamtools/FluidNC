@@ -1,0 +1,147 @@
+name: "Serama"
+board: "Serama"
+
+
+arc_tolerance_mm: 0.002
+#Range: 0.001 to 1.0
+#FluidNC converts arcs into tiny line segment representing the arc. This value determines how closely the segments represent the arc. This value is rarely changed by the user.
+
+junction_deviation_mm: 0.010
+#Range: 0.01 to 1.0
+#Junction deviation is used by the planner to calculate cornering speeds. This is generally not adjusted by the user. Read the firmware source code for a full description.
+
+verbose_errors: false
+#Prints an error string with each error code. This might not be compatible with some gcode senders.
+
+report_inches: false
+#Set to true for inches and false for millimeters. This is only for reporting and not input values.
+
+enable_parking_override_control: false
+#This allows you to override the parking feature via gcode. When true M56 P0 disables parking and M56 P1 enables it.
+
+use_line_numbers: false
+#Allow FluidNC to use line numbers in gcode. To use line numbers, set this to true. Put line numbers in the gcode with N<line number>, like N100. The line number that is currently being executed by the motion planner will be displayed in the status reports with Ln:100. If there is no line number information in the gcode, it will report Ln:0.
+
+planner_blocks: 16
+#Range: 10 - 120
+#This sets the number of blocks used in the planner. You should leave it at the default unless you are tuning for a special application.
+
+start:
+  must_home: false
+
+control:
+  enter_pin: gpio.36:low
+
+stepping:
+  engine: TIMED
+  idle_ms: 255
+  dir_delay_us: 1
+  pulse_us: 4
+  disable_delay_us: 1
+
+axes:
+  shared_stepper_disable_pin: NO_PIN
+  shared_stepper_reset_pin: NO_PIN
+  
+  x:
+    steps_per_mm: 40
+    max_rate_mm_per_min: 7500
+    acceleration_mm_per_sec2: 10000
+    max_travel_mm: 216
+    soft_limits: false
+    homing:
+      cycle: 2
+      mpos_mm: 4
+      positive_direction: false
+      feed_mm_per_min: 200
+      seek_mm_per_min: 2000
+    
+    motor0:
+      limit_neg_pin: gpio.1:high
+      pulloff_mm: 2
+      stepstick:
+        disable_pin: gpio.15:low
+        direction_pin: gpio.16
+        step_pin: gpio.17
+    motor1:
+      null_motor:
+
+  y:
+    steps_per_mm: 34.5
+    max_rate_mm_per_min: 7500
+    acceleration_mm_per_sec2: 10000
+    max_travel_mm: 230
+    soft_limits: false
+    homing:
+      cycle: -1
+      mpos_mm: -40
+
+    motor0:
+      limit_neg_pin: gpio.2:low
+      pulloff_mm: 10
+      stepstick:
+        disable_pin: gpio.18:low
+        direction_pin: gpio.21:low
+        step_pin: gpio.26
+    motor1:
+      null_motor:
+
+  z:
+    steps_per_mm: 12.25
+    max_rate_mm_per_min: 5000
+    acceleration_mm_per_sec2: 10000
+    max_travel_mm: 16
+    soft_limits: false
+    homing:
+      cycle: 1
+      mpos_mm: 2
+      positive_direction: true
+      feed_mm_per_min: 500
+      seek_mm_per_min: 1000
+
+    motor0:
+      limit_pos_pin: gpio.4:high
+      pulloff_mm: 4
+      stepstick:
+        disable_pin: gpio.47:low
+        direction_pin: gpio.33:high
+        step_pin: gpio.34
+    motor1:
+      null_motor:
+
+# OLED
+i2c0:
+   sda_pin: gpio.41
+   scl_pin: gpio.40
+   frequency: 400000
+        
+oled:
+   i2c_num: 0
+   i2c_address: 60
+   width: 128
+   height: 64
+   radio_delay_ms: 1000
+
+# Encoder
+encoder:
+  a_pin: gpio.35
+  b_pin: gpio.48
+
+# Configure SD card in SPI mode
+spi:
+  miso_pin: gpio.8
+  mosi_pin: gpio.9
+  sck_pin: gpio.10
+
+sdcard:
+  cs_pin: gpio.12
+  card_detect_pin: gpio.14
+  frequency_hz: 8000000
+
+# LED (0) and expansion IOs (1-4)
+user_outputs:
+  digital0_pin: gpio.5
+  digital1_pin: gpio.43
+  digital2_pin: gpio.44
+  digital3_pin: gpio.42
+  digital4_pin: gpio.6

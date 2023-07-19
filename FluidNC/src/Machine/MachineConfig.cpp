@@ -25,8 +25,12 @@
 #include <cstdio>
 #include <cstring>
 #include <atomic>
+#include <memory>
 
 Machine::MachineConfig* config;
+
+// Print out reset reason at boot
+#define DEBUG_RESET_REASON
 
 // TODO FIXME: Split this file up into several files, perhaps put it in some folder and namespace Machine?
 
@@ -149,31 +153,51 @@ namespace Machine {
         }
     }
 
-    char defaultConfig[] = "name: Default (Test Drive)\nboard: None\n";
+    const char defaultConfig[] = "name: Default (Test Drive)\nboard: None\n";
 
     bool MachineConfig::load() {
         bool configOkay;
         // If the system crashes we skip the config file and use the default
         // builtin config.  This helps prevent reset loops on bad config files.
         esp_reset_reason_t reason = esp_reset_reason();
+
+#ifdef DEBUG_RESET_REASON
+        // Print out the reset reason
+        delay_ms(500); // Let serial console catch up
+        switch (reason) {
+            case ESP_RST_UNKNOWN:   log_info("RESET: Reset reason can not be determined"); break;
+            case ESP_RST_POWERON:   log_info("RESET: Reset due to power-on event"); break;
+            case ESP_RST_EXT:       log_info("RESET: Reset by external pin (not applicable for ESP32)"); break;
+            case ESP_RST_SW:        log_info("RESET: Software reset via esp_restart"); break;
+            case ESP_RST_PANIC:     log_info("RESET: Software reset due to exception/panic"); break;
+            case ESP_RST_INT_WDT:   log_info("RESET: Reset (software or hardware) due to interrupt watchdog"); break;
+            case ESP_RST_TASK_WDT:  log_info("RESET: Reset due to task watchdog"); break;
+            case ESP_RST_WDT:       log_info("RESET: Reset due to other watchdogs"); break;
+            case ESP_RST_DEEPSLEEP: log_info("RESET: Reset after exiting deep sleep mode"); break;
+            case ESP_RST_BROWNOUT:  log_info("RESET: Brownout reset (software or hardware)"); break;
+            case ESP_RST_SDIO:      log_info("RESET: Reset over SDIO"); break;
+            default: break;
+        }
+#endif
+
         if (reason == ESP_RST_PANIC) {
             log_error("Skipping configuration file due to panic");
             configOkay = false;
         } else {
-            configOkay = load(config_filename->get());
+            configOkay = load_file(config_filename->get());
         }
 
         if (!configOkay) {
             log_info("Using default configuration");
-            configOkay = load(new StringRange(defaultConfig));
+            configOkay = load_yaml(defaultConfig);
         }
 
         return configOkay;
     }
 
-    bool MachineConfig::load(const char* filename) {
+    bool MachineConfig::load_file(const std::string_view filename) {
         try {
-            FileStream file(filename, "r", "");
+            FileStream file(std::string { filename }, "r", "");
 
             auto filesize = file.size();
             if (filesize <= 0) {
@@ -181,27 +205,26 @@ namespace Machine {
                 return false;
             }
 
-            char* buffer     = new char[filesize + 1];
+            auto buffer      = std::make_unique<char[]>(filesize + 1);
             buffer[filesize] = '\0';
-            auto actual      = file.read(buffer, filesize);
+            auto actual      = file.read(buffer.get(), filesize);
             if (actual != filesize) {
                 log_info("Configuration file:" << filename << " read error");
                 return false;
             }
             log_info("Configuration file:" << filename);
-            bool retval = load(new StringRange(buffer, buffer + filesize));
-            delete[] buffer;
-            return retval;
+            // Trimming the overall config file could influence indentation, hence false
+            return load_yaml(std::string_view { buffer.get(), filesize });
         } catch (...) {
             log_warn("Cannot open configuration file:" << filename);
             return false;
         }
     }
 
-    bool MachineConfig::load(StringRange* input) {
+    bool MachineConfig::load_yaml(std::string_view input) {
         bool successful = false;
         try {
-            Configuration::Parser        parser(input->begin(), input->end());
+            Configuration::Parser        parser(input);
             Configuration::ParserHandler handler(parser);
 
             // instance() is by reference, so we can just get rid of an old instance and
@@ -223,7 +246,7 @@ namespace Machine {
                 Configuration::AfterParse afterParse;
                 config->afterParse();
                 config->group(afterParse);
-            } catch (std::exception& ex) { log_info("Validation error: " << ex.what()); }
+            } catch (std::exception& ex) { log_error("Validation error: " << ex.what()); }
 
             log_debug("Checking configuration");
 
@@ -231,14 +254,14 @@ namespace Machine {
                 Configuration::Validator validator;
                 config->validate();
                 config->group(validator);
-            } catch (std::exception& ex) { log_info("Validation error: " << ex.what()); }
+            } catch (std::exception& ex) { log_error("Validation error: " << ex.what()); }
 
             // log_info("Heap size after configuation load is " << uint32_t(xPortGetFreeHeapSize()));
 
             successful = (sys.state != State::ConfigAlarm);
 
             if (!successful) {
-                log_info("Configuration is invalid");
+                log_error("Configuration is invalid");
             }
 
         } catch (const Configuration::ParseException& ex) {
@@ -257,7 +280,6 @@ namespace Machine {
             // Get rid of buffer and return
             log_error("Unknown error while processing config file");
         }
-        delete[] input;
 
         std::atomic_thread_fence(std::memory_order::memory_order_seq_cst);
 

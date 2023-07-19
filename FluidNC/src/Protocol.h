@@ -88,6 +88,7 @@ extern ArgEvent rapidOverrideEvent;
 extern ArgEvent spindleOverrideEvent;
 extern ArgEvent accessoryOverrideEvent;
 extern ArgEvent limitEvent;
+extern ArgEvent cardDetectEvent;
 
 extern ArgEvent reportStatusEvent;
 
@@ -126,3 +127,5 @@ void send_line(Channel& channel, const std::string* message);
 void send_line(Channel& channel, const std::string& message);
 
 void drain_messages();
+
+extern uint32_t heapLowWater;

@@ -58,8 +58,8 @@ static uint8_t calc_pwm_precision(uint32_t frequency) {
     }
 
     // Increase the precision (bits) until it exceeds the frequency
-    // The hardware maximum precision is 20 bits
-    const uint8_t  ledcMaxBits = 20;
+    // The hardware maximum precision is SOC_LEDC_TIMER_BIT_WIDE_NUM bits
+    const uint8_t  ledcMaxBits = SOC_LEDC_TIMER_BIT_WIDE_NUM;
     const uint32_t apbFreq     = 80000000;
     const uint32_t maxCount    = apbFreq / frequency;
     for (uint8_t bits = 2; bits <= ledcMaxBits; ++bits) {
@@ -120,6 +120,9 @@ void IRAM_ATTR PwmPin::setDuty(uint32_t duty) {
 
     LEDC.channel_group[g].channel[c].duty.duty        = duty << 4;
     LEDC.channel_group[g].channel[c].conf0.sig_out_en = on;
+#ifdef CONFIG_IDF_TARGET_ESP32S3
+    LEDC.channel_group[g].channel[c].conf0.low_speed_update = on;
+#endif
     LEDC.channel_group[g].channel[c].conf1.duty_start = on;
 }
 

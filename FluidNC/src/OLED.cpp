@@ -10,6 +10,44 @@ static bool* saved_limits = NULL;
 static volatile JogState jog_state;
 static volatile bool jog_timer_active;
 
+// Bantam Tools logo (XBM format)
+static uint8_t bantam_logo_bits[] PROGMEM = {
+  0x00, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+  0x00, 0x00, 0x00, 0x00, 0x03, 0x80, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0E, 0x80, 0x0F, 0x00, 
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+  0x3E, 0x00, 0x2F, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+  0x00, 0x00, 0x00, 0x00, 0xFE, 0x00, 0x3F, 0x00, 0x00, 0x00, 0x00, 0x00, 
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xF8, 0x03, 0x3E, 0x00, 
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+  0xEC, 0x0F, 0x37, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+  0x00, 0x00, 0x00, 0x00, 0xBC, 0x0F, 0x1F, 0x78, 0xC0, 0xE1, 0xD8, 0x3F, 
+  0x87, 0xC3, 0x83, 0x3F, 0x1E, 0x3C, 0x0C, 0x3C, 0xFC, 0x8E, 0x1F, 0xF8, 
+  0xC1, 0xE1, 0xD8, 0x3F, 0x87, 0xC7, 0x83, 0x3F, 0x3F, 0x7E, 0x0C, 0x7E, 
+  0xF0, 0xCF, 0x0F, 0x98, 0xE3, 0xE1, 0x19, 0x86, 0x87, 0xC7, 0x03, 0x0E, 
+  0x73, 0xE6, 0x0C, 0x66, 0xD8, 0xCF, 0x1F, 0x18, 0x63, 0xE3, 0x19, 0x86, 
+  0x8D, 0x47, 0x03, 0x8E, 0x73, 0xC6, 0x0C, 0x06, 0x78, 0xEF, 0x1F, 0x98, 
+  0x61, 0xE3, 0x1B, 0x86, 0x8D, 0x65, 0x03, 0x8E, 0x73, 0xC6, 0x0C, 0x0E, 
+  0xF0, 0xEF, 0x07, 0xF8, 0x61, 0x63, 0x1B, 0x86, 0x8D, 0x6D, 0x03, 0x8E, 
+  0x73, 0xC6, 0x0C, 0x3C, 0xE0, 0xFF, 0x0F, 0xF8, 0x71, 0x63, 0x1B, 0xC6, 
+  0x8D, 0x6D, 0x03, 0x8E, 0x73, 0xC6, 0x0C, 0x78, 0x30, 0xFF, 0x0F, 0x18, 
+  0xF3, 0x67, 0x1E, 0xC6, 0x9F, 0x3D, 0x03, 0x8E, 0x73, 0xC6, 0x0C, 0x60, 
+  0xF0, 0xFE, 0x0F, 0x18, 0xF3, 0x67, 0x1E, 0xC6, 0x9F, 0x39, 0x03, 0x8E, 
+  0x73, 0xC6, 0x0C, 0xE2, 0xE0, 0xFF, 0x07, 0x98, 0x33, 0x66, 0x1C, 0xC6, 
+  0x98, 0x39, 0x03, 0x8E, 0x73, 0xE6, 0x0C, 0xE7, 0x80, 0xFF, 0x03, 0xF8, 
+  0x39, 0x66, 0x1C, 0xC6, 0x98, 0x39, 0x03, 0x0E, 0x3F, 0x7E, 0xFC, 0x7E, 
+  0x00, 0xFE, 0x01, 0xF8, 0x18, 0x6E, 0x18, 0x66, 0xB0, 0x19, 0x03, 0x0E, 
+  0x1E, 0x3C, 0xFC, 0x3C, 0x00, 0xFE, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xEF, 0x00, 0x00, 
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+  0x00, 0x76, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x66, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x6C, 0x00, 0x00, 
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+  0x00, 0xCC, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x90, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, };
+
 // Jogging timer callback
 static void jog_timer_cb(void* arg)
 {
@@ -296,9 +334,12 @@ void OLED::menu_init(void) {
     // Version Menu
     char bantam_ver_str[MENU_NAME_MAX_STR] = {"Version: "};
     strncat(bantam_ver_str, git_info_short, MENU_NAME_MAX_STR - 10);
+    char fluidnc_ver_str[MENU_NAME_MAX_STR] = {"FluidNC: "};
+    strncat(fluidnc_ver_str, fluidnc_version, MENU_NAME_MAX_STR - 10);
 
     menu_add(version_menu, NULL, NULL, "< Back");
     menu_add(version_menu, NULL, NULL, bantam_ver_str);
+    menu_add(version_menu, NULL, NULL, fluidnc_ver_str);
 
     // Not jogging at init
     jog_state = JogState::Idle;
@@ -346,7 +387,7 @@ void OLED::menu_update_selection(int menu_max_active_entries) {
     }
 }
 
-void OLED::show(Layout& layout, const String& msg) {
+void OLED::show(Layout& layout, const char* msg) {
     if (_width < layout._width_required) {
         return;
     }
@@ -355,8 +396,6 @@ void OLED::show(Layout& layout, const String& msg) {
     _oled->drawString(layout._x, layout._y, msg);
 }
 
-OLED::Layout OLED::bannerLayout128  = { 0, 0, 0, ArialMT_Plain_16, TEXT_ALIGN_CENTER };
-OLED::Layout OLED::bannerLayout64   = { 0, 0, 0, ArialMT_Plain_16, TEXT_ALIGN_CENTER };
 OLED::Layout OLED::stateLayout      = { 0, 0, 0, ArialMT_Plain_10, TEXT_ALIGN_LEFT };
 OLED::Layout OLED::tickerLayout     = { 63, 0, 128, ArialMT_Plain_10, TEXT_ALIGN_CENTER };
 OLED::Layout OLED::filenameLayout   = { 63, 13, 128, ArialMT_Plain_10, TEXT_ALIGN_CENTER };
@@ -419,9 +458,10 @@ void OLED::init() {
 
     _oled->clear();
 
-    show((_width == 128) ? bannerLayout128 : bannerLayout64, "Bantam Tools");
+    _oled->drawXbm(0, 18, 128, 26, bantam_logo_bits);
 
     _oled->display();
+    delay_ms(1000);
 
     allChannels.registration(this);
     setReportInterval(500);
@@ -528,7 +568,7 @@ void OLED::show_file() {
     _oled->setColor(WHITE);
 
     if (_width == 128) {
-        show(percentLayout128, String(pct) + '%');
+        show(percentLayout128, std::to_string(pct) + '%');
 
         _ticker += "-";
         if (_ticker.length() >= 12) {
@@ -536,11 +576,11 @@ void OLED::show_file() {
         }
         show(tickerLayout, _ticker);
 
-        wrapped_draw_string(13, _filename.c_str(), ArialMT_Plain_10);
+        wrapped_draw_string(14, _filename, ArialMT_Plain_10);
 
         _oled->drawProgressBar(0, 39, 120, 10, pct);
     } else {
-        show(percentLayout64, String(pct) + '%');
+        show(percentLayout64, std::to_string(pct) + '%');
     }
 
     // Display pause/resume message at bottom
@@ -582,16 +622,16 @@ void OLED::show_dro(float* axes, bool isMpos, bool* limits) {
     for (uint8_t axis = X_AXIS; axis < n_axis; axis++) {
         oled_y_pos = ((_height == 64) ? 24 : 17) + (axis * 10);
 
-        String axis_letter = String(Machine::Axes::_names[axis]);
+        std::string axis_msg(1, Machine::Axes::_names[axis]);
         if (_width == 128) {
-            axis_letter += ":";
+            axis_msg += ":";
         } else {
             // For small displays there isn't room for separate limit boxes
             // so we put it after the label
-            axis_letter += limits[axis] ? "L" : ":";
+            axis_msg += limits[axis] ? "L" : ":";
         }
         _oled->setTextAlignment(TEXT_ALIGN_LEFT);
-        _oled->drawString(68 + 0, oled_y_pos, axis_letter);
+        _oled->drawString(68 + 0, oled_y_pos, axis_msg.c_str());
 
         _oled->setTextAlignment(TEXT_ALIGN_RIGHT);
         snprintf(axisVal, 20 - 1, "%.3f", axes[axis]);
@@ -612,17 +652,13 @@ void OLED::show_radio_info() {
 
     if (_width == 128) {
         if (_state == "Alarm") {
-            wrapped_draw_string(18, _radio_info, ArialMT_Plain_10);
-            wrapped_draw_string(30, _radio_addr, ArialMT_Plain_10);
-            wrapped_draw_string(42, "Press button to Clear", ArialMT_Plain_10);
+            show_error("Press button to CLEAR");
         } else if (_state != "Run") {
             show(radioAddrLayout, _radio_addr);
         }
     } else {
         if (_state == "Alarm") {
-            wrapped_draw_string(10, _radio_info, ArialMT_Plain_10);
-            wrapped_draw_string(28, _radio_addr, ArialMT_Plain_10);
-            wrapped_draw_string(46, "Press button to Clear", ArialMT_Plain_10);
+            show_error("Press button to CLEAR");
         }
     }
 }
@@ -668,9 +704,7 @@ void OLED::parse_numbers(std::string s, float* nums, int maxnums) {
     } while (nextpos != std::string::npos);
 }
 
-float* OLED::parse_axes(std::string s) {
-    static float axes[MAX_N_AXIS];
-
+void OLED::parse_axes(std::string s, float* axes) {
     size_t pos     = 0;
     size_t nextpos = -1;
     size_t axis    = 0;
@@ -682,7 +716,6 @@ float* OLED::parse_axes(std::string s) {
         }
         pos = nextpos + 1;
     } while (nextpos != std::string::npos);
-    return axes;
 }
 
 void OLED::parse_status_report() {
@@ -697,9 +730,9 @@ void OLED::parse_status_report() {
     bool probe              = false;
     bool limits[MAX_N_AXIS] = { false };
 
-    float* axes;
-    bool   isMpos = false;
-    _filename     = "";
+    static float axes[MAX_N_AXIS];
+    bool  isMpos = false;
+    _filename    = "";
 
     // ... handle it
     while (nextpos != std::string::npos) {
@@ -712,13 +745,13 @@ void OLED::parse_status_report() {
         auto value = field.substr(colon + 1);
         if (tag == "MPos") {
             // x,y,z,...
-            axes   = parse_axes(value);
+            parse_axes(value, axes);
             isMpos = true;
             continue;
         }
         if (tag == "WPos") {
             // x,y,z...
-            axes   = parse_axes(value);
+            parse_axes(value, axes);
             isMpos = false;
             continue;
         }
@@ -768,7 +801,10 @@ void OLED::parse_status_report() {
         }
         if (tag == "WCO") {
             // x,y,z,...
-            //auto wcos = parse_axes(value);
+            // We do not use the WCO values because the DROs show whichever
+            // position is in the status report
+            // float wcos[MAX_N_AXIS];
+            // auto  wcos = parse_axes(value, wcos);
             continue;
         }
         if (tag == "Ov") {
@@ -846,9 +882,8 @@ void OLED::parse_gcode_report() {
 
 // [MSG:INFO: Connecting to STA:SSID foo]
 void OLED::parse_STA() {
-    size_t      start = strlen("[MSG:INFO: Connecting to STA SSID:");
-    std::string ssid  = _report.substr(start, _report.size() - start - 1);
-    _radio_info       = String(ssid.c_str());
+    size_t start = strlen("[MSG:INFO: Connecting to STA SSID:");
+    _radio_info  = _report.substr(start, _report.size() - start - 1);
 
     _oled->clear();
     auto fh = font_height(ArialMT_Plain_10);
@@ -858,9 +893,8 @@ void OLED::parse_STA() {
 
 // [MSG:INFO: Connected - IP is 192.168.68.134]
 void OLED::parse_IP() {
-    size_t      start  = _report.rfind(" ") + 1;
-    std::string ipaddr = _report.substr(start, _report.size() - start - 1);
-    _radio_addr        = String(ipaddr.c_str());
+    size_t start = _report.rfind(" ") + 1;
+    _radio_addr  = _report.substr(start, _report.size() - start - 1);
 
     _oled->clear();
     auto fh = font_height(ArialMT_Plain_10);
@@ -872,15 +906,14 @@ void OLED::parse_IP() {
 
 // [MSG:INFO: AP SSID foo IP 192.168.68.134 mask foo channel foo]
 void OLED::parse_AP() {
-    size_t      start    = strlen("[MSG:INFO: AP SSID ");
-    size_t      ssid_end = _report.rfind(" IP ");
-    size_t      ip_end   = _report.rfind(" mask ");
-    std::string ssid     = _report.substr(start, ssid_end - start);
-    size_t      ip_start = ssid_end + strlen(" IP ");
-    std::string ipaddr   = _report.substr(ip_start, ip_end - ip_start);
-    _radio_info          = "AP: ";
-    _radio_info += ssid.c_str();
-    _radio_addr = String(ipaddr.c_str());
+    size_t start    = strlen("[MSG:INFO: AP SSID ");
+    size_t ssid_end = _report.rfind(" IP ");
+    size_t ip_end   = _report.rfind(" mask ");
+    size_t ip_start = ssid_end + strlen(" IP ");
+
+    _radio_info = "AP: ";
+    _radio_info += _report.substr(start, ssid_end - start);
+    _radio_addr = _report.substr(ip_start, ip_end - ip_start);
 
     _oled->clear();
     auto fh = font_height(ArialMT_Plain_10);
@@ -1049,7 +1082,7 @@ size_t OLED::char_width(char c, font_t font) {
     return (index < 0) ? 0 : xf->glyphs[index].width;
 }
 
-void OLED::wrapped_draw_string(int16_t y, const String& s, font_t font) {
+void OLED::wrapped_draw_string(int16_t y, const std::string& s, font_t font) {
     _oled->setFont(font);
     _oled->setTextAlignment(TEXT_ALIGN_LEFT);
 
@@ -1063,10 +1096,10 @@ void OLED::wrapped_draw_string(int16_t y, const String& s, font_t font) {
         }
     }
     if (swidth < _width) {
-        _oled->drawString(0, y, s);
+        _oled->drawString(0, y, s.c_str());
     } else {
-        _oled->drawString(0, y, s.substring(0, i));
-        _oled->drawString(0, y + font_height(font) - 1, s.substring(i, slen));
+        _oled->drawString(0, y, s.substr(0, i).c_str());
+        _oled->drawString(0, y + font_height(font) - 1, s.substr(i, slen).c_str());
     }
 }
 
