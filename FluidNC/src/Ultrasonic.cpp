@@ -189,6 +189,10 @@ bool Ultrasonic::within_pause_distance(void) {
     return (dist_cm <= _pause_distance_cm);
 }
 
+// Returns the configured pause time in milliseconds
+int32_t Ultrasonic::get_pause_time_ms(void) {
+    return _pause_time_ms;
+}
 
 // Configurable functions
 void Ultrasonic::validate() {}

@@ -63,8 +63,8 @@ class Ultrasonic : public Configuration::Configurable {
     Pin _trig_pin;
     Pin _echo_pin;
 
-    int _pause_time_ms = -1;        // Delay after pausing
-    int _pause_distance_cm = -1;    // Distance to trigger a pause
+    int32_t _pause_time_ms = -1;        // Delay after pausing
+    int32_t _pause_distance_cm = -1;    // Distance to trigger a pause
 
 public:
 	Ultrasonic();
@@ -73,6 +73,7 @@ public:
     void init();
     bool is_active();
     bool within_pause_distance();
+    int32_t get_pause_time_ms();
 
     // Configuration handlers.
     void validate() override;

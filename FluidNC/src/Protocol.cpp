@@ -199,6 +199,10 @@ void polling_loop(void* unused) {
         // Polling without an argument both checks for realtime characters and
         // returns a line-oriented command if one is ready.
         activeChannel = pollChannels(activeLine);
+
+        // Read encoder and ultrasonic sensor
+        protocol_read_encoder();
+        protocol_read_ultrasonic();
     }
 }
 
@@ -255,32 +259,6 @@ static void check_startup_state() {
             // All systems go!
             sys.state = State::Idle;
             settings_execute_startup();  // Execute startup script.
-        }
-    }
-}
-
-// Reads the encoder input and prints a report if available
-void protocol_read_encoder() {
-    
-    // Read and report the difference if encoder is active
-    if (config->_encoder->is_active()) {
-
-        int16_t enc_diff = config->_encoder->get_difference();
-        if (enc_diff != 0) {
-            log_info("Encoder difference -> " << enc_diff); // Used by display for updates
-        }
-    }
-}
-
-// Reads the ultrasonic sensor and TODO
-void protocol_read_ultrasonic() {
-
-    // Read and report the difference if encoder is active
-    if (config->_ultrasonic->is_active()) {
-
-        // Check if we're within the distance to pause
-        if (config->_ultrasonic->within_pause_distance()) {
-            log_info("PAUSE!");
         }
     }
 }
@@ -344,14 +322,6 @@ void protocol_main_loop() {
                 log_warn("Low memory: " << heapLowWater << " bytes");
             }
         }
-        // Read encoder
-        if (config->_encoder) {
-            protocol_read_encoder();
-        }
-        // Read the ultrasonic sensor
-        if (config->_ultrasonic) {
-            protocol_read_ultrasonic();
-        }   
     }
     return; /* Never reached */
 }
@@ -1172,6 +1142,99 @@ static void protocol_do_enter() {
             break;
 
         default: break;
+    }
+}
+
+// Reads the encoder input and prints a report if available
+void protocol_read_encoder() {
+
+    // Bail if encoder not configured
+    if (!config->_encoder) return;
+    
+    // Read and report the difference if encoder is active
+    if (config->_encoder->is_active()) {
+
+        int16_t enc_diff = config->_encoder->get_difference();
+        if (enc_diff != 0) {
+            log_info("Encoder difference -> " << enc_diff); // Used by display for updates
+        }
+    }
+}
+
+static int32_t pauseEndTime = 0;
+
+// Reads the ultrasonic sensor and TODO
+void protocol_read_ultrasonic() {
+
+    // Bail if ultrasonic sensor not configured
+    if (!config->_ultrasonic) return;
+
+    // Process states if sensor active
+    if (config->_ultrasonic->is_active()) {
+
+        switch (sys.state) {
+
+            // Ultrasonic sensor does nothing in these states
+            case State::ConfigAlarm:
+            case State::CheckMode:
+            case State::Jog:
+            case State::Homing:
+            case State::Sleep:
+            case State::SafetyDoor:
+            case State::Alarm:
+            case State::Idle:
+                break;
+
+            // Feedhold during a cycle if we're within the pause distance and start timer
+            case State::Cycle:
+
+                if (config->_ultrasonic->within_pause_distance()) {
+                    
+                    // Feedhold
+                    protocol_start_holding();
+
+                    // Schedule pause for specified time unless already scheduled
+                    if (pauseEndTime == 0) {
+                        pauseEndTime = usToEndTicks(1000 * 1000);
+                        // pauseEndTime 0 means that a resume is not scheduled. so if we happen to
+                        // land on 0 as an end time, just push it back by one microsecond to get off 0.
+                        if (pauseEndTime == 0) {
+                            pauseEndTime = 1;
+                        }
+                    }   
+
+                    log_info("PAUSE = " << pauseEndTime);
+
+                    sys.state = State::Hold;
+                }
+                break;
+
+            // Resume from feedhold after a pause
+            case State::Hold:
+
+                log_info("1! Pause End time = " << pauseEndTime);
+                log_info("Time = " << getCpuTicks() - pauseEndTime);
+
+                // Check to see if we should resume from feedhold
+                // If pauseEndTime is 0, no pause is pending.
+                if (pauseEndTime && (getCpuTicks() - pauseEndTime) > 0) {
+                    pauseEndTime = 0;
+
+                    log_info("2!");
+
+                    // Cycle start only when IDLE or when a hold is complete and ready to resume.
+                    if (sys.suspend.bit.holdComplete) {
+                        if (spindle_stop_ovr.value) {
+                            spindle_stop_ovr.bit.restoreCycle = true;  // Set to restore in suspend routine and cycle start after.
+                        } else {
+                            protocol_do_initiate_cycle();
+                        }
+                    }
+                }
+                break;
+
+            default: break;
+        }
     }
 }
 
