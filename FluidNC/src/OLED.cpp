@@ -464,7 +464,7 @@ void OLED::init() {
     delay_ms(1000);
 
     allChannels.registration(this);
-    setReportInterval(500);
+    setReportInterval(250);
 
     this->menu_init();
 }
