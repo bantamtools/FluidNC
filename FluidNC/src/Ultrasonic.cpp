@@ -48,11 +48,29 @@ Ultrasonic::Ultrasonic() {}
 // Ultrasonic destructor
 Ultrasonic::~Ultrasonic() {}
 
-/**
- * @brief Initializes the ultrasonic subsystem
- *
- * @return none
- */
+// Ultrasonic read task
+void Ultrasonic::read_task(void *pvParameters) {
+
+    uint32_t dist_cm;
+    esp_err_t ret;
+
+    // Connect pointer
+    Ultrasonic* instance = static_cast<Ultrasonic*>(pvParameters);
+
+    // Loop forever
+    while(1) {
+
+        // Read the ultrasonic sensor and save distance if valid
+        if ((ret = instance->measure_cm(ULT_MAX_DISTANCE, &dist_cm)) == ESP_OK) {
+            instance->_dist_cm = dist_cm;
+        }
+
+        // Check every 100ms
+        vTaskDelay(ULT_READ_PERIODIC_MS/portTICK_PERIOD_MS);
+    }
+}
+
+// Initializes the ultrasonic subsystem
 void Ultrasonic::init() {
 
     // Check if ultrasonic sensor configured
@@ -66,6 +84,9 @@ void Ultrasonic::init() {
     _echo_pin.setAttr(Pin::Attr::Input);
 
     _trig_pin.write(0);
+
+    // Start read task
+    xTaskCreate(read_task, "ultrasonic_read_task", ULT_READ_STACK_SIZE, this, ULT_READ_PRIORITY, NULL);
 
     // Set flag
     _is_active = true;
@@ -165,17 +186,10 @@ esp_err_t Ultrasonic::measure_cm(uint32_t max_distance, uint32_t *distance) {
 // Checks whether we are within the pause distance or not
 bool Ultrasonic::within_pause_distance(void) {
 
-    esp_err_t ret;
-
     // Return if no distance set
     if (_pause_distance_cm < 0) return false;
 
-    uint32_t dist_cm;
-    if ((ret = measure_cm(ULT_MAX_DISTANCE, &dist_cm)) != ESP_OK) {
-        return ret;
-    }
-
-    return (dist_cm <= _pause_distance_cm);
+    return (_dist_cm <= _pause_distance_cm);
 }
 
 // Returns the configured pause time in milliseconds

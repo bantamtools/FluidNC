@@ -1213,7 +1213,7 @@ void protocol_read_ultrasonic() {
             case State::Cycle:
 
                 if (config->_ultrasonic->within_pause_distance()) {
-                    
+                                       
                     // Feedhold
                     protocol_start_holding();
 

@@ -54,7 +54,36 @@ class Ultrasonic : public Configuration::Configurable {
     int32_t _pause_time_ms = -1;        // Delay after pausing
     int32_t _pause_distance_cm = -1;    // Distance to trigger a pause
 
+private:
+
+    static constexpr uint32_t       ULT_TRIGGER_LOW_DELAY   = 4;
+    static constexpr uint32_t       ULT_TRIGGER_HIGH_DELAY  = 10;
+    static constexpr int64_t        ULT_PING_TIMEOUT        = 6000;
+    static constexpr float          ULT_ROUNDTRIP_M         = 5800.0;
+    static constexpr uint32_t       ULT_ROUNDTRIP_CM        = 58;
+    static constexpr uint32_t       ULT_MAX_DISTANCE        = 1000;
+
+    static constexpr esp_err_t      ESP_ERR_ULTRASONIC_PING         = 0x200;
+    static constexpr esp_err_t      ESP_ERR_ULTRASONIC_PING_TIMEOUT = 0x201;
+    static constexpr esp_err_t      ESP_ERR_ULTRASONIC_ECHO_TIMEOUT = 0x202;
+
+    static constexpr UBaseType_t    ULT_READ_PRIORITY       = (configMAX_PRIORITIES - 3);
+    static constexpr uint32_t       ULT_READ_STACK_SIZE     = 4096;
+    static constexpr uint32_t       ULT_READ_PERIODIC_MS    = 100;
+
+    static void read_task(void *pvParameters);
+
+protected:
+
+    bool _is_active = false;
+    uint32_t _dist_cm = ULT_MAX_DISTANCE;
+
+    esp_err_t measure_raw(uint32_t max_time_us, uint32_t *time_us);
+    esp_err_t measure_m(float max_distance, float *distance);
+    esp_err_t measure_cm(uint32_t max_distance, uint32_t *distance);
+
 public:
+
 	Ultrasonic();
     ~Ultrasonic();
 
@@ -66,23 +95,4 @@ public:
     // Configuration handlers.
     void validate() override;
     void group(Configuration::HandlerBase& handler) override;
-    
-protected:
-
-    static constexpr uint32_t   ULT_TRIGGER_LOW_DELAY   = 4;
-    static constexpr uint32_t   ULT_TRIGGER_HIGH_DELAY  = 10;
-    static constexpr int64_t    ULT_PING_TIMEOUT        = 6000;
-    static constexpr float      ULT_ROUNDTRIP_M         = 5800.0;
-    static constexpr uint32_t   ULT_ROUNDTRIP_CM        = 58;
-    static constexpr uint32_t   ULT_MAX_DISTANCE        = 1000;
-
-    static constexpr esp_err_t  ESP_ERR_ULTRASONIC_PING         = 0x200;
-    static constexpr esp_err_t  ESP_ERR_ULTRASONIC_PING_TIMEOUT = 0x201;
-    static constexpr esp_err_t  ESP_ERR_ULTRASONIC_ECHO_TIMEOUT = 0x202;
-
-    bool _is_active = false;
-
-    esp_err_t measure_raw(uint32_t max_time_us, uint32_t *time_us);
-    esp_err_t measure_m(float max_distance, float *distance);
-    esp_err_t measure_cm(uint32_t max_distance, uint32_t *distance);
 };
