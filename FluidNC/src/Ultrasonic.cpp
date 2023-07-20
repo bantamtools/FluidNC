@@ -41,14 +41,6 @@
 #include "Ultrasonic.h"
 
 static portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED;
-#define PORT_ENTER_CRITICAL portENTER_CRITICAL(&mux)
-#define PORT_EXIT_CRITICAL portEXIT_CRITICAL(&mux)
-
-#define timeout_expired(start, len) ((esp_timer_get_time() - (start)) >= (len))
-
-#define CHECK_ARG(VAL) do { if (!(VAL)) return ESP_ERR_INVALID_ARG; } while (0)
-#define CHECK(x) do { esp_err_t __; if ((__ = x) != ESP_OK) return __; } while (0)
-#define RETURN_CRITICAL(RES) do { PORT_EXIT_CRITICAL; return RES; } while(0)
 
 // Ultraonic constructor
 Ultrasonic::Ultrasonic() {}
@@ -84,21 +76,14 @@ bool Ultrasonic::is_active() {
     return _is_active;
 }
 
-/**
- * @brief Measure time between ping and echo
- *
- * @param max_time_us Maximal time to wait for echo
- * @param[out] time_us Time, us
- * @return `ESP_OK` on success, otherwise:
- *         - ::ESP_ERR_ULTRASONIC_PING         - Invalid state (previous ping is not ended)
- *         - ::ESP_ERR_ULTRASONIC_PING_TIMEOUT - Device is not responding
- *         - ::ESP_ERR_ULTRASONIC_ECHO_TIMEOUT - Distance is too big or wave is scattered
- */
+// Measure time between ping and echo
 esp_err_t Ultrasonic::measure_raw(uint32_t max_time_us, uint32_t *time_us) {
 
-    CHECK_ARG(time_us);
+    if (!time_us) {
+        return ESP_ERR_INVALID_ARG;
+    }
 
-    PORT_ENTER_CRITICAL;
+    portENTER_CRITICAL(&mux);
 
     // Ping: Low for 2..4 us, then high 10 us
     _trig_pin.write(0);
@@ -108,15 +93,19 @@ esp_err_t Ultrasonic::measure_raw(uint32_t max_time_us, uint32_t *time_us) {
     _trig_pin.write(0);
 
     // Previous ping isn't ended
-    if (_echo_pin.read())
-        RETURN_CRITICAL(ESP_ERR_ULTRASONIC_PING);
+    if (_echo_pin.read()) {
+        portEXIT_CRITICAL(&mux);
+        return ESP_ERR_ULTRASONIC_PING;
+    }
 
     // Wait for echo
     int64_t start = esp_timer_get_time();
     while (!_echo_pin.read())
     {
-        if (timeout_expired(start, ULT_PING_TIMEOUT))
-            RETURN_CRITICAL(ESP_ERR_ULTRASONIC_PING_TIMEOUT);
+        if ((esp_timer_get_time() - start) >= ULT_PING_TIMEOUT) {
+            portEXIT_CRITICAL(&mux);
+            return ESP_ERR_ULTRASONIC_PING_TIMEOUT;
+        }
     }
 
     // got echo, measuring
@@ -125,53 +114,49 @@ esp_err_t Ultrasonic::measure_raw(uint32_t max_time_us, uint32_t *time_us) {
     while (_echo_pin.read())
     {
         time = esp_timer_get_time();
-        if (timeout_expired(echo_start, max_time_us))
-            RETURN_CRITICAL(ESP_ERR_ULTRASONIC_ECHO_TIMEOUT);
+        if ((esp_timer_get_time() - echo_start) >= max_time_us) {
+            portEXIT_CRITICAL(&mux);
+            return ESP_ERR_ULTRASONIC_ECHO_TIMEOUT;
+        }
     }
-    PORT_EXIT_CRITICAL;
+    portEXIT_CRITICAL(&mux);
 
     *time_us = time - echo_start;
 
     return ESP_OK;
 }
 
-/**
- * @brief Measure distance in meters
- *
- * @param max_distance Maximal distance to measure, meters
- * @param[out] distance Distance in meters
- * @return `ESP_OK` on success, otherwise:
- *         - ::ESP_ERR_ULTRASONIC_PING         - Invalid state (previous ping is not ended)
- *         - ::ESP_ERR_ULTRASONIC_PING_TIMEOUT - Device is not responding
- *         - ::ESP_ERR_ULTRASONIC_ECHO_TIMEOUT - Distance is too big or wave is scattered
- */
+// Measure distance in meters
 esp_err_t Ultrasonic::measure_m(float max_distance, float *distance) {
 
-    CHECK_ARG(distance);
+    esp_err_t ret;
+
+    if (!distance) {
+        return ESP_ERR_INVALID_ARG;
+    }
 
     uint32_t time_us;
-    CHECK(measure_raw(max_distance * ULT_ROUNDTRIP_M, &time_us));
+    if ((ret = measure_raw(max_distance * ULT_ROUNDTRIP_M, &time_us)) != ESP_OK) {
+        return ret;
+    }
     *distance = time_us / ULT_ROUNDTRIP_M;
 
     return ESP_OK;
 }
 
-/**
- * @brief Measure distance in centimeters
- *
- * @param max_distance Maximal distance to measure, centimeters
- * @param[out] distance Distance in centimeters
- * @return `ESP_OK` on success, otherwise:
- *         - ::ESP_ERR_ULTRASONIC_PING         - Invalid state (previous ping is not ended)
- *         - ::ESP_ERR_ULTRASONIC_PING_TIMEOUT - Device is not responding
- *         - ::ESP_ERR_ULTRASONIC_ECHO_TIMEOUT - Distance is too big or wave is scattered
- */
+// Measure distance in centimeters
 esp_err_t Ultrasonic::measure_cm(uint32_t max_distance, uint32_t *distance) {
 
-    CHECK_ARG(distance);
+    esp_err_t ret;
+
+    if (!distance) {
+        return ESP_ERR_INVALID_ARG;
+    }
 
     uint32_t time_us;
-    CHECK(measure_raw(max_distance * ULT_ROUNDTRIP_CM, &time_us));
+    if ((ret = measure_raw(max_distance * ULT_ROUNDTRIP_CM, &time_us)) != ESP_OK) {
+        return ret;
+    }
     *distance = time_us / ULT_ROUNDTRIP_CM;
 
     return ESP_OK;
@@ -180,11 +165,15 @@ esp_err_t Ultrasonic::measure_cm(uint32_t max_distance, uint32_t *distance) {
 // Checks whether we are within the pause distance or not
 bool Ultrasonic::within_pause_distance(void) {
 
+    esp_err_t ret;
+
     // Return if no distance set
     if (_pause_distance_cm < 0) return false;
 
     uint32_t dist_cm;
-    CHECK(measure_cm(ULT_MAX_DISTANCE, &dist_cm));
+    if ((ret = measure_cm(ULT_MAX_DISTANCE, &dist_cm)) != ESP_OK) {
+        return ret;
+    }
 
     return (dist_cm <= _pause_distance_cm);
 }

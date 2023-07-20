@@ -45,18 +45,6 @@
 #include <stdint.h>
 #include "Configuration/Configurable.h"
 
-// Definitions
-#define ULT_TRIGGER_LOW_DELAY           4
-#define ULT_TRIGGER_HIGH_DELAY          10
-#define ULT_PING_TIMEOUT                6000
-#define ULT_ROUNDTRIP_M                 5800.0f
-#define ULT_ROUNDTRIP_CM                58
-#define ULT_MAX_DISTANCE                1000
-
-#define ESP_ERR_ULTRASONIC_PING         0x200
-#define ESP_ERR_ULTRASONIC_PING_TIMEOUT 0x201
-#define ESP_ERR_ULTRASONIC_ECHO_TIMEOUT 0x202
-
 // Class
 class Ultrasonic : public Configuration::Configurable {
 
@@ -80,6 +68,18 @@ public:
     void group(Configuration::HandlerBase& handler) override;
     
 protected:
+
+    static constexpr uint32_t   ULT_TRIGGER_LOW_DELAY   = 4;
+    static constexpr uint32_t   ULT_TRIGGER_HIGH_DELAY  = 10;
+    static constexpr int64_t    ULT_PING_TIMEOUT        = 6000;
+    static constexpr float      ULT_ROUNDTRIP_M         = 5800.0;
+    static constexpr uint32_t   ULT_ROUNDTRIP_CM        = 58;
+    static constexpr uint32_t   ULT_MAX_DISTANCE        = 1000;
+
+    static constexpr esp_err_t  ESP_ERR_ULTRASONIC_PING         = 0x200;
+    static constexpr esp_err_t  ESP_ERR_ULTRASONIC_PING_TIMEOUT = 0x201;
+    static constexpr esp_err_t  ESP_ERR_ULTRASONIC_ECHO_TIMEOUT = 0x202;
+
     bool _is_active = false;
 
     esp_err_t measure_raw(uint32_t max_time_us, uint32_t *time_us);
