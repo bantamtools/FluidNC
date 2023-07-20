@@ -34,6 +34,8 @@ private:
 public:
     static std::string _progress;
 
+    static const uint32_t CYCLE_REPORT_INTERVAL = 500; // Reporting interval (in ms) during a cycle
+
     // fsname is the default file system on which the file is located, in case the path does not specify
     // path is the full path to the file
     // channel is the I/O channel on which status about the use of this file will be reported

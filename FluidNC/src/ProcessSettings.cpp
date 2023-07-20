@@ -23,6 +23,7 @@
 #include "xmodem.h"               // xmodemReceive(), xmodemTransmit()
 #include "StartupLog.h"           // startupLog
 #include "Driver/fluidnc_gpio.h"  // gpio_dump()
+#include "InputFile.h"            // InputFile::CYCLE_REPORT_INTERVAL
 
 #include "FluidPath.h"
 #include "HashFS.h"
@@ -737,9 +738,9 @@ static Error setReportInterval(const char* value, WebUI::AuthenticationLevel aut
         return Error::BadNumberFormat;
     }
 
-    // Force interval of 500ms during a run
-    if (sys.state == State::Cycle) {
-        actual = out.setReportInterval(500);
+    // Force interval of 500ms during a run if it gets changed
+    if (sys.state == State::Cycle && out.getReportInterval() != InputFile::CYCLE_REPORT_INTERVAL) {
+        actual = out.setReportInterval(InputFile::CYCLE_REPORT_INTERVAL);
     } else {
         actual = out.setReportInterval(intValue);
     }

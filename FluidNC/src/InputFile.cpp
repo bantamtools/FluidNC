@@ -8,9 +8,9 @@
 InputFile::InputFile(const char* defaultFs, const char* path, WebUI::AuthenticationLevel auth_level, Channel& out) :
     FileStream(path, "r", defaultFs), _auth_level(auth_level), _out(out), _line_num(0)  {
 
-        // Save off the auto-reporting interval then shut it off
+        // Save off the auto-reporting interval then set to 500ms
         _prev_report_interval = _out.getReportInterval();
-        _out.setReportInterval(500);
+        _out.setReportInterval(CYCLE_REPORT_INTERVAL);
     }
 /*
   Read a line from the file
