@@ -1066,8 +1066,7 @@ static void protocol_do_enter() {
 
             // Click / short press, feedhold job
             } else {
-                protocol_start_holding();
-                sys.state = State::Hold;
+                protocol_do_feedhold();
             }
             break;
 
@@ -1080,10 +1079,8 @@ static void protocol_do_enter() {
                  // Long press, cancel job
                 if (long_press) {
                     protocol_send_event(&resetEvent);
-                } else if (spindle_stop_ovr.value) {
-                    spindle_stop_ovr.bit.restoreCycle = true;  // Set to restore in suspend routine and cycle start after.
                 } else {
-                    protocol_do_initiate_cycle();
+                    protocol_do_cycle_start();
                 }
             }
             break;
@@ -1213,9 +1210,9 @@ void protocol_read_ultrasonic() {
             case State::Cycle:
 
                 if (config->_ultrasonic->within_pause_distance()) {
-                                       
+
                     // Feedhold
-                    protocol_start_holding();
+                    protocol_do_feedhold();
 
                     // Schedule pause for specified time unless already scheduled
                     if (pauseEndTime == 0) {
@@ -1237,15 +1234,7 @@ void protocol_read_ultrasonic() {
                 // If pauseEndTime is 0, no pause is pending.
                 if (pauseEndTime && (getCpuTicks() - pauseEndTime) > 0) {
                     pauseEndTime = 0;
-
-                    // Cycle start only when IDLE or when a hold is complete and ready to resume.
-                    if (sys.suspend.bit.holdComplete) {
-                        if (spindle_stop_ovr.value) {
-                            spindle_stop_ovr.bit.restoreCycle = true;  // Set to restore in suspend routine and cycle start after.
-                        } else {
-                            protocol_do_initiate_cycle();
-                        }
-                    }
+                    protocol_do_cycle_start();
                 }
                 break;
 
