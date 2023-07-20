@@ -156,13 +156,15 @@ void output_loop(void* unused) {
     while (true) {
         LogMessage message;
         if (xQueueReceive(message_queue, &message, 0)) {
-            if (message.isString) {
-                std::string* s = static_cast<std::string*>(message.line);
-                message.channel->println(s->c_str());
-                delete s;
-            } else {
-                const char* cp = static_cast<const char*>(message.line);
-                message.channel->println(cp);
+            if (message.channel) {
+                if (message.isString) {
+                    std::string* s = static_cast<std::string*>(message.line);
+                    if (s) message.channel->println(s->c_str());
+                    delete s;
+                } else {
+                    const char* cp = static_cast<const char*>(message.line);
+                    if (cp) message.channel->println(cp);
+                }
             }
         }
         vTaskDelay(0);
