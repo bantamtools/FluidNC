@@ -50,8 +50,8 @@ void InputFile::ack(Error status) {
             // Do not stop on unsupported commands because most senders do not
             // Stop the file job on other errors
             _notifyf("File job error", "Error:%d in %s at line: %d", status, path(), getLineNumber());
-            allChannels.kill(this);
             _out.setReportInterval(_prev_report_interval);  // restore auto-reporting interval
+            allChannels.kill(this);
             return;
         }
     }
@@ -80,14 +80,14 @@ Channel* InputFile::pollLine(char* line) {
             _progress = "";
             _notifyf("File job done", "%s file job succeeded", path());
             log_msg(path() << " file job succeeded");
-            allChannels.kill(this);
             _out.setReportInterval(_prev_report_interval);  // restore auto-reporting interval
+            allChannels.kill(this);
             return nullptr;
         default:
             _progress = "";
             log_error(static_cast<int>(err) << " (" << errorString(err) << ") in " << path() << " at line " << getLineNumber());
-            allChannels.kill(this);
             _out.setReportInterval(_prev_report_interval);  // restore auto-reporting interval
+            allChannels.kill(this);
             return nullptr;
     }
 }
@@ -96,8 +96,8 @@ void InputFile::stopJob() {
     //Report print stopped
     _notifyf("File print canceled", "Reset during file job at line: %d", getLineNumber());
     log_info("Reset during file job at line: " << getLineNumber());
-    allChannels.kill(this);
     _out.setReportInterval(_prev_report_interval);  // restore auto-reporting interval
+    allChannels.kill(this);
 }
 
 InputFile::~InputFile() {
