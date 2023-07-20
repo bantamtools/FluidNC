@@ -51,7 +51,7 @@
 #define ULT_PING_TIMEOUT                6000
 #define ULT_ROUNDTRIP_M                 5800.0f
 #define ULT_ROUNDTRIP_CM                58
-#define ULT_MAX_DISTANCE                100
+#define ULT_MAX_DISTANCE                1000
 
 #define ESP_ERR_ULTRASONIC_PING         0x200
 #define ESP_ERR_ULTRASONIC_PING_TIMEOUT 0x201
