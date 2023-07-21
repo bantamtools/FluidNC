@@ -16,9 +16,11 @@ namespace Kinematics {
 
     void DifferentialDrive::init() {
         log_info("Kinematic system: " << name());
-        m_heading = 0.0; // define current heading as zero angle
+        m_heading = 0.0; // define current heading as zero angle (note this faces down positive X)
         m_motor_left = 0.0;
         m_motor_right = 0.0;
+        m_cartesian_x = 0.0;
+        m_cartesian_y = 0.0;
         init_position();
     }
 
@@ -48,17 +50,14 @@ namespace Kinematics {
         // then move the necessary distance straight forward (+ both motors equally) to the target.
         // Make sure Z and any other axes are passed through unchanged during the final move.
 
-        // TODO .... but I think all of the below is actually going to be wrong because I'm generating relative
-        //  moves and mc_move_motors is expecting absolute moves. So hmm. Have to store our last motor positions I guess?
-
         auto n_axis = config->_axes->_numberAxis;
         float motors[n_axis];
 
         // First check whether we are moving in X/Y at all, if not the equations below won't make sense
         float XY_cartesian_distance = vector_distance(position, target, 2);
         if (XY_cartesian_distance == 0) {
-            motors[0] = m_motor_left; // don't move from current position
-            motors[1] = m_motor_right;
+            motors[X_AXIS] = m_motor_left; // don't move from current position
+            motors[Y_AXIS] = m_motor_right;
             for (size_t axis = Z_AXIS; axis < n_axis; axis++) { // pass through any other axis moves (like Z for pen)
                 motors[axis] = target[axis];
             }
@@ -67,7 +66,7 @@ namespace Kinematics {
 
         // calc new heading
         //   angle between 2D points = atan2(y2 - y1, x2 - x1)
-        float new_heading = atan2f((target[1]-position[1]),(target[0]-position[0])); // (radians)
+        float new_heading = atan2f((target[Y_AXIS]-position[Y_AXIS]),(target[X_AXIS]-position[X_AXIS])); // (radians)
         // angle diff
         float turn_angle = new_heading - m_heading;
         // Note this would turn in an arbitrary direction based on what atan gave us; may turn 270 when it could turn 90.
@@ -85,8 +84,8 @@ namespace Kinematics {
         // Meanwhile, we need to convert these relative distance movements to absolute targets
         float left_target = m_motor_left + wheel_turn_dist;
         float right_target = m_motor_right - wheel_turn_dist;
-        motors[0] = left_target;
-        motors[1] = right_target;
+        motors[X_AXIS] = left_target;
+        motors[Y_AXIS] = right_target;
         for (size_t axis = Z_AXIS; axis < n_axis; axis++) {
             motors[axis] = 0.0; // dont move other axes during turn
         }
@@ -102,8 +101,8 @@ namespace Kinematics {
         // Now just move forward the required distance to the target
         left_target = m_motor_left + XY_cartesian_distance;
         right_target = m_motor_right + XY_cartesian_distance;
-        motors[0] = left_target;
-        motors[1] = right_target;
+        motors[X_AXIS] = left_target;
+        motors[Y_AXIS] = right_target;
         for (size_t axis = Z_AXIS; axis < n_axis; axis++) { // pass through any other axis moves (like Z for pen)
             motors[axis] = target[axis];
         }
@@ -112,6 +111,9 @@ namespace Kinematics {
         }
         m_motor_left = left_target;
         m_motor_right = right_target;
+        // update cartesian position to target we've arrived at
+        m_cartesian_x = target[X_AXIS];
+        m_cartesian_y = target[Y_AXIS];
         return true;
     }
 
@@ -122,6 +124,13 @@ namespace Kinematics {
         // However, we want this so the WebUI shows position. Solution will have to be to keep up a running
         //  cartesian XY position state. During linear moves, we'll have to store the starting motor pos and interpolate
         //  to the current motor pos based on the start and end points. Gonna need lots of state.
+
+        // First pass for testing, we're just going to report the position after the last finished move
+        cartesian[X_AXIS] = m_cartesian_x;
+        cartesian[Y_AXIS] = m_cartesian_y;
+        for (size_t axis = Z_AXIS; axis < n_axis; axis++) { // pass through any other axes
+            cartesian[axis] = motors[axis];
+        }
     }
 
     void DifferentialDrive::transform_cartesian_to_motors(float* cartesian, float* motors) {

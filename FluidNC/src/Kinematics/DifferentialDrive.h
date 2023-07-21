@@ -39,6 +39,9 @@ namespace Kinematics {
         float m_motor_left; // current left (x?) motor position, in mm of motion
         float m_motor_right; // current right (y?) motor position
         // TODO: also track cartesian position so we can report it back to FluidNC
+        float m_cartesian_x;
+        float m_cartesian_y;
+        // we'll also need some motor position state to track cartesian pos during moves...
 
         // Parameters
         int _left_motor_axis    = 0;
