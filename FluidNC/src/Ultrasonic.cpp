@@ -88,6 +88,11 @@ void Ultrasonic::init() {
     // Start read task
     xTaskCreate(read_task, "ultrasonic_read_task", ULT_READ_STACK_SIZE, this, ULT_READ_PRIORITY, NULL);
 
+    // Print configuration info message
+    log_info("Ultrasonic:" << " TRIG:" << _trig_pin.name() << " ECHO:" << _echo_pin.name() << 
+        " pause_time:" << _pause_time_ms << "ms" <<
+        " pause_distance:" << _pause_distance_cm << "cm");
+
     // Set flag
     _is_active = true;
 }
