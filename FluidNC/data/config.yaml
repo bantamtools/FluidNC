@@ -145,3 +145,11 @@ user_outputs:
   digital2_pin: gpio.44
   digital3_pin: gpio.42
   digital4_pin: gpio.6
+
+# Accelerometer
+accelerometer:
+  scl_pin: gpio.43
+  sda_pin: gpio.44
+  i2c_addr: 0x53
+  int1_pin: gpio.42
+  int2_pin: gpio.6
