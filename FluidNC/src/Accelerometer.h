@@ -3,7 +3,6 @@
 #pragma once
 
 #include <stdint.h>
-//#include "Config.h"
 #include "Configuration/Configurable.h"
 #include "Channel.h"
 
@@ -13,12 +12,13 @@
 // Class
 class Accelerometer : public Channel, public Configuration::Configurable {
 
-    Pin _scl_pin;
-    Pin _sda_pin;
-    uint32_t _i2c_addr = 0x0;
+    uint8_t _i2c_address = 0x53;
+    uint8_t _i2c_num = 1;
 
     Pin _int1_pin;  
     Pin _int2_pin;
+
+    bool _error = false;
 
 public:
     Accelerometer() : Channel("accelerometer") {}
@@ -48,7 +48,7 @@ public:
 
     // Configuration handlers
     void validate() override;
-    void afterParse() override {}  // TODO
+    void afterParse() override;
     void group(Configuration::HandlerBase& handler) override;
     
 protected:

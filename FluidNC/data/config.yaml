@@ -143,9 +143,13 @@ user_outputs:
   digital0_pin: gpio.5
 
 # Accelerometer
+i2c1:
+  sda_pin: gpio.43
+  scl_pin: gpio.44
+  frequency: 400000
+
 accelerometer:
-  scl_pin: gpio.43
-  sda_pin: gpio.44
-  i2c_addr: 0x53
+  i2c_num: 1
+  i2c_address: 0x53
   int1_pin: gpio.42
   int2_pin: gpio.6
