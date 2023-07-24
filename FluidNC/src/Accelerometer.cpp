@@ -18,8 +18,11 @@ void Accelerometer::init() {
     allChannels.registration(this);
     setReportInterval(250);
 
-    // Print init message
-    //log_info("Accelerometer configured, ..." I2C address:" << to_hex(_address) << " width: " << _width << " height: " << _height);
+    // Print configuration info message
+    log_info(name() << "I2C Address: " << to_hex(_i2c_addr) << 
+        " SCL:" << _scl_pin.name() << " SDA:" << _sda_pin.name() << 
+        " INT1:" << (_int1_pin.defined() ? _int1_pin.name() : "None") << 
+        " INT2:" << (_int2_pin.defined() ? _int2_pin.name() : "None"));
 
     // Set flag
     _is_active = true;
