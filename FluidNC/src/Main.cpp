@@ -27,6 +27,7 @@
 #    include "Driver/localfs.h"
 
 #    include "Encoder.h"
+#    include "Accelerometer.h"
 
 extern void make_user_commands();
 
@@ -108,6 +109,10 @@ void setup() {
 
             if (config->_encoder) {
                 config->_encoder->init();
+            }
+
+            if (config->_accelerometer) {
+                config->_accelerometer->init();
             }
 
             config->_stepping->init();  // Configure stepper interrupt timers
