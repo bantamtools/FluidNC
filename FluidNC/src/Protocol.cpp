@@ -1233,8 +1233,21 @@ void protocol_read_ultrasonic() {
                 // If pauseEndTime is 0, no pause is pending.
                 } else if (pauseActive && pauseEndTime && (getCpuTicks() - pauseEndTime) > 0) {
                     pauseEndTime = 0;
-                    pauseActive = false;
-                    protocol_send_event(&cycleStartEvent);
+
+                    // Still have an object in the way, restart the timer
+                    if (config->_ultrasonic->within_pause_distance()) {
+                        pauseEndTime = usToEndTicks(config->_ultrasonic->get_pause_time_ms() * 1000);
+                        // pauseEndTime 0 means that a resume is not scheduled. so if we happen to
+                        // land on 0 as an end time, just push it back by one microsecond to get off 0.
+                        if (pauseEndTime == 0) {
+                            pauseEndTime = 1;
+                        }
+                        
+                    // Otherwise, resume motion
+                    } else {
+                        pauseActive = false;
+                        protocol_send_event(&cycleStartEvent);
+                    }
                 }
                 break;
 
