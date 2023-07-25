@@ -185,15 +185,16 @@ void polling_loop(void* unused) {
     // Poll the input sources waiting for a complete line to arrive
     for (; true; /*feedLoopWDT(), */ vTaskDelay(0)) {
 
-        // Read encoder and ultrasonic sensor
-        protocol_read_encoder();
-        protocol_read_ultrasonic();
-
         // Polling is paused when xmodem is using a channel for binary upload
         if (pollingPaused) {
             vTaskDelay(100);
             continue;
         }
+
+        // Read encoder and ultrasonic sensor
+        protocol_read_encoder();
+        protocol_read_ultrasonic();
+
         if (activeChannel) {
             // Poll for realtime characters when waiting for the primary loop
             // (in another thread) to pick up the line.
