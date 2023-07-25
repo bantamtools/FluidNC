@@ -1067,7 +1067,7 @@ static void protocol_do_enter() {
 
             // Click / short press, feedhold job
             } else {
-                protocol_do_feedhold();
+                protocol_send_event(&feedHoldEvent);
             }
             break;
 
@@ -1081,7 +1081,7 @@ static void protocol_do_enter() {
                 if (long_press) {
                     protocol_send_event(&resetEvent);
                 } else {
-                    protocol_do_cycle_start();
+                    protocol_send_event(&cycleStartEvent);
                 }
             }
             break;
@@ -1184,6 +1184,7 @@ void protocol_read_encoder() {
 }
 
 static int32_t pauseEndTime = 0;
+static bool pauseActive = false;
 
 // Reads the ultrasonic sensor and TODO
 void protocol_read_ultrasonic() {
@@ -1211,30 +1212,29 @@ void protocol_read_ultrasonic() {
             case State::Cycle:
 
                 if (config->_ultrasonic->within_pause_distance()) {
-
-                    // Feedhold
-                    protocol_do_feedhold();
-
-                    // Once in HOLD, schedule pause for specified time unless already scheduled
-                    if ((sys.state == State::Hold) && (pauseEndTime == 0)) {
-                        pauseEndTime = usToEndTicks(config->_ultrasonic->get_pause_time_ms() * 1000);
-                        // pauseEndTime 0 means that a resume is not scheduled. so if we happen to
-                        // land on 0 as an end time, just push it back by one microsecond to get off 0.
-                        if (pauseEndTime == 0) {
-                            pauseEndTime = 1;
-                        }
-                    }
+                    protocol_send_event(&feedHoldEvent);
+                    pauseActive = true;
                 }
                 break;
 
             // Resume from feedhold after a pause
             case State::Hold:
 
+                // Once in HOLD, schedule pause for specified time unless already scheduled
+                if (pauseActive && pauseEndTime == 0) {
+                    pauseEndTime = usToEndTicks(config->_ultrasonic->get_pause_time_ms() * 1000);
+                    // pauseEndTime 0 means that a resume is not scheduled. so if we happen to
+                    // land on 0 as an end time, just push it back by one microsecond to get off 0.
+                    if (pauseEndTime == 0) {
+                        pauseEndTime = 1;
+                    }
+
                 // Check to see if we should resume from feedhold
                 // If pauseEndTime is 0, no pause is pending.
-                if (pauseEndTime && (getCpuTicks() - pauseEndTime) > 0) {
+                } else if (pauseActive && pauseEndTime && (getCpuTicks() - pauseEndTime) > 0) {
                     pauseEndTime = 0;
-                    protocol_do_cycle_start();
+                    pauseActive = false;
+                    protocol_send_event(&cycleStartEvent);
                 }
                 break;
 
