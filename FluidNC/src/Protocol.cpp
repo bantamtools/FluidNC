@@ -1215,8 +1215,8 @@ void protocol_read_ultrasonic() {
                     // Feedhold
                     protocol_do_feedhold();
 
-                    // Schedule pause for specified time unless already scheduled
-                    if (pauseEndTime == 0) {
+                    // Once in HOLD, schedule pause for specified time unless already scheduled
+                    if ((sys.state == State::Hold) && (pauseEndTime == 0)) {
                         pauseEndTime = usToEndTicks(config->_ultrasonic->get_pause_time_ms() * 1000);
                         // pauseEndTime 0 means that a resume is not scheduled. so if we happen to
                         // land on 0 as an end time, just push it back by one microsecond to get off 0.
@@ -1224,7 +1224,6 @@ void protocol_read_ultrasonic() {
                             pauseEndTime = 1;
                         }
                     }
-                    sys.state = State::Hold;
                 }
                 break;
 
