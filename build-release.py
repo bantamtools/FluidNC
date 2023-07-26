@@ -302,7 +302,7 @@ for platform in ['win64', 'posix']:
                 name = 'index.html.gz'
                 zipObj.write(os.path.join('FluidNC', 'data', name), os.path.join(zipDirName, envName, name))
             if envName == 'wifi_s3':
-                print("writting wifi_s3", os.path.join(pioPath, envName, name), os.path.join(zipDirName, envName, name))
+                print("zipDirName=", zipFileName)
                 name = 'littlefs.bin'
                 zipObj.write(os.path.join(pioPath, envName, name), os.path.join(zipDirName, envName, name))
                 name = 'index.html.gz'
@@ -311,22 +311,26 @@ for platform in ['win64', 'posix']:
             objPath = os.path.join(pioPath, envName)
             for obj in ['firmware.bin','partitions.bin']:
                 zipObj.write(os.path.join(objPath, obj), os.path.join(zipDirName, envName, obj))
-
+                print("zipped",'firmware.bin','partitions.bin')
             # E.g. posix/install-wifi.sh -> install-wifi.sh
             copyToZip(zipObj, platform, 'install-' + envName + scriptExtension[platform], zipDirName)
+            print("zipped", zipObj, platform, 'install-' + envName + scriptExtension[platform], zipDirName)
 
         for script in ['install-fs', 'fluidterm', 'checksecurity', 'erase', 'tools']:
             # E.g. posix/fluidterm.sh -> fluidterm.sh
             copyToZip(zipObj, platform, script + scriptExtension[platform], zipDirName)
+            print("copytozip", zipObj, platform, script + scriptExtension[platform], zipDirName)
 
         # Put the fluidterm code in the archive
         for obj in ['fluidterm.py', 'README-FluidTerm.md']:
             fn = os.path.join('fluidterm', obj)
             zipObj.write(fn, os.path.join(zipDirName, os.path.join('common', obj)))
+            print(fn, os.path.join(zipDirName, os.path.join('common', obj)))
 
         if platform == 'win64':
             obj = 'fluidterm' + exeExtension[platform]
             zipObj.write(os.path.join('fluidterm', obj), os.path.join(zipDirName, platform, obj))
+            print(os.path.join('fluidterm', obj), os.path.join(zipDirName, platform, obj))
 
         EsptoolVersion = 'v3.1'
 
