@@ -225,7 +225,7 @@ def makeManifest():
     addInstallable(filesystem_update, False, ["esp32-wifi-4m-filesystem"])
 
     addVariant("wifi_s3", "Supports WiFi and WebUI on the esp32_s3", "Installation type")
-    addInstallable(fresh_install, True, ["esp32-4m-partitions", "esp32-bootloader", "esp32-bootapp", "esp32-wifi-firmware", "esp32-wifi-4m-filesystem"])
+    addInstallable(fresh_install, True, ["esp32-4m_s3-partitions", "esp32-bootloader", "esp32-bootapp", "esp32-wifi-firmware", "esp32-wifi-4m-filesystem"])
     addInstallable(firmware_update, False, ["esp32-wifi-firmware"])
     addInstallable(filesystem_update, False, ["esp32-wifi-4m-filesystem"])
 
