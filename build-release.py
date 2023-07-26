@@ -168,8 +168,8 @@ for mcu in ['esp32']:
 
             addImage(mcu + '-' + envName + '-' + flashsize + '-filesystem', '0x3d0000', 'littlefs.bin', buildDir, mcu + '/' + envName + '/' + flashsize)
             addImage(mcu + '-' + flashsize + '_s3-partitions', '0x8000', 'partitions.bin', buildDir, mcu + '/' + flashsize)
-            addImage(mcu + '-bootloader', '0x1000', 'bootloader.bin', buildDir, mcu)
-            addImage(mcu + '-bootapp', '0xe000', 'boot_app0.bin', buildDir, mcu)
+            addImage(mcu + '_s3-bootloader', '0x1000', 'bootloader.bin', buildDir, mcu)
+            addImage(mcu + '_s3-bootapp', '0xe000', 'boot_app0.bin', buildDir, mcu)
 
 def addSection(node, name, description, choice):
     section = {
@@ -225,9 +225,9 @@ def makeManifest():
     addInstallable(filesystem_update, False, ["esp32-wifi-4m-filesystem"])
 
     addVariant("wifi_s3", "Supports WiFi and WebUI on the esp32_s3", "Installation type")
-    addInstallable(fresh_install, True, ["esp32-4m_s3-partitions", "esp32-bootloader", "esp32-bootapp", "esp32-wifi-firmware", "esp32-wifi-4m-filesystem"])
-    addInstallable(firmware_update, False, ["esp32-wifi-firmware"])
-    addInstallable(filesystem_update, False, ["esp32-wifi-4m-filesystem"])
+    addInstallable(fresh_install, True, ["esp32-4m_s3-partitions", "esp32_s3-bootloader", "esp32_s3-bootapp", "esp32-wifi_s3-firmware", "esp32-wifi_s3-4m-filesystem"])
+    addInstallable(firmware_update, False, ["esp32-wifi_s3-firmware"])
+    addInstallable(filesystem_update, False, ["esp32-wifi_s3-4m-filesystem"])
 
     addVariant("bt", "Supports Bluetooth serial", "Installation type")
     addInstallable(fresh_install, True, ["esp32-4m-partitions", "esp32-bootloader", "esp32-bootapp", "esp32-bt-firmware"])
