@@ -133,7 +133,7 @@ flashsize = "4m"
 
 mcu = "esp32"
 for mcu in ['esp32']:
-    for envName in ['wifi','bt', 'noradio']:
+    for envName in ['wifi','bt', 'noradio', 'wifi_s3']:
         if buildEnv(envName, verbose=verbose) != 0:
             sys.exit(1)
         buildDir = os.path.join('.pio', 'build', envName)
@@ -143,6 +143,21 @@ for mcu in ['esp32']:
 
         if envName == 'wifi':
             if buildFs('wifi', verbose=verbose) != 0:
+                sys.exit(1)
+
+            # bootapp is a data partition that the bootloader and OTA use to determine which
+            # image to run.  Its initial value is in a file "boot_app0.bin" in the platformio
+            # framework package.  We copy it to the build directory so addImage can find it
+            bootappsrc = os.path.join(os.path.expanduser('~'),'.platformio','packages','framework-arduinoespressif32','tools','partitions', 'boot_app0.bin')
+            shutil.copy(bootappsrc, buildDir)
+
+            addImage(mcu + '-' + envName + '-' + flashsize + '-filesystem', '0x3d0000', 'littlefs.bin', buildDir, mcu + '/' + envName + '/' + flashsize)
+            addImage(mcu + '-' + flashsize + '-partitions', '0x8000', 'partitions.bin', buildDir, mcu + '/' + flashsize)
+            addImage(mcu + '-bootloader', '0x1000', 'bootloader.bin', buildDir, mcu)
+            addImage(mcu + '-bootapp', '0xe000', 'boot_app0.bin', buildDir, mcu)
+
+        if envName == 'wifi_s3':
+            if buildFs('wifi_s3', verbose=verbose) != 0:
                 sys.exit(1)
 
             # bootapp is a data partition that the bootloader and OTA use to determine which
@@ -209,6 +224,11 @@ def makeManifest():
     addInstallable(firmware_update, False, ["esp32-wifi-firmware"])
     addInstallable(filesystem_update, False, ["esp32-wifi-4m-filesystem"])
 
+    addVariant("wifi_s3", "Supports WiFi and WebUI on the esp32_s3", "Installation type")
+    addInstallable(fresh_install, True, ["esp32-4m-partitions", "esp32-bootloader", "esp32-bootapp", "esp32-wifi-firmware", "esp32-wifi-4m-filesystem"])
+    addInstallable(firmware_update, False, ["esp32-wifi-firmware"])
+    addInstallable(filesystem_update, False, ["esp32-wifi-4m-filesystem"])
+
     addVariant("bt", "Supports Bluetooth serial", "Installation type")
     addInstallable(fresh_install, True, ["esp32-4m-partitions", "esp32-bootloader", "esp32-bootapp", "esp32-bt-firmware"])
     addInstallable(firmware_update, False, ["esp32-bt-firmware"])
@@ -263,7 +283,7 @@ for platform in ['win64', 'posix']:
             zipObj.write(os.path.join(sharedPath, 'common', secFuses), os.path.join(zipDirName, 'common', secFuses))
 
         # Put FluidNC binaries, partition maps, and installers in the archive
-        for envName in ['wifi','bt']:
+        for envName in ['wifi','bt', "wifi_s3"]:
 
             # Put bootloader binaries in the archive
             bootloader = 'bootloader.bin'
@@ -272,6 +292,11 @@ for platform in ['win64', 'posix']:
             # Put littlefs.bin and index.html.gz in the archive
             # bt does not need a littlefs.bin because there is no use for index.html.gz
             if envName == 'wifi':
+                name = 'littlefs.bin'
+                zipObj.write(os.path.join(pioPath, envName, name), os.path.join(zipDirName, envName, name))
+                name = 'index.html.gz'
+                zipObj.write(os.path.join('FluidNC', 'data', name), os.path.join(zipDirName, envName, name))
+            if envName == 'wifi_s3':
                 name = 'littlefs.bin'
                 zipObj.write(os.path.join(pioPath, envName, name), os.path.join(zipDirName, envName, name))
                 name = 'index.html.gz'
