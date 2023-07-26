@@ -269,6 +269,9 @@ for platform in ['win64', 'posix']:
     zipDirName = os.path.join('fluidnc-' + tag + '-' + platform)
     zipFileName = os.path.join(relPath, zipDirName + '.zip')
 
+    print("zipDirName=", zipDirName)
+    print("zipDirName=", zipFileName)
+
     with ZipFile(zipFileName, 'w') as zipObj:
         name = 'HOWTO-INSTALL.txt'
         zipObj.write(os.path.join(sharedPath, platform, name), os.path.join(zipDirName, name))
@@ -283,11 +286,13 @@ for platform in ['win64', 'posix']:
             zipObj.write(os.path.join(sharedPath, 'common', secFuses), os.path.join(zipDirName, 'common', secFuses))
 
         # Put FluidNC binaries, partition maps, and installers in the archive
-        for envName in ['wifi','bt', "wifi_s3"]:
+        for envName in ['wifi','bt',"wifi_s3"]:
 
             # Put bootloader binaries in the archive
             bootloader = 'bootloader.bin'
             zipObj.write(os.path.join(pioPath, envName, bootloader), os.path.join(zipDirName, envName, bootloader))
+
+            print("zipObj.write=", os.path.join(pioPath, envName, bootloader), os.path.join(zipDirName, envName, bootloader))
 
             # Put littlefs.bin and index.html.gz in the archive
             # bt does not need a littlefs.bin because there is no use for index.html.gz
@@ -297,6 +302,7 @@ for platform in ['win64', 'posix']:
                 name = 'index.html.gz'
                 zipObj.write(os.path.join('FluidNC', 'data', name), os.path.join(zipDirName, envName, name))
             if envName == 'wifi_s3':
+                print("writting wifi_s3", os.path.join(pioPath, envName, name), os.path.join(zipDirName, envName, name))
                 name = 'littlefs.bin'
                 zipObj.write(os.path.join(pioPath, envName, name), os.path.join(zipDirName, envName, name))
                 name = 'index.html.gz'
