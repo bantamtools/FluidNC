@@ -133,7 +133,7 @@ flashsize = "4m"
 
 mcu = "esp32"
 for mcu in ['esp32']:
-    for envName in ['wifi','bt', 'noradio']:
+    for envName in ['wifi','bt', 'noradio', 'wifi_s3']:
         if buildEnv(envName, verbose=verbose) != 0:
             sys.exit(1)
         buildDir = os.path.join('.pio', 'build', envName)
@@ -155,6 +155,21 @@ for mcu in ['esp32']:
             addImage(mcu + '-' + flashsize + '-partitions', '0x8000', 'partitions.bin', buildDir, mcu + '/' + flashsize)
             addImage(mcu + '-bootloader', '0x1000', 'bootloader.bin', buildDir, mcu)
             addImage(mcu + '-bootapp', '0xe000', 'boot_app0.bin', buildDir, mcu)
+
+        if envName == 'wifi_s3':
+            if buildFs('wifi_s3', verbose=verbose) != 0:
+                sys.exit(1)
+
+            # bootapp is a data partition that the bootloader and OTA use to determine which
+            # image to run.  Its initial value is in a file "boot_app0.bin" in the platformio
+            # framework package.  We copy it to the build directory so addImage can find it
+            bootappsrc = os.path.join(os.path.expanduser('~'),'.platformio','packages','framework-arduinoespressif32','tools','partitions', 'boot_app0.bin')
+            shutil.copy(bootappsrc, buildDir)
+
+            addImage(mcu + '-' + envName + '-' + flashsize + '-filesystem', '0x3d0000', 'littlefs.bin', buildDir, mcu + '/' + envName + '/' + flashsize)
+            addImage(mcu + '-' + flashsize + '_s3-partitions', '0x8000', 'partitions.bin', buildDir, mcu + '/' + flashsize)
+            addImage(mcu + '_s3-bootloader', '0x1000', 'bootloader.bin', buildDir, mcu)
+            addImage(mcu + '_s3-bootapp', '0xe000', 'boot_app0.bin', buildDir, mcu)
 
 def addSection(node, name, description, choice):
     section = {
@@ -209,6 +224,11 @@ def makeManifest():
     addInstallable(firmware_update, False, ["esp32-wifi-firmware"])
     addInstallable(filesystem_update, False, ["esp32-wifi-4m-filesystem"])
 
+    addVariant("wifi_s3", "Supports WiFi and WebUI on the esp32_s3", "Installation type")
+    addInstallable(fresh_install, True, ["esp32-4m_s3-partitions", "esp32_s3-bootloader", "esp32_s3-bootapp", "esp32-wifi_s3-firmware", "esp32-wifi_s3-4m-filesystem"])
+    addInstallable(firmware_update, False, ["esp32-wifi_s3-firmware"])
+    addInstallable(filesystem_update, False, ["esp32-wifi_s3-4m-filesystem"])
+
     addVariant("bt", "Supports Bluetooth serial", "Installation type")
     addInstallable(fresh_install, True, ["esp32-4m-partitions", "esp32-bootloader", "esp32-bootapp", "esp32-bt-firmware"])
     addInstallable(firmware_update, False, ["esp32-bt-firmware"])
@@ -249,6 +269,9 @@ for platform in ['win64', 'posix']:
     zipDirName = os.path.join('fluidnc-' + tag + '-' + platform)
     zipFileName = os.path.join(relPath, zipDirName + '.zip')
 
+    print("zipDirName=", zipDirName)
+    print("zipDirName=", zipFileName)
+
     with ZipFile(zipFileName, 'w') as zipObj:
         name = 'HOWTO-INSTALL.txt'
         zipObj.write(os.path.join(sharedPath, platform, name), os.path.join(zipDirName, name))
@@ -263,11 +286,13 @@ for platform in ['win64', 'posix']:
             zipObj.write(os.path.join(sharedPath, 'common', secFuses), os.path.join(zipDirName, 'common', secFuses))
 
         # Put FluidNC binaries, partition maps, and installers in the archive
-        for envName in ['wifi','bt']:
+        for envName in ['wifi','bt',"wifi_s3"]:
 
             # Put bootloader binaries in the archive
             bootloader = 'bootloader.bin'
             zipObj.write(os.path.join(pioPath, envName, bootloader), os.path.join(zipDirName, envName, bootloader))
+
+            print("zipObj.write=", os.path.join(pioPath, envName, bootloader), os.path.join(zipDirName, envName, bootloader))
 
             # Put littlefs.bin and index.html.gz in the archive
             # bt does not need a littlefs.bin because there is no use for index.html.gz
@@ -276,26 +301,36 @@ for platform in ['win64', 'posix']:
                 zipObj.write(os.path.join(pioPath, envName, name), os.path.join(zipDirName, envName, name))
                 name = 'index.html.gz'
                 zipObj.write(os.path.join('FluidNC', 'data', name), os.path.join(zipDirName, envName, name))
+            if envName == 'wifi_s3':
+                print("zipDirName=", zipFileName)
+                name = 'littlefs.bin'
+                zipObj.write(os.path.join(pioPath, envName, name), os.path.join(zipDirName, envName, name))
+                name = 'index.html.gz'
+                zipObj.write(os.path.join('FluidNC', 'data', name), os.path.join(zipDirName, envName, name))
 
             objPath = os.path.join(pioPath, envName)
             for obj in ['firmware.bin','partitions.bin']:
                 zipObj.write(os.path.join(objPath, obj), os.path.join(zipDirName, envName, obj))
-
+                print("zipped",'firmware.bin','partitions.bin')
             # E.g. posix/install-wifi.sh -> install-wifi.sh
             copyToZip(zipObj, platform, 'install-' + envName + scriptExtension[platform], zipDirName)
+            print("zipped", zipObj, platform, 'install-' + envName + scriptExtension[platform], zipDirName)
 
         for script in ['install-fs', 'fluidterm', 'checksecurity', 'erase', 'tools']:
             # E.g. posix/fluidterm.sh -> fluidterm.sh
             copyToZip(zipObj, platform, script + scriptExtension[platform], zipDirName)
+            print("copytozip", zipObj, platform, script + scriptExtension[platform], zipDirName)
 
         # Put the fluidterm code in the archive
         for obj in ['fluidterm.py', 'README-FluidTerm.md']:
             fn = os.path.join('fluidterm', obj)
             zipObj.write(fn, os.path.join(zipDirName, os.path.join('common', obj)))
+            print(fn, os.path.join(zipDirName, os.path.join('common', obj)))
 
         if platform == 'win64':
             obj = 'fluidterm' + exeExtension[platform]
             zipObj.write(os.path.join('fluidterm', obj), os.path.join(zipDirName, platform, obj))
+            print(os.path.join('fluidterm', obj), os.path.join(zipDirName, platform, obj))
 
         EsptoolVersion = 'v3.1'
 
