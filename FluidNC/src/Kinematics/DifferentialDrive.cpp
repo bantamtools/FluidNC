@@ -19,8 +19,14 @@ namespace Kinematics {
         m_heading = 0.0; // define current heading as zero angle (note this faces down positive X)
         m_motor_left = 0.0;
         m_motor_right = 0.0;
-        m_cartesian_x = 0.0;
-        m_cartesian_y = 0.0;
+        m_prev_x = 0.0;
+        m_prev_y = 0.0;
+        m_next_x = 0.0;
+        m_next_y = 0.0;
+        m_prev_left = 0.0;
+        m_prev_right = 0.0;
+        m_next_left = 0.0;
+        m_next_right = 0.0;
         init_position();
     }
 
@@ -64,6 +70,14 @@ namespace Kinematics {
             return mc_move_motors(motors, pl_data);
         }
 
+        // record starting motor positions and cartesian start and end
+        m_prev_left = m_motor_left;
+        m_prev_right = m_motor_right;
+        m_prev_x = position[X_AXIS];
+        m_prev_y = position[Y_AXIS];
+        m_next_x = target[X_AXIS];
+        m_next_y = target[Y_AXIS];
+
         // calc new heading
         //   angle between 2D points = atan2(y2 - y1, x2 - x1)
         float new_heading = atan2f((target[Y_AXIS]-position[Y_AXIS]),(target[X_AXIS]-position[X_AXIS])); // (radians)
@@ -93,27 +107,29 @@ namespace Kinematics {
         if (!mc_move_motors(motors, pl_data)) {
             return false;
         }
-        // if we're still here, turn move completed so update current state
+        // if we're still here, turn move was accepted so update accepted state
         m_heading = new_heading;
         m_motor_left = left_target;
         m_motor_right = right_target;
 
+        // set starting motor positions for straight move (testing)
+        m_prev_left = m_motor_left;
+        m_prev_right = m_motor_right;
+
         // Now just move forward the required distance to the target
-        left_target = m_motor_left + XY_cartesian_distance;
-        right_target = m_motor_right + XY_cartesian_distance;
-        motors[X_AXIS] = left_target;
-        motors[Y_AXIS] = right_target;
+        m_next_left = m_motor_left + XY_cartesian_distance;
+        m_next_right = m_motor_right + XY_cartesian_distance;
+        motors[X_AXIS] = m_next_left;
+        motors[Y_AXIS] = m_next_right;
         for (size_t axis = Z_AXIS; axis < n_axis; axis++) { // pass through any other axis moves (like Z for pen)
             motors[axis] = target[axis];
         }
         if (!mc_move_motors(motors, pl_data)) {
             return false;
         }
-        m_motor_left = left_target;
-        m_motor_right = right_target;
-        // update cartesian position to target we've arrived at
-        m_cartesian_x = target[X_AXIS];
-        m_cartesian_y = target[Y_AXIS];
+        // update accepted state
+        m_motor_left = m_next_left;
+        m_motor_right = m_next_right;
         return true;
     }
 
@@ -125,12 +141,29 @@ namespace Kinematics {
         //  cartesian XY position state. During linear moves, we'll have to store the starting motor pos and interpolate
         //  to the current motor pos based on the start and end points. Gonna need lots of state.
 
-        // First pass for testing, we're just going to report the position after the last finished move
-        cartesian[X_AXIS] = m_cartesian_x;
-        cartesian[Y_AXIS] = m_cartesian_y;
+        // First pass for testing, we're just going to report the position after the last processed move
+        // Note this just set reports to the next target as soon as a move set began, not great
+//        cartesian[X_AXIS] = m_next_x;
+//        cartesian[Y_AXIS] = m_next_y;
+        // now with more state, interpolate motor progress into cartesian progress
+        // I expect this to work during straight moves but turns will report nonsense... and that is indeed the case.
+        if (m_next_left-m_prev_left == 0) {
+            cartesian[X_AXIS] = m_next_x;
+        } else {
+            cartesian[X_AXIS] = m_prev_x + ((motors[X_AXIS]-m_prev_left)/(m_next_left-m_prev_left))*(m_next_x-m_prev_x);
+        }
+        if (m_next_right-m_prev_right == 0) {
+            cartesian[Y_AXIS] = m_next_y;
+        } else {
+            cartesian[Y_AXIS] = m_prev_y + ((motors[Y_AXIS]-m_prev_right)/(m_next_right-m_prev_right))*(m_next_y-m_prev_y);
+        }
         for (size_t axis = Z_AXIS; axis < n_axis; axis++) { // pass through any other axes
             cartesian[axis] = motors[axis];
         }
+        // idea: we always turn first then move. During turn, X/Y should not change at all (ideally).
+        //  When we are turning, the motors are moving in opposite directions.
+        //  So, still more state for previous in-progress motors report, compare to current, if XY in opp dirs,
+        //  then just return m_prev_xy, if same, do the distance interpolation...
     }
 
     void DifferentialDrive::transform_cartesian_to_motors(float* cartesian, float* motors) {
