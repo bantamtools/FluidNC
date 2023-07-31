@@ -11,10 +11,10 @@ stepping:
 start:
   must_home: false
 
-planner_blocks: 16
-
 control:
-    feed_hold_pin: gpio.36:low
+  enter_pin: gpio.36:low
+  
+planner_blocks: 16
 
 # uart1:
 #   txd_pin: gpio.22
@@ -128,6 +128,24 @@ sdcard:
   cs_pin: gpio.12
   card_detect_pin: gpio.14
   frequency_hz: 2000000
+
+# OLED
+i2c0:
+   sda_pin: gpio.41
+   scl_pin: gpio.40
+   frequency: 400000
+        
+oled:
+   i2c_num: 0
+   i2c_address: 60
+   width: 128
+   height: 64
+   radio_delay_ms: 1000
+
+# Encoder
+encoder:
+  a_pin: gpio.35
+  b_pin: gpio.48
 
 user_outputs:
   digital0_pin: gpio.5
