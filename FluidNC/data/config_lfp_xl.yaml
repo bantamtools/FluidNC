@@ -13,7 +13,7 @@ start:
 
 control:
   enter_pin: gpio.36:low
-  
+
 planner_blocks: 16
 
 # uart1:
@@ -48,8 +48,8 @@ axes:
 
   x:
     steps_per_mm: 40
-    max_rate_mm_per_min: 10000
-    acceleration_mm_per_sec2: 2400
+    max_rate_mm_per_min: 34000
+    acceleration_mm_per_sec2: 300
     max_travel_mm: 1275
     soft_limits: false
     homing:
@@ -75,8 +75,8 @@ axes:
 
   y:
     steps_per_mm: 40
-    max_rate_mm_per_min: 10000
-    acceleration_mm_per_sec2: 2400
+    max_rate_mm_per_min: 34000
+    acceleration_mm_per_sec2: 300
     max_travel_mm: 1024
     soft_limits: false
     homing:
@@ -102,8 +102,8 @@ axes:
 
   z:
     steps_per_mm: 16
-    max_rate_mm_per_min: 3000.000
-    acceleration_mm_per_sec2: 2400
+    max_rate_mm_per_min: 34000
+    acceleration_mm_per_sec2: 300
     max_travel_mm: 25
     soft_limits: false
     homing:
@@ -119,6 +119,7 @@ axes:
     motor1:
       null_motor:
 
+# Configure SD card in SPI mode
 spi:
   miso_pin: gpio.8
   mosi_pin: gpio.9
@@ -127,7 +128,7 @@ spi:
 sdcard:
   cs_pin: gpio.12
   card_detect_pin: gpio.14
-  frequency_hz: 2000000
+  frequency_hz: 400000
 
 # OLED
 i2c0:
