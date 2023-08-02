@@ -35,15 +35,15 @@ namespace Kinematics {
     private:
 
         // State
-        float m_heading; // last completed forward angle (radians)
-        float m_motor_left; // last completed left (usually x) motor position, in mm of motion
-        float m_motor_right; // last completed right (usually y) motor position
+        float m_heading; // last accepted forward angle (radians)
+        float m_motor_left; // last accepted left (usually x) motor position, in mm of motion
+        float m_motor_right; // last accepted right (usually y) motor position
         // also track cartesian position so we can report it back to FluidNC
         float m_prev_x;
         float m_prev_y;
         float m_next_x;
         float m_next_y;
-        // we'll also need some motor position state to track cartesian pos during moves...
+        // we'll also need some motor position state to update cartesian pos during moves...
         float m_prev_left; // motor start
         float m_prev_right;
         float m_next_left; // motor finish

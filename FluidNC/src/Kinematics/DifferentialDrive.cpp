@@ -100,8 +100,8 @@ namespace Kinematics {
         float right_target = m_motor_right - wheel_turn_dist;
         motors[X_AXIS] = left_target;
         motors[Y_AXIS] = right_target;
-        for (size_t axis = Z_AXIS; axis < n_axis; axis++) {
-            motors[axis] = 0.0; // dont move other axes during turn
+        for (size_t axis = Z_AXIS; axis < n_axis; axis++) { // pass through any other axis positions (like Z for pen)
+            motors[axis] = target[axis];
         }
         // execute the turn and continue
         if (!mc_move_motors(motors, pl_data)) {
