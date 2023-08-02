@@ -36,6 +36,10 @@ namespace Machine {
         if (_motors[0] == nullptr) {
             _motors[0] = new Machine::Motor(_axis, 0);
         }
+        // Always set rapids acceleration to minimum of the default acceleration
+        if (_rapid_acceleration < _acceleration) {
+            _rapid_acceleration = _acceleration;
+        }
     }
 
     void Axis::init() {
