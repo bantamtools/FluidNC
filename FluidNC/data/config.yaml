@@ -20,8 +20,9 @@ axes:
   
   x:
     steps_per_mm: 40.16
-    max_rate_mm_per_min: 34000
+    max_rate_mm_per_min: 30000
     acceleration_mm_per_sec2: 5000
+    rapid_acceleration_mm_per_sec2: 100
     max_travel_mm: 216
     soft_limits: false
     homing:
@@ -43,8 +44,9 @@ axes:
 
   y:
     steps_per_mm: 33.28
-    max_rate_mm_per_min: 34000
+    max_rate_mm_per_min: 30000
     acceleration_mm_per_sec2: 5000
+    rapid_acceleration_mm_per_sec2: 100
     max_travel_mm: 230
     soft_limits: false
     homing:
@@ -63,8 +65,9 @@ axes:
 
   z:
     steps_per_mm: 12.25
-    max_rate_mm_per_min: 34000
-    acceleration_mm_per_sec2: 5000
+    max_rate_mm_per_min: 30000
+    acceleration_mm_per_sec2: 10000
+    rapid_acceleration_mm_per_sec2: 100
     max_travel_mm: 16
     soft_limits: false
     homing:
