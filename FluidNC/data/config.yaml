@@ -64,7 +64,7 @@ axes:
       null_motor:
 
   z:
-    steps_per_mm: 11.9
+    steps_per_mm: 22.7
     max_rate_mm_per_min: 12000
     acceleration_mm_per_sec2: 70000
     rapid_acceleration_mm_per_sec2: 70000
@@ -72,7 +72,7 @@ axes:
     soft_limits: false
     homing:
       cycle: 1
-      mpos_mm: 4.85
+      mpos_mm: 0.6
       positive_direction: true
       feed_mm_per_min: 500
       seek_mm_per_min: 1000
