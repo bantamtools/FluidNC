@@ -21,20 +21,20 @@ axes:
   x:
     steps_per_mm: 40.16
     max_rate_mm_per_min: 12000
-    acceleration_mm_per_sec2: 40000
-    rapid_acceleration_mm_per_sec2: 40000
+    acceleration_mm_per_sec2: 7500
+    rapid_acceleration_mm_per_sec2: 7500
     max_travel_mm: 216
     soft_limits: false
     homing:
       cycle: 2
-      mpos_mm: 14.0
+      mpos_mm: 13.5
       positive_direction: false
       feed_mm_per_min: 200
       seek_mm_per_min: 2000
     
     motor0:
       limit_neg_pin: gpio.1:high
-      pulloff_mm: 3
+      pulloff_mm: 4
       stepstick:
         disable_pin: gpio.15:low
         direction_pin: gpio.16:low
@@ -45,8 +45,8 @@ axes:
   y:
     steps_per_mm: 33.28
     max_rate_mm_per_min: 12000
-    acceleration_mm_per_sec2: 40000
-    rapid_acceleration_mm_per_sec2: 40000
+    acceleration_mm_per_sec2: 7500
+    rapid_acceleration_mm_per_sec2: 7500
     max_travel_mm: 230
     soft_limits: false
     homing:
