@@ -27,6 +27,8 @@ namespace Kinematics {
         m_prev_right = 0.0;
         m_next_left = 0.0;
         m_next_right = 0.0;
+        m_left_last_report = 0.0;
+        m_right_last_report = 0.0;
         init_position();
     }
 
@@ -115,6 +117,8 @@ namespace Kinematics {
         // set starting motor positions for straight move (testing)
         m_prev_left = m_motor_left;
         m_prev_right = m_motor_right;
+        m_left_last_report = m_motor_left;
+        m_right_last_report = m_motor_right;
 
         // Now just move forward the required distance to the target
         m_next_left = m_motor_left + XY_cartesian_distance;
@@ -147,6 +151,29 @@ namespace Kinematics {
 //        cartesian[Y_AXIS] = m_next_y;
         // now with more state, interpolate motor progress into cartesian progress
         // I expect this to work during straight moves but turns will report nonsense... and that is indeed the case.
+
+        // idea: we always turn first then move. During turn, X/Y should not change at all (ideally).
+        //  When we are turning, the motors are moving in opposite directions.
+        //  So, still more state for previous in-progress motors report, compare to current, if XY in opp dirs,
+        //  then just return m_prev_xy, if same, do the distance interpolation...
+
+        bool xdir = motors[X_AXIS] > m_left_last_report;
+        bool ydir = motors[Y_AXIS] > m_right_last_report;
+
+        if (xdir != ydir) {
+            // motors moving opposite directions, we're in turning stage, XY should not change yet
+            cartesian[X_AXIS] = m_prev_x;
+            cartesian[Y_AXIS] = m_prev_y;
+            for (size_t axis = Z_AXIS; axis < n_axis; axis++) { // pass through any other axes
+                cartesian[axis] = motors[axis];
+            }
+            m_left_last_report = motors[X_AXIS];
+            m_right_last_report = motors[Y_AXIS];
+            return;
+        }
+
+        // else motors are moving the same direction, we're travelling
+        // this bit is the linear move interpolation (with an escape clause for zero-length moves)
         if (m_next_left-m_prev_left == 0) {
             cartesian[X_AXIS] = m_next_x;
         } else {
@@ -160,10 +187,8 @@ namespace Kinematics {
         for (size_t axis = Z_AXIS; axis < n_axis; axis++) { // pass through any other axes
             cartesian[axis] = motors[axis];
         }
-        // idea: we always turn first then move. During turn, X/Y should not change at all (ideally).
-        //  When we are turning, the motors are moving in opposite directions.
-        //  So, still more state for previous in-progress motors report, compare to current, if XY in opp dirs,
-        //  then just return m_prev_xy, if same, do the distance interpolation...
+        m_left_last_report = motors[X_AXIS];
+        m_right_last_report = motors[Y_AXIS];
     }
 
     void DifferentialDrive::transform_cartesian_to_motors(float* cartesian, float* motors) {

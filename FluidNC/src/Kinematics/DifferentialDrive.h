@@ -48,6 +48,8 @@ namespace Kinematics {
         float m_prev_right;
         float m_next_left; // motor finish
         float m_next_right;
+        float m_left_last_report; // latest motor pos while move in progress
+        float m_right_last_report;
 
 
         // Parameters
