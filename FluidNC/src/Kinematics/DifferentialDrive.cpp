@@ -9,7 +9,7 @@ namespace Kinematics {
     void DifferentialDrive::group(Configuration::HandlerBase& handler) {
         handler.item("left_motor_axis", _left_motor_axis);
         handler.item("right_motor_axis", _right_motor_axis);
-        handler.item("wheel_radius", _wheel_radius);
+        //handler.item("wheel_radius", _wheel_radius);  // this is folded into the motor config's steps/mm
         handler.item("distance_between_wheels", _distance_between_wheels);
         log_info("DD wheel distance: " << _distance_between_wheels);
     }

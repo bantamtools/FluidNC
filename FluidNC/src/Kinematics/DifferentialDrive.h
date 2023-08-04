@@ -55,7 +55,7 @@ namespace Kinematics {
         // Parameters
         int _left_motor_axis    = 0;
         int _right_motor_axis   = 1;
-        float _wheel_radius     = 20.0;
+        //float _wheel_radius     = 20.0;
         float _distance_between_wheels = 50.0;
 
     };
