@@ -28,13 +28,10 @@ private:
     Channel& _out;
 
     uint32_t _line_num;  // the most recent line number read
-    uint32_t _prev_report_interval; // previous auto-reporting interval, restored after input file killed
     bool     _readyNext = true;
 
 public:
     static std::string _progress;
-
-    static const uint32_t CYCLE_REPORT_INTERVAL = 500; // Reporting interval (in ms) during a cycle
 
     // fsname is the default file system on which the file is located, in case the path does not specify
     // path is the full path to the file
