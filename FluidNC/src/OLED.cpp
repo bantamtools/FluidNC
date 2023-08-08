@@ -396,13 +396,13 @@ void OLED::show(Layout& layout, const char* msg) {
     _oled->drawString(layout._x, layout._y, msg);
 }
 
-OLED::Layout OLED::stateLayout      = { 0, 0, 0, ArialMT_Plain_10, TEXT_ALIGN_LEFT };
-OLED::Layout OLED::tickerLayout     = { 63, 0, 128, ArialMT_Plain_10, TEXT_ALIGN_CENTER };
-OLED::Layout OLED::filenameLayout   = { 63, 13, 128, ArialMT_Plain_10, TEXT_ALIGN_CENTER };
-OLED::Layout OLED::percentLayout128 = { 128, 0, 128, ArialMT_Plain_10, TEXT_ALIGN_RIGHT };
-OLED::Layout OLED::percentLayout64  = { 64, 0, 64, ArialMT_Plain_10, TEXT_ALIGN_RIGHT };
-OLED::Layout OLED::posLabelLayout   = { 110, 13, 128, ArialMT_Plain_10, TEXT_ALIGN_RIGHT };
-OLED::Layout OLED::radioAddrLayout  = { 50, 0, 128, ArialMT_Plain_10, TEXT_ALIGN_LEFT };
+OLED::Layout OLED::stateLayout          = { 0, 0, 0, ArialMT_Plain_10, TEXT_ALIGN_LEFT };
+OLED::Layout OLED::elapsedTimeLayout    = { 63, 0, 128, ArialMT_Plain_10, TEXT_ALIGN_CENTER };
+OLED::Layout OLED::filenameLayout       = { 63, 13, 128, ArialMT_Plain_10, TEXT_ALIGN_CENTER };
+OLED::Layout OLED::percentLayout128     = { 128, 0, 128, ArialMT_Plain_10, TEXT_ALIGN_RIGHT };
+OLED::Layout OLED::percentLayout64      = { 64, 0, 64, ArialMT_Plain_10, TEXT_ALIGN_RIGHT };
+OLED::Layout OLED::posLabelLayout       = { 110, 13, 128, ArialMT_Plain_10, TEXT_ALIGN_RIGHT };
+OLED::Layout OLED::radioAddrLayout      = { 50, 0, 128, ArialMT_Plain_10, TEXT_ALIGN_LEFT };
 
 void OLED::afterParse() {
     if (!config->_i2c[_i2c_num]) {
@@ -551,7 +551,16 @@ void OLED::show_menu() {
 }
 
 void OLED::show_file() {
+    char time_str[10];
     int pct = int(_percent);
+
+    // Record the start time if at beginning and clear at end of run
+    if (_state == "Run" && pct == 0 && _run_start_time == 0) {
+        _run_start_time = millis();
+    } else if (_state == "Idle" || pct == 100) {
+        _run_start_time = 0;
+    } 
+
     if (_filename.length() == 0) {
         return;
     }
@@ -570,11 +579,14 @@ void OLED::show_file() {
     if (_width == 128) {
         show(percentLayout128, std::to_string(pct) + '%');
 
-        _ticker += "-";
-        if (_ticker.length() >= 12) {
-            _ticker = "-";
-        }
-        show(tickerLayout, _ticker);
+        // Calculate and display the elapsed time
+        uint32_t elapsed_time = (millis() - _run_start_time) / 1000;
+        snprintf(time_str, 10, "%02d:%02d:%02d", 
+            (elapsed_time / 3600),          // hours
+            ((elapsed_time % 3600) / 60),   // minutes
+            ((elapsed_time % 3600) % 60));  // seconds
+
+        show(elapsedTimeLayout, time_str);
 
         wrapped_draw_string(14, _filename, ArialMT_Plain_10);
 
@@ -647,7 +659,7 @@ void OLED::show_radio_info() {
 
     // Clear anything left in radio area
     _oled->setColor(BLACK);
-    _oled->fillRect(50, 0, 78, 11);
+    _oled->fillRect(30, 0, 98, 11);
     _oled->setColor(WHITE);
 
     if (_width == 128) {

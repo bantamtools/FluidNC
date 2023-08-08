@@ -68,7 +68,7 @@ public:
     static Layout bannerLayout128;
     static Layout bannerLayout64;
     static Layout stateLayout;
-    static Layout tickerLayout;
+    static Layout elapsedTimeLayout;
     static Layout filenameLayout;
     static Layout percentLayout128;
     static Layout percentLayout64;
@@ -96,7 +96,7 @@ private:
     std::string _filename;
 
     float       _percent;
-    std::string _ticker;
+    uint32_t    _run_start_time = 0;
 
     int _radio_delay = 0;
 
