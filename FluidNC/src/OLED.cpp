@@ -402,7 +402,7 @@ OLED::Layout OLED::filenameLayout       = { 63, 13, 128, ArialMT_Plain_10, TEXT_
 OLED::Layout OLED::percentLayout128     = { 128, 0, 128, ArialMT_Plain_10, TEXT_ALIGN_RIGHT };
 OLED::Layout OLED::percentLayout64      = { 64, 0, 64, ArialMT_Plain_10, TEXT_ALIGN_RIGHT };
 OLED::Layout OLED::posLabelLayout       = { 110, 13, 128, ArialMT_Plain_10, TEXT_ALIGN_RIGHT };
-OLED::Layout OLED::radioAddrLayout      = { 50, 0, 128, ArialMT_Plain_10, TEXT_ALIGN_LEFT };
+OLED::Layout OLED::radioAddrLayout      = { 128, 0, 128, ArialMT_Plain_10, TEXT_ALIGN_RIGHT };
 
 void OLED::afterParse() {
     if (!config->_i2c[_i2c_num]) {
@@ -559,6 +559,7 @@ void OLED::show_file() {
         _run_start_time = millis();
     } else if (_state == "Idle" || pct == 100) {
         _run_start_time = 0;
+        return;
     } 
 
     if (_filename.length() == 0) {
