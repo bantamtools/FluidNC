@@ -136,7 +136,7 @@ private:
     void draw_checkbox(int16_t x, int16_t y, int16_t width, int16_t height, bool checked);
 
     void wrapped_draw_string(int16_t y, const std::string& s, font_t font);
-    void cropped_draw_string(int16_t y, const std::string& s, font_t font);
+    void truncated_draw_string(int16_t y, const std::string& s, font_t font);
 
     void show(Layout& layout, const std::string& msg) { show(layout, msg.c_str()); }
     void show(Layout& layout, const char* msg);

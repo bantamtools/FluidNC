@@ -542,7 +542,7 @@ void OLED::show_menu() {
         (entry->selected) ? _oled->setColor(BLACK) : _oled->setColor(WHITE);
 
         // Write out the entry name
-        _oled->drawString(0, 13 + (menu_height * i), (String)(entry->display_name));
+        truncated_draw_string(13 + (menu_height * i), entry->display_name, ArialMT_Plain_10);
 
         // Advance the line and pointer
         entry = entry->next;
@@ -599,7 +599,7 @@ void OLED::show_file() {
 
         show(elapsedTimeLayout, time_str);
 
-        cropped_draw_string(14, _filename, ArialMT_Plain_10);
+        truncated_draw_string(14, _filename, ArialMT_Plain_10);
 
         _oled->drawProgressBar(0, 26, 120, 10, pct);
     } else {
@@ -1127,23 +1127,27 @@ void OLED::wrapped_draw_string(int16_t y, const std::string& s, font_t font) {
     }
 }
 
-void OLED::cropped_draw_string(int16_t y, const std::string& s, font_t font) {
+void OLED::truncated_draw_string(int16_t y, const std::string& s, font_t font) {
     _oled->setFont(font);
     _oled->setTextAlignment(TEXT_ALIGN_LEFT);
+
+    std::string dots = "...";
+    size_t dots_width = char_width(dots[0] * dots.length(), font);
 
     size_t slen   = s.length();
     size_t swidth = 0;
     size_t i;
     for (i = 0; i < slen && swidth < _width; i++) {
         swidth += char_width(s[i], font);
-        if (swidth > _width) {
+        if (swidth > (_width - dots_width)) {
             break;
         }
     }
-    if (swidth < _width) {
+    if (swidth < (_width - dots_width)) {
         _oled->drawString(0, y, s.c_str());
     } else {
         _oled->drawString(0, y, s.substr(0, i).c_str());
+        _oled->drawString((_width - dots_width), y, dots.c_str()); // Ellipsis dots for truncation
     }
 }
 
