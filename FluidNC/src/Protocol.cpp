@@ -78,6 +78,8 @@ void protocol_reset() {
 
 static int32_t idleEndTime = 0;
 
+static uint32_t enterStartTime = 0;
+
 /*
   PRIMARY LOOP:
 */
@@ -1042,7 +1044,19 @@ static void protocol_do_card_detect(void* arg) {
 }
 
 static void protocol_do_enter() {
-    
+
+    bool long_press = false;
+
+    // Measure enter press and flag if long press
+    enterStartTime = millis();
+    while (config->_control->enter_pressed() && ((millis() - enterStartTime) < config->_control->_long_press_ms)) {
+        delay_ms(10);
+    }
+    if ((millis() - enterStartTime) >= config->_control->_long_press_ms) {
+        long_press = true;
+    }
+
+    // Enter released, process state changes
     switch (sys.state) {
 
         // Button press does nothing in these states

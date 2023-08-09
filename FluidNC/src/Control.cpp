@@ -9,6 +9,7 @@
 Control::Control() {
     // The SafetyDoor pin must be defined first because it is checked explicity in safety_door_ajar()
     _pins.push_back(new ControlPin(&safetyDoorEvent, "safety_door_pin", 'D'));
+    _pins.push_back(new ControlPin(&enterEvent, "enter_pin", 'E'));
     _pins.push_back(new ControlPin(&resetEvent, "reset_pin", 'R'));
     _pins.push_back(new ControlPin(&feedHoldEvent, "feed_hold_pin", 'H'));
     _pins.push_back(new ControlPin(&cycleStartEvent, "cycle_start_pin", 'S'));
@@ -16,7 +17,6 @@ Control::Control() {
     _pins.push_back(new ControlPin(&macro1Event, "macro1_pin", '1'));
     _pins.push_back(new ControlPin(&macro2Event, "macro2_pin", '2'));
     _pins.push_back(new ControlPin(&macro3Event, "macro3_pin", '3'));
-    _pins.push_back(new ControlPin(&enterEvent, "enter_pin", 'E'));
 }
 
 void Control::init() {
@@ -29,6 +29,7 @@ void Control::group(Configuration::HandlerBase& handler) {
     for (auto pin : _pins) {
         handler.item(pin->_legend.c_str(), pin->_pin);
     }
+    handler.item("long_press_ms", _long_press_ms);
 }
 
 std::string Control::report_status() {
@@ -67,4 +68,9 @@ bool Control::safety_door_ajar() {
     // because that is the default for the value field, which will
     // never be changed for an undefined pin.
     return _pins[0]->get();
+}
+
+// Returns if enter button is pressed, used for long press detection
+bool Control::enter_pressed() {
+    return _pins[1]->get();
 }

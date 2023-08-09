@@ -13,6 +13,7 @@ start:
 
 control:
   enter_pin: gpio.36:low
+  long_press_ms: 1000
 
 planner_blocks: 16
 

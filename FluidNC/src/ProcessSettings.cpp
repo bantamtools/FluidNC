@@ -271,6 +271,10 @@ static Error isStuck() {
         rtAlarm = ExecAlarm::ControlPin;
         return Error::CheckDoor;
     }
+    // Skip stuck alarm if enter pressed (long press)
+    if (config->_control->enter_pressed()) {
+        return Error::Ok;
+    }
     if (config->_control->stuck()) {
         log_info("Control pins:" << config->_control->report_status());
         rtAlarm = ExecAlarm::ControlPin;

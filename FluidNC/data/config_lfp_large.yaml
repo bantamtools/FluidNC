@@ -37,6 +37,7 @@ planner_blocks: 16
 
 control:
     feed_hold_pin: gpio.36:low
+    long_press_ms: 1000
 
 # uart1:
 #   txd_pin: gpio.22
