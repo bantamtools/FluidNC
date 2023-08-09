@@ -479,7 +479,7 @@ void OLED::show_state() {
 
     // Clear anything left in radio area
     _oled->setColor(BLACK);
-    _oled->fillRect(0, 0, 50, 11);
+    _oled->fillRect(0, 0, 40, 11);
     _oled->setColor(WHITE);
 
     show(stateLayout, _state);
@@ -556,12 +556,21 @@ void OLED::show_file() {
     int pct = int(_percent);
 
     // Record the start time if at beginning and clear at end of run
-    if (_state == "Run" && pct == 0 && _run_start_time == 0) {
+    if (_state == "Run" && _run_start_time == 0) {
         _run_start_time = millis();
+
     } else if (_state == "Idle" || pct == 100) {
         _run_start_time = 0;
+        _prev_run_time = 0;
         return;
     } 
+
+    // Save off previous run time during a pause
+    if ((_state == "Hold:0" || _state == "Hold:1") && (_run_start_time != 0)) {
+        _prev_run_time += (millis() - _run_start_time);
+        _run_start_time = 0;
+        return;
+    }
 
     if (_filename.length() == 0) {
         return;
@@ -582,7 +591,7 @@ void OLED::show_file() {
         show(percentLayout128, std::to_string(pct) + '%');
 
         // Calculate and display the elapsed time
-        uint32_t elapsed_time = (millis() - _run_start_time) / 1000;
+        uint32_t elapsed_time = (millis() - _run_start_time + _prev_run_time) / 1000;
         snprintf(time_str, 10, "%02d:%02d:%02d", 
             (elapsed_time / 3600),          // hours
             ((elapsed_time % 3600) / 60),   // minutes
