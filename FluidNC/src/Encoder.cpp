@@ -70,7 +70,7 @@ void Encoder::init() {
 	pcnt_config.unit = _pcnt_unit;
 
 	// What to do on the positive / negative edge of pulse input?
-	pcnt_config.pos_mode = PCNT_COUNT_DIS;      // Keep the counter value on the positive edge
+	pcnt_config.pos_mode = PCNT_COUNT_DEC;      // Count down on the positive edge
 	pcnt_config.neg_mode = PCNT_COUNT_INC;      // Count up on the negative edge
 
 	// What to do when control input is low or high?
