@@ -403,6 +403,7 @@ OLED::Layout OLED::percentLayout128     = { 128, 0, 128, ArialMT_Plain_10, TEXT_
 OLED::Layout OLED::percentLayout64      = { 64, 0, 64, ArialMT_Plain_10, TEXT_ALIGN_RIGHT };
 OLED::Layout OLED::posLabelLayout       = { 110, 13, 128, ArialMT_Plain_10, TEXT_ALIGN_RIGHT };
 OLED::Layout OLED::radioAddrLayout      = { 128, 0, 128, ArialMT_Plain_10, TEXT_ALIGN_RIGHT };
+OLED::Layout OLED::connectWifiLayout    = { 63, 52, 128, ArialMT_Plain_10, TEXT_ALIGN_CENTER };
 
 void OLED::afterParse() {
     if (!config->_i2c[_i2c_num]) {
@@ -898,9 +899,8 @@ void OLED::parse_STA() {
     size_t start = strlen("[MSG:INFO: Connecting to STA SSID:");
     _radio_info  = _report.substr(start, _report.size() - start - 1);
 
-    _oled->clear();
     auto fh = font_height(ArialMT_Plain_10);
-    wrapped_draw_string(0, _radio_info, ArialMT_Plain_10);
+    show(connectWifiLayout, "Connecting to Wi-Fi...");
     _oled->display();
 }
 
@@ -911,8 +911,9 @@ void OLED::parse_IP() {
 
     _oled->clear();
     auto fh = font_height(ArialMT_Plain_10);
-    wrapped_draw_string(0, _radio_info, ArialMT_Plain_10);
-    wrapped_draw_string(fh * 2, _radio_addr, ArialMT_Plain_10);
+    wrapped_draw_string(0, "Wi-Fi Info", ArialMT_Plain_10);
+    wrapped_draw_string(fh, "Network ID: " + _radio_info, ArialMT_Plain_10);
+    wrapped_draw_string(fh * 2, "IP Addr: " + _radio_addr, ArialMT_Plain_10);
     _oled->display();
     delay_ms(_radio_delay);
 }

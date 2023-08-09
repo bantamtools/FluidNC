@@ -74,6 +74,7 @@ public:
     static Layout percentLayout64;
     static Layout posLabelLayout;
     static Layout radioAddrLayout;
+    static Layout connectWifiLayout;
 
     bool menu_is_files_list(void);
     struct MenuNodeType *menu_get_selected();
