@@ -1068,17 +1068,30 @@ static void protocol_do_enter() {
         case State::SafetyDoor:
             break;
 
-        // Feedhold during a cycle
+        // Feedhold / cancel during a cycle
         case State::Cycle:
-            protocol_start_holding();
-            sys.state = State::Hold;
+
+            // Long press, cancel job
+            if (long_press) {
+                protocol_send_event(&resetEvent);
+
+            // Click / short press, feedhold job
+            } else {
+                protocol_start_holding();
+                sys.state = State::Hold;
+            }
             break;
 
-        // Resume from feedhold
+        // Resume / cancel during a feedhold
         case State::Hold:
-            // Cycle start only when IDLE or when a hold is complete and ready to resume.
+
+            // Cycle start / cancel when IDLE or hold is complete and ready to resume.
             if (sys.suspend.bit.holdComplete) {
-                if (spindle_stop_ovr.value) {
+
+                 // Long press, cancel job
+                if (long_press) {
+                    protocol_send_event(&resetEvent);
+                } else if (spindle_stop_ovr.value) {
                     spindle_stop_ovr.bit.restoreCycle = true;  // Set to restore in suspend routine and cycle start after.
                 } else {
                     protocol_do_initiate_cycle();

@@ -54,7 +54,7 @@ bool Control::stuck() {
 bool Control::startup_check() {
     bool ret = false;
     for (auto pin : _pins) {
-        if (pin->get()) {
+        if (pin->get() && !enter_pressed()) {  // skip check for enter pressed
             log_error(pin->_legend << " is active at startup");
             ret = true;
         }

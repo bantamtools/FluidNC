@@ -590,19 +590,20 @@ void OLED::show_file() {
 
         show(elapsedTimeLayout, time_str);
 
-        wrapped_draw_string(14, _filename, ArialMT_Plain_10);
+        cropped_draw_string(14, _filename, ArialMT_Plain_10);
 
-        _oled->drawProgressBar(0, 39, 120, 10, pct);
+        _oled->drawProgressBar(0, 26, 120, 10, pct);
     } else {
         show(percentLayout64, std::to_string(pct) + '%');
     }
 
     // Display pause/resume message at bottom
     if (_state == "Hold:0" || _state == "Hold:1") {
-        _oled->drawString(0, 52, "Press button to RESUME");
+        _oled->drawString(0, 39, "Click to RESUME");
     } else {
-        _oled->drawString(0, 52, "Press button to PAUSE");
+        _oled->drawString(0, 39, "Click to PAUSE");
     }
+    _oled->drawString(0, 52, "Long Press to CANCEL");
 }
 void OLED::show_dro(float* axes, bool isMpos, bool* limits) {
 
@@ -1114,6 +1115,26 @@ void OLED::wrapped_draw_string(int16_t y, const std::string& s, font_t font) {
     } else {
         _oled->drawString(0, y, s.substr(0, i).c_str());
         _oled->drawString(0, y + font_height(font) - 1, s.substr(i, slen).c_str());
+    }
+}
+
+void OLED::cropped_draw_string(int16_t y, const std::string& s, font_t font) {
+    _oled->setFont(font);
+    _oled->setTextAlignment(TEXT_ALIGN_LEFT);
+
+    size_t slen   = s.length();
+    size_t swidth = 0;
+    size_t i;
+    for (i = 0; i < slen && swidth < _width; i++) {
+        swidth += char_width(s[i], font);
+        if (swidth > _width) {
+            break;
+        }
+    }
+    if (swidth < _width) {
+        _oled->drawString(0, y, s.c_str());
+    } else {
+        _oled->drawString(0, y, s.substr(0, i).c_str());
     }
 }
 
