@@ -191,6 +191,9 @@ namespace WebUI {
 
         HashFS::hash_all();
 
+        // Read RSS feed once Wi-Fi is connected
+        config->_oled->rss_fetch_and_parse();
+
         _setupdone = true;
         return no_error;
     }

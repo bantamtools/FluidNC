@@ -12,6 +12,9 @@
 
 #include "Driver/sdspi.h"
 
+#include <HTTPClient.h>
+#include <tinyxml2.h>
+
 #define MENU_NAME_MAX_STR   40
 #define MENU_NAME_MAX_PATH  255
 
@@ -83,6 +86,9 @@ public:
     JogState menu_get_jog_state();
     void menu_set_jog_state(JogState);
     void menu_show_error(String);
+
+    void rss_parse_titles(const String& rssData);
+    void rss_fetch_and_parse();
 
 private:
     MenuType *main_menu, *files_menu, *jogging_menu, *settings_menu, *version_menu, *current_menu;
