@@ -86,10 +86,7 @@ public:
     JogState menu_get_jog_state();
     void menu_set_jog_state(JogState);
     void menu_show_error(String);
-
-    void rss_parse_titles(const String& rssData);
-    void rss_fetch_and_parse();
-
+    
 private:
     MenuType *main_menu, *files_menu, *jogging_menu, *settings_menu, *version_menu, *current_menu;
     int enc_diff = 0;

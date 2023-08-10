@@ -387,40 +387,6 @@ void OLED::menu_update_selection(int menu_max_active_entries) {
     }
 }
 
-void OLED::rss_parse_titles(const String& rssData) {
-
-    tinyxml2::XMLDocument xml;
-    if (xml.Parse(rssData.c_str()) == tinyxml2::XML_SUCCESS) {
-        tinyxml2::XMLElement* channel = xml.FirstChildElement("rss")->FirstChildElement("channel");
-        tinyxml2::XMLElement* item = channel->FirstChildElement("item");
-
-        while (item) {
-            const char* title = item->FirstChildElement("title")->GetText();
-            log_info(title);
-            item = item->NextSiblingElement("item");
-        }
-    } else {
-        log_error("XML parsing error");
-    }
-}
-
-void OLED::rss_fetch_and_parse() {
-
-    HTTPClient http;
-    http.begin("https://www.mattstaniszewski.net/test_feed.xml");
-
-    int httpCode = http.GET();
-    if (httpCode == HTTP_CODE_OK) {
-        String rssData = http.getString();
-        //log_info(rssData.c_str());
-        rss_parse_titles(rssData);
-    } else {
-        log_info("Failed to fetch RSS feed");
-    }
-
-    http.end();
-}
-
 void OLED::show(Layout& layout, const char* msg) {
     if (_width < layout._width_required) {
         return;
