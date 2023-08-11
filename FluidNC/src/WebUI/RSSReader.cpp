@@ -13,13 +13,14 @@ namespace WebUI {
 namespace WebUI {
 
     static const String DEFAULT_RSS_URL = "https://www.mattstaniszewski.net/test_feed.xml";
-    static const int DEFAULT_RSS_READ_PERIOD_MS = 10000;
+    static const int DEFAULT_RSS_WAIT_PERIOD_MS = 10000;
 
     // Constructor
     RSSReader::RSSReader() {
-        _url            = DEFAULT_RSS_URL;
-        _read_period_ms = DEFAULT_RSS_READ_PERIOD_MS;
-        _started        = false;
+        _url                = DEFAULT_RSS_URL;
+        _wait_period_ms     = DEFAULT_RSS_WAIT_PERIOD_MS;
+        _wait_start_time_ms = 0;
+        _started            = false;
     }
 
     // Starts the RSS reader subsystem
@@ -46,14 +47,29 @@ namespace WebUI {
             return;
         }
 
-        _url            = "";
-        _read_period_ms = 0;
-        _started        = false;
+        _url                = "";
+        _wait_period_ms     = 0;
+        _wait_start_time_ms = 0;
+        _started            = false;
     }
 
     // Processes any RSS reader changes
     void RSSReader::handle() {
-        if (_started) {}
+        if (_started) {
+
+            // Poll the XML data and refresh the list after wait expires or at start
+            if ((_wait_start_time_ms == 0) || ((millis() - _wait_start_time_ms) >= DEFAULT_RSS_WAIT_PERIOD_MS)) {
+
+                // Parse XML data
+                fetch_and_parse();
+
+                // Print Heap
+                log_warn("Heap: " << xPortGetFreeHeapSize());
+
+                // Set new wait start time
+                _wait_start_time_ms = millis();
+            }
+        }
     }
 
     // Check if RSS reader service has been started
@@ -92,7 +108,6 @@ namespace WebUI {
         int httpCode = http.GET();
         if (httpCode == HTTP_CODE_OK) {
             String rssData = http.getString();
-            //log_info(rssData.c_str());
             parse_titles(rssData);
         } else {
             log_info("Failed to fetch RSS feed");

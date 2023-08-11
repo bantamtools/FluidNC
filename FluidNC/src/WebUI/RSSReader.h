@@ -21,7 +21,8 @@ namespace WebUI {
 
         bool        _started;
         String      _url;
-        int32_t     _read_period_ms;
+        uint32_t    _wait_period_ms;
+        uint32_t    _wait_start_time_ms;
     
         void        parse_titles(const String& rssData);
         void        fetch_and_parse();
