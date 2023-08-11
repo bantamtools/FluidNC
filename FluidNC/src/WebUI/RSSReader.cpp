@@ -12,13 +12,14 @@ namespace WebUI {
 
 namespace WebUI {
 
-    static const String DEFAULT_RSS_URL         = "https://www.mattstaniszewski.net/test_feed.xml";
-    static const int DEFAULT_RSS_BOOT_WAIT_MS   = 30000;
+    static const String DEFAULT_RSS_WEB_SERVER  = "mattstaniszewski.net";
+    static const String DEFAULT_RSS_ADDRESS     = "/test_feed.xml";
     static const int DEFAULT_RSS_WAIT_PERIOD_MS = 10000;
 
     // Constructor
     RSSReader::RSSReader() {
-        _url                = DEFAULT_RSS_URL;
+        _web_server         = DEFAULT_RSS_WEB_SERVER;
+        _web_rss_address    = DEFAULT_RSS_ADDRESS;
         _wait_period_ms     = DEFAULT_RSS_WAIT_PERIOD_MS;
         _wait_start_time_ms = 0;
         _started            = false;
@@ -48,7 +49,8 @@ namespace WebUI {
             return;
         }
 
-        _url                = "";
+        _web_server         = "";
+        _web_rss_address    = "";
         _wait_period_ms     = 0;
         _wait_start_time_ms = 0;
         _started            = false;
@@ -58,15 +60,15 @@ namespace WebUI {
     void RSSReader::handle() {
         if (_started) {
 
-            // Poll the XML data and refresh the list after wait expires or after boot delay
-            if ((_wait_start_time_ms == 0 && (millis() < DEFAULT_RSS_BOOT_WAIT_MS)) || 
+            // Poll the XML data and refresh the list after wait expires or after boot
+            if ((_wait_start_time_ms == 0) || 
                 ((millis() - _wait_start_time_ms) >= DEFAULT_RSS_WAIT_PERIOD_MS)) {
 
                 // Parse XML data
                 fetch_and_parse();
 
-                // Print Heap
-                log_warn("Heap: " << xPortGetFreeHeapSize());
+                // DEBUG: Print Heap
+                //log_warn("Heap: " << xPortGetFreeHeapSize());
 
                 // Set new wait start time
                 _wait_start_time_ms = millis();
@@ -78,7 +80,7 @@ namespace WebUI {
     bool RSSReader::started() { return _started; }
 
     // Returns the RSS URL
-    String RSSReader::getUrl() { return _url; }
+    String RSSReader::getUrl() { return (_web_server + _web_rss_address); }
 
     // Destructor
     RSSReader::~RSSReader() { end(); }
@@ -97,68 +99,72 @@ namespace WebUI {
     // Fetch an RSS feed and parse the data
     void RSSReader::fetch_and_parse() {
 
-        HTTPClient http;
+        bool insideItem = false;
+        char c;
+        String rssChunk = "";
+        tinyxml2::XMLDocument rssDoc;
+        tinyxml2::XMLElement *itemNode = nullptr;
 
-        // Start the HTTP client and GET request
-        http.begin(_url);
-        int httpCode = http.GET(); // Fetch the content from the URL
-        
-        // OK response, process RSS data
-        if (httpCode == HTTP_CODE_OK) {
+        // Set up RSS client (use instead of HTTPClient, takes more memory)
+        WiFiClient rssClient;
 
-            tinyxml2::XMLDocument xmlDoc;
-            tinyxml2::XMLElement *itemNode = nullptr;
-            String xmlChunk = "";
-            char c;
+        // Connected to RSS server
+        if (rssClient.connect(_web_server.c_str(), 80)) {
 
-            // Create stream for reading chunks (less memory)
-            WiFiClient *stream = http.getStreamPtr();
+            // GET Request
+            rssClient.print("GET ");
+            rssClient.print(_web_rss_address.c_str());
+            rssClient.print(" HTTP/1.1\r\n");
+            rssClient.print("Host: ");
+            rssClient.print(_web_server.c_str());
+            rssClient.print("\r\n");
+            rssClient.print("Connection: close\r\n\r\n");
 
-            // Valid stream with data
-            while (stream->connected() && stream->available()) {
+            // RSS data available
+            while (rssClient.connected() || rssClient.available()) {
 
-                // Read a character and add to chunk
-                c = stream->read();
-                xmlChunk += c;
+                while (rssClient.available()) {
 
-                // Check for the end of an item
-                if (itemNode && c == '>' && xmlChunk.endsWith("</item>")) {
+                    // Read a byte at a time into RSS chunk
+                    c = rssClient.read();
+                    rssChunk += c;
 
-                    // Extract the <item> content from the chunk
-                    size_t start = xmlChunk.indexOf("<item>");
-                    size_t end = xmlChunk.indexOf("</item>") + 7; // Include the </item> tag
-                    xmlChunk = xmlChunk.substring(start, end);
+                    // Check for the end of an item
+                    if (itemNode && c == '>' && rssChunk.endsWith("</item>")) {
 
-                    // Parse the extracted item content
-                    if (xmlDoc.Parse(xmlChunk.c_str(), xmlChunk.length()) == tinyxml2::XML_SUCCESS) {
+                        // Extract the <item> content from the chunk
+                        size_t start = rssChunk.indexOf("<item>");
+                        size_t end = rssChunk.indexOf("</item>") + 7; // Include the </item> tag
+                        rssChunk = rssChunk.substring(start, end);
 
-                        itemNode = xmlDoc.FirstChildElement("item");
-                        parse_item(itemNode);
-                        itemNode = nullptr;
-                        xmlDoc.Clear();
-                        
-                    } else {
-                        Serial.println("Failed to parse item XML");
+                        // Parse the extracted item content
+                        if (rssDoc.Parse(rssChunk.c_str(), rssChunk.length()) == tinyxml2::XML_SUCCESS) {
+
+                            itemNode = rssDoc.FirstChildElement("item");
+                            parse_item(itemNode);
+                            itemNode = nullptr;
+                            rssDoc.Clear();
+
+                        } else {
+                            log_warn("Failed to parse item XML");
+                        }
+                        rssChunk = "";
                     }
-
-                    // Clear the chunk
-                    xmlChunk = "";
-
-                }
-
-                // Check for the start of a new item
-                if (!itemNode && c == '>' && xmlChunk.endsWith("<item>")) {
-                    itemNode = xmlDoc.NewElement("item");
-                    xmlChunk = "<item>";
+                    
+                    // Check for the start of a new item
+                    if (!itemNode && c == '>' && rssChunk.endsWith("<item>")) {
+                        itemNode = rssDoc.NewElement("item");
+                        rssChunk = "<item>";
+                    }
                 }
             }
         
-        // Error response
+        // Connection to RSS server failed
         } else {
-            Serial.printf("HTTP request failed with code %d\n", httpCode);
+            log_warn("Connection failed");
         }
-
-        // Close HTTP client 
-        http.end();
+        
+        // End the RSS connection
+        rssClient.stop();
     }
 }

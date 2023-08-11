@@ -21,7 +21,8 @@ namespace WebUI {
     private:
 
         bool        _started;
-        String      _url;
+        String      _web_server;
+        String      _web_rss_address;
         uint32_t    _wait_period_ms;
         uint32_t    _wait_start_time_ms;
     
