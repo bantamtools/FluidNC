@@ -22,6 +22,7 @@ namespace WebUI {
         _web_rss_address    = DEFAULT_RSS_ADDRESS;
         _wait_period_ms     = DEFAULT_RSS_WAIT_PERIOD_MS;
         _wait_start_time_ms = 0;
+        _last_build_date    = 0;
         _started            = false;
     }
 
@@ -53,6 +54,7 @@ namespace WebUI {
         _web_rss_address    = "";
         _wait_period_ms     = 0;
         _wait_start_time_ms = 0;
+        _last_build_date    = 0;
         _started            = false;
     }
 
@@ -85,7 +87,7 @@ namespace WebUI {
     // Destructor
     RSSReader::~RSSReader() { end(); }
 
-    // Parses the items in XML data
+    // Parses the items in RSS data
     void RSSReader::parse_item(tinyxml2::XMLElement *itemNode) {
 
         // Parse and process <title> and <link> elements
@@ -96,6 +98,43 @@ namespace WebUI {
         log_info("Title: " << title << ", Link: " << link);
     }
 
+    // Parses a three-letter month name into an integer
+    int RSSReader::parse_month_name(const char *monthName) {
+
+        if (strcmp(monthName, "Jan") == 0) return 0;
+        if (strcmp(monthName, "Feb") == 0) return 1;
+        if (strcmp(monthName, "Mar") == 0) return 2;
+        if (strcmp(monthName, "Apr") == 0) return 3;
+        if (strcmp(monthName, "May") == 0) return 4;
+        if (strcmp(monthName, "Jun") == 0) return 5;
+        if (strcmp(monthName, "Jul") == 0) return 6;
+        if (strcmp(monthName, "Aug") == 0) return 7;
+        if (strcmp(monthName, "Sep") == 0) return 8;
+        if (strcmp(monthName, "Oct") == 0) return 9;
+        if (strcmp(monthName, "Nov") == 0) return 10;
+        if (strcmp(monthName, "Dec") == 0) return 11;
+        
+        return -1;  // Invalid month name
+    }
+
+    // Parses the last build date in RSS data
+    time_t RSSReader::parse_last_build_date(const char *lastBuildDate) {
+
+        struct tm tmStruct;
+        memset(&tmStruct, 0, sizeof(tmStruct));
+        
+        // Parse date and time components from the lastBuildDate string
+        sscanf(lastBuildDate, "%*3s, %d %3s %4d %2d:%2d:%2d %*3s",
+                &tmStruct.tm_mday, lastBuildDate, &tmStruct.tm_year,
+                &tmStruct.tm_hour, &tmStruct.tm_min, &tmStruct.tm_sec);
+        
+        tmStruct.tm_year -= 1900;  // Adjust year to be relative to 1900
+        tmStruct.tm_mon = parse_month_name(lastBuildDate); // Implement parse_month_name
+        
+        // Convert the struct tm to a Unix timestamp
+        return mktime(&tmStruct);
+    }
+
     // Fetch an RSS feed and parse the data
     void RSSReader::fetch_and_parse() {
 
@@ -104,6 +143,7 @@ namespace WebUI {
         String rssChunk = "";
         tinyxml2::XMLDocument rssDoc;
         tinyxml2::XMLElement *itemNode = nullptr;
+        String lastBuildDate = "";
 
         // Set up RSS client (use instead of HTTPClient, takes more memory)
         WiFiClient rssClient;
@@ -128,6 +168,30 @@ namespace WebUI {
                     // Read a byte at a time into RSS chunk
                     c = rssClient.read();
                     rssChunk += c;
+
+                    // Check for the last build date - assumes it is before items (as per RSS specification)
+                    if (c == '>' && rssChunk.endsWith("</lastBuildDate>")) {
+
+                        size_t start = rssChunk.lastIndexOf(">", rssChunk.indexOf("</lastBuildDate>"));
+                        lastBuildDate = rssChunk.substring(start + 1, rssChunk.length() - 14); // Extract the date
+                        
+                        // Convert the last build date string to a time_t value
+                        time_t timestamp = parse_last_build_date(lastBuildDate.c_str());
+                        
+                        // Print the last build date as a Unix timestamp
+                        log_info("Last Build Date: " << (int32_t)timestamp);
+
+                        // Feed is updated, notify and update listing
+                        if (timestamp > _last_build_date) {
+                            _last_build_date = timestamp;
+                            log_info("*Feed is updated*");
+                        
+                        // Feed hasn't changed, terminate RSS connection
+                        } else {
+                            rssClient.stop();
+                            return;
+                        }
+                    }
 
                     // Check for the end of an item
                     if (itemNode && c == '>' && rssChunk.endsWith("</item>")) {

@@ -25,8 +25,11 @@ namespace WebUI {
         String      _web_rss_address;
         uint32_t    _wait_period_ms;
         uint32_t    _wait_start_time_ms;
+        time_t      _last_build_date;
     
         void        parse_item(tinyxml2::XMLElement *itemNode);
+        int         parse_month_name(const char *monthName);
+        time_t      parse_last_build_date(const char *lastBuildDate);
         void        fetch_and_parse();
     };
 
