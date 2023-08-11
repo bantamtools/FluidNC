@@ -3,6 +3,7 @@
 #pragma once
 
 #include <cstdint>
+#include <tinyxml2.h>
 
 namespace WebUI {
     class RSSReader {
@@ -24,7 +25,7 @@ namespace WebUI {
         uint32_t    _wait_period_ms;
         uint32_t    _wait_start_time_ms;
     
-        void        parse_titles(const String& rssData);
+        void        parse_item(tinyxml2::XMLElement *itemNode);
         void        fetch_and_parse();
     };
 

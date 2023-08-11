@@ -13,7 +13,6 @@
 #include "Driver/sdspi.h"
 
 #include <HTTPClient.h>
-#include <tinyxml2.h>
 
 #define MENU_NAME_MAX_STR   40
 #define MENU_NAME_MAX_PATH  255

@@ -12,7 +12,8 @@ namespace WebUI {
 
 namespace WebUI {
 
-    static const String DEFAULT_RSS_URL = "https://www.mattstaniszewski.net/test_feed.xml";
+    static const String DEFAULT_RSS_URL         = "https://www.mattstaniszewski.net/test_feed.xml";
+    static const int DEFAULT_RSS_BOOT_WAIT_MS   = 30000;
     static const int DEFAULT_RSS_WAIT_PERIOD_MS = 10000;
 
     // Constructor
@@ -57,8 +58,9 @@ namespace WebUI {
     void RSSReader::handle() {
         if (_started) {
 
-            // Poll the XML data and refresh the list after wait expires or at start
-            if ((_wait_start_time_ms == 0) || ((millis() - _wait_start_time_ms) >= DEFAULT_RSS_WAIT_PERIOD_MS)) {
+            // Poll the XML data and refresh the list after wait expires or after boot delay
+            if ((_wait_start_time_ms == 0 && (millis() < DEFAULT_RSS_BOOT_WAIT_MS)) || 
+                ((millis() - _wait_start_time_ms) >= DEFAULT_RSS_WAIT_PERIOD_MS)) {
 
                 // Parse XML data
                 fetch_and_parse();
@@ -81,38 +83,82 @@ namespace WebUI {
     // Destructor
     RSSReader::~RSSReader() { end(); }
 
-    // Parses the titles in XML data
-    void RSSReader::parse_titles(const String& rssData) {
+    // Parses the items in XML data
+    void RSSReader::parse_item(tinyxml2::XMLElement *itemNode) {
 
-        tinyxml2::XMLDocument xml;
-        if (xml.Parse(rssData.c_str()) == tinyxml2::XML_SUCCESS) {
-            tinyxml2::XMLElement* channel = xml.FirstChildElement("rss")->FirstChildElement("channel");
-            tinyxml2::XMLElement* item = channel->FirstChildElement("item");
-
-            while (item) {
-                const char* title = item->FirstChildElement("title")->GetText();
-                log_info(title);
-                item = item->NextSiblingElement("item");
-            }
-        } else {
-            log_error("XML parsing error");
-        }
+        // Parse and process <title> and <link> elements
+        const char *title = itemNode->FirstChildElement("title")->GetText();
+        const char *link = itemNode->FirstChildElement("link")->GetText();
+        
+        // Print them out
+        log_info("Title: " << title << ", Link: " << link);
     }
 
     // Fetch an RSS feed and parse the data
     void RSSReader::fetch_and_parse() {
 
         HTTPClient http;
-        http.begin(_url);
 
-        int httpCode = http.GET();
+        // Start the HTTP client and GET request
+        http.begin(_url);
+        int httpCode = http.GET(); // Fetch the content from the URL
+        
+        // OK response, process RSS data
         if (httpCode == HTTP_CODE_OK) {
-            String rssData = http.getString();
-            parse_titles(rssData);
+
+            tinyxml2::XMLDocument xmlDoc;
+            tinyxml2::XMLElement *itemNode = nullptr;
+            String xmlChunk = "";
+            char c;
+
+            // Create stream for reading chunks (less memory)
+            WiFiClient *stream = http.getStreamPtr();
+
+            // Valid stream with data
+            while (stream->connected() && stream->available()) {
+
+                // Read a character and add to chunk
+                c = stream->read();
+                xmlChunk += c;
+
+                // Check for the end of an item
+                if (itemNode && c == '>' && xmlChunk.endsWith("</item>")) {
+
+                    // Extract the <item> content from the chunk
+                    size_t start = xmlChunk.indexOf("<item>");
+                    size_t end = xmlChunk.indexOf("</item>") + 7; // Include the </item> tag
+                    xmlChunk = xmlChunk.substring(start, end);
+
+                    // Parse the extracted item content
+                    if (xmlDoc.Parse(xmlChunk.c_str(), xmlChunk.length()) == tinyxml2::XML_SUCCESS) {
+
+                        itemNode = xmlDoc.FirstChildElement("item");
+                        parse_item(itemNode);
+                        itemNode = nullptr;
+                        xmlDoc.Clear();
+                        
+                    } else {
+                        Serial.println("Failed to parse item XML");
+                    }
+
+                    // Clear the chunk
+                    xmlChunk = "";
+
+                }
+
+                // Check for the start of a new item
+                if (!itemNode && c == '>' && xmlChunk.endsWith("<item>")) {
+                    itemNode = xmlDoc.NewElement("item");
+                    xmlChunk = "<item>";
+                }
+            }
+        
+        // Error response
         } else {
-            log_info("Failed to fetch RSS feed");
+            Serial.printf("HTTP request failed with code %d\n", httpCode);
         }
 
+        // Close HTTP client 
         http.end();
     }
 }
