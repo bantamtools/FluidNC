@@ -60,6 +60,8 @@ enum class JogState : uint8_t {
 
 class OLED : public Channel, public Configuration::Configurable {
 public:
+    MenuType *main_menu, *files_menu, *jogging_menu, *rss_menu, *settings_menu, *version_menu, *current_menu;
+
     struct Layout {
         uint8_t                    _x;
         uint8_t                    _y;
@@ -78,6 +80,8 @@ public:
     static Layout radioAddrLayout;
     static Layout connectWifiLayout;
 
+    void menu_add(MenuType *, MenuType *, const char *, const char *);
+    void menu_delete(MenuType *);
     bool menu_is_files_list(void);
     struct MenuNodeType *menu_get_selected();
     void menu_enter_submenu();
@@ -85,9 +89,9 @@ public:
     JogState menu_get_jog_state();
     void menu_set_jog_state(JogState);
     void menu_show_error(String);
+    void show_menu();
     
 private:
-    MenuType *main_menu, *files_menu, *jogging_menu, *settings_menu, *version_menu, *current_menu;
     int enc_diff = 0;
 
     std::string _report;
@@ -108,8 +112,6 @@ private:
 
     struct MenuNodeType *menu_get_active_tail(MenuType *, int);
     void menu_initialize(MenuType *, MenuType *);
-    void menu_add(MenuType *, MenuType *, const char *, const char *);
-    void menu_delete(MenuType *);
     void menu_populate_files_list();
     void menu_init();
     void menu_update_selection(int);
@@ -127,7 +129,6 @@ private:
     void parse_numbers(std::string s, float* nums, int maxnums);
 
     void show_limits(bool probe, const bool* limits);
-    void show_menu();
     void show_state();
     void show_file();
     void show_dro(float* axes, bool isMpos, bool* limits);

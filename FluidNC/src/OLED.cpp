@@ -301,6 +301,7 @@ void OLED::menu_init(void) {
     main_menu = (MenuType*)malloc(sizeof(struct MenuType));
     files_menu = (MenuType*)malloc(sizeof(struct MenuType));
     jogging_menu = (MenuType*)malloc(sizeof(struct MenuType));
+    rss_menu = (MenuType*)malloc(sizeof(struct MenuType));
     settings_menu = (MenuType*)malloc(sizeof(struct MenuType));
     version_menu = (MenuType*)malloc(sizeof(struct MenuType));
 
@@ -308,6 +309,7 @@ void OLED::menu_init(void) {
     menu_initialize(main_menu, NULL);
     menu_initialize(files_menu, main_menu);
     menu_initialize(jogging_menu, main_menu);
+    menu_initialize(rss_menu, main_menu);
     menu_initialize(settings_menu, main_menu);
     menu_initialize(version_menu, settings_menu);
 
@@ -318,6 +320,7 @@ void OLED::menu_init(void) {
     menu_add(main_menu, NULL, NULL, "Home");
     menu_add(main_menu, jogging_menu, NULL, "Jogging");
     menu_add(main_menu, files_menu, NULL, "Run from SD");
+    menu_add(main_menu, rss_menu, NULL, "RSS Feed");
     menu_add(main_menu, settings_menu, NULL, "Settings");
 
     // Jogging Menu
@@ -325,6 +328,9 @@ void OLED::menu_init(void) {
     menu_add(jogging_menu, NULL, NULL, "Jog X");
     menu_add(jogging_menu, NULL, NULL, "Jog Y");
     menu_add(jogging_menu, NULL, NULL, "Jog Z");
+
+    // RSS Menu
+    menu_add(rss_menu, NULL, NULL, "< Back");
 
     // Settings Menu
     menu_add(settings_menu, NULL, NULL, "< Back");
@@ -517,7 +523,7 @@ void OLED::show_menu() {
     // Set up font and menu window
     _oled->setFont(ArialMT_Plain_10);
     menu_height = 13;
-    (current_menu == files_menu || current_menu == version_menu) ? menu_width = 128 : menu_width = 64;
+    (current_menu == files_menu || current_menu == rss_menu || current_menu == version_menu) ? menu_width = 128 : menu_width = 64;
     menu_max_active_entries = 4;
 
     // Clear any highlighting left in menu area
@@ -622,7 +628,7 @@ void OLED::show_dro(float* axes, bool isMpos, bool* limits) {
     saved_limits = limits;
 
     if (_state == "Alarm" || _state == "Hold:0" || _state == "Hold:1" ||
-        current_menu == files_menu || current_menu == version_menu) {
+        current_menu == files_menu || current_menu == rss_menu ||current_menu == version_menu) {
         return;
     }
 
