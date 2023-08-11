@@ -50,6 +50,11 @@ namespace Kinematics {
         float m_next_right;
         float m_left_last_report; // latest motor pos while move in progress
         float m_right_last_report;
+        // state for capturing and delaying Z-down moves
+        bool m_have_captured_z;
+        float m_captured_z_target;
+        float m_captured_z_prev;
+        plan_line_data_t* m_captured_z_pldata;
 
 
         // Parameters
@@ -57,6 +62,7 @@ namespace Kinematics {
         int _right_motor_axis   = 1;
         //float _wheel_radius     = 20.0;
         float _distance_between_wheels = 50.0;
+        bool _use_z_delay = false; // attempt to delay Z down moves (engage pen/media) until after in-place turns
 
     };
 }

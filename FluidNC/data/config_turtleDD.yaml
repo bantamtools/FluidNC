@@ -16,14 +16,15 @@ stepping:
 
 kinematics:
   DifferentialDrive:
-    distance_between_wheels: 150
+    distance_between_wheels: 189
+    use_z_delay: true
 
 axes:
   shared_stepper_disable_pin: NO_PIN
   shared_stepper_reset_pin: NO_PIN
   
   x:
-    steps_per_mm: 4.464
+    steps_per_mm: 6.904
     max_rate_mm_per_min: 2000
     acceleration_mm_per_sec2: 1000
     max_travel_mm: 1000
@@ -46,7 +47,7 @@ axes:
       null_motor:
 
   y:
-    steps_per_mm: 4.464
+    steps_per_mm: 6.904
     max_rate_mm_per_min: 2000
     acceleration_mm_per_sec2: 1000
     max_travel_mm: 1000
@@ -78,8 +79,8 @@ axes:
       rc_servo:
         pwm_hz: 50
         output_pin: gpio.39:low
-        min_pulse_us: 1300
-        max_pulse_us: 2300
+        min_pulse_us: 2300
+        max_pulse_us: 1300
 
 # OLED
 i2c0:

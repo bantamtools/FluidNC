@@ -11,6 +11,7 @@ namespace Kinematics {
         handler.item("right_motor_axis", _right_motor_axis);
         //handler.item("wheel_radius", _wheel_radius);  // this is folded into the motor config's steps/mm
         handler.item("distance_between_wheels", _distance_between_wheels);
+        handler.item("use_z_delay", _use_z_delay);
         log_info("DD wheel distance: " << _distance_between_wheels);
     }
 
@@ -29,6 +30,10 @@ namespace Kinematics {
         m_next_right = 0.0;
         m_left_last_report = 0.0;
         m_right_last_report = 0.0;
+        m_have_captured_z = false;
+        m_captured_z_target = 0.0;
+        m_captured_z_prev = 0.0;
+        m_captured_z_pldata = NULL;
         init_position();
     }
 
@@ -66,11 +71,21 @@ namespace Kinematics {
         if (XY_cartesian_distance == 0) {
             motors[X_AXIS] = m_motor_left; // don't move from current position
             motors[Y_AXIS] = m_motor_right;
-            for (size_t axis = Z_AXIS; axis < n_axis; axis++) { // pass through any other axis moves (like Z for pen)
+            if (_use_z_delay && (target[Z_AXIS] < position[Z_AXIS])) { // capture Z-down only move and save for later
+                motors[Z_AXIS] = position[Z_AXIS]; // don't move
+                m_captured_z_target = target[Z_AXIS];
+                m_captured_z_prev = position[Z_AXIS];
+                m_captured_z_pldata = pl_data;
+                m_have_captured_z = true;
+            } else {
+                motors[Z_AXIS] = target[Z_AXIS];
+            }
+            for (size_t axis = Z_AXIS+1; axis < n_axis; axis++) { // pass through any remaining axis moves
                 motors[axis] = target[axis];
             }
             return mc_move_motors(motors, pl_data);
         }
+        // finished with no X/Y movement case
 
         // record starting motor positions and cartesian start and end
         m_prev_left = m_motor_left;
@@ -89,7 +104,7 @@ namespace Kinematics {
         if (turn_angle > PI) { turn_angle -= 2.0*PI; }
         if (turn_angle < -PI) { turn_angle += 2.0*PI; }
         // Now it should be within +- 180
-        // TODO: Further optimization: if angle is further than +-90, turn the supplementary and move backward
+        // TODO?: Further optimization: if angle beyond +/-90, could turn the supplementary and move backward - but some media may not draw well backward
         // To turn in place we move each wheel in opposite directions.
         // The distance covered by each wheel is given by the formula
         //      Dist = (angle_radians/2pi)*(wheelbase*pi) = angle*wheelbase/2
@@ -102,7 +117,12 @@ namespace Kinematics {
         float right_target = m_motor_right - wheel_turn_dist;
         motors[X_AXIS] = left_target;
         motors[Y_AXIS] = right_target;
-        for (size_t axis = Z_AXIS; axis < n_axis; axis++) { // pass through any other axis positions (like Z for pen)
+        if (m_have_captured_z) { // if we're holding Z until after turn, keep it at previous value here
+            motors[Z_AXIS] = m_captured_z_prev;
+        } else {
+            motors[Z_AXIS] = target[Z_AXIS];
+        }
+        for (size_t axis = Z_AXIS+1; axis < n_axis; axis++) { // pass through any other axis positions
             motors[axis] = target[axis];
         }
         // execute the turn and continue
@@ -113,6 +133,17 @@ namespace Kinematics {
         m_heading = new_heading;
         m_motor_left = left_target;
         m_motor_right = right_target;
+
+        // if we have a previously captured Z-down move, we execute it here after the turn but before the traverse
+        if(m_have_captured_z) {
+            motors[X_AXIS] = m_motor_left; // no move
+            motors[Y_AXIS] = m_motor_right; // no move
+            motors[Z_AXIS] = m_captured_z_target;
+            m_have_captured_z = false; // clear flag preemptively so we don't try to do this again
+            if (!mc_move_motors(motors, m_captured_z_pldata)) { // execute Z down move
+                return false;
+            }
+        }
 
         // set starting motor positions for straight move (testing)
         m_prev_left = m_motor_left;
@@ -125,7 +156,7 @@ namespace Kinematics {
         m_next_right = m_motor_right + XY_cartesian_distance;
         motors[X_AXIS] = m_next_left;
         motors[Y_AXIS] = m_next_right;
-        for (size_t axis = Z_AXIS; axis < n_axis; axis++) { // pass through any other axis moves (like Z for pen)
+        for (size_t axis = Z_AXIS; axis < n_axis; axis++) { // pass through any other axis moves
             motors[axis] = target[axis];
         }
         if (!mc_move_motors(motors, pl_data)) {
