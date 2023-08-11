@@ -110,10 +110,6 @@ void setup() {
                 config->_encoder->init();
             }
 
-            if (config->_rss_reader != nullptr) {
-                config->_rss_reader->init();
-            }
-
             config->_stepping->init();  // Configure stepper interrupt timers
 
             plan_init();
