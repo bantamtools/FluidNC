@@ -60,7 +60,6 @@ enum class JogState : uint8_t {
 
 class OLED : public Channel, public Configuration::Configurable {
 public:
-    MenuType *main_menu, *files_menu, *jogging_menu, *rss_menu, *settings_menu, *version_menu, *current_menu;
 
     struct Layout {
         uint8_t                    _x;
@@ -80,8 +79,6 @@ public:
     static Layout radioAddrLayout;
     static Layout connectWifiLayout;
 
-    void menu_add(MenuType *, MenuType *, const char *, const char *);
-    void menu_delete(MenuType *);
     bool menu_is_files_list(void);
     struct MenuNodeType *menu_get_selected();
     void menu_enter_submenu();
@@ -89,9 +86,14 @@ public:
     JogState menu_get_jog_state();
     void menu_set_jog_state(JogState);
     void menu_show_error(String);
-    void show_menu();
-    
+    void menu_add_sd_file();
+    void menu_add_rss_link(const char *link, const char *title);
+    void menu_prep_for_sd_update();
+    void menu_prep_for_rss_update();
+
 private:
+
+    MenuType *main_menu, *files_menu, *jogging_menu, *rss_menu, *settings_menu, *version_menu, *current_menu;
     int enc_diff = 0;
 
     std::string _report;
@@ -112,6 +114,9 @@ private:
 
     struct MenuNodeType *menu_get_active_tail(MenuType *, int);
     void menu_initialize(MenuType *, MenuType *);
+    void menu_add(MenuType *, MenuType *, const char *, const char *);
+    void menu_delete(MenuType *);
+    void menu_prep_for_list(MenuType *menu);
     void menu_populate_files_list();
     void menu_init();
     void menu_update_selection(int);
@@ -130,6 +135,7 @@ private:
 
     void show_limits(bool probe, const bool* limits);
     void show_state();
+    void show_menu();
     void show_file();
     void show_dro(float* axes, bool isMpos, bool* limits);
     void show_radio_info();

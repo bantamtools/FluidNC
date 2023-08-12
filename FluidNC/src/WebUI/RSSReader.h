@@ -28,7 +28,6 @@ namespace WebUI {
         uint32_t    _wait_start_time_ms;
         time_t      _last_build_date;
     
-        void        prep_rss_menu(void);
         void        parse_item(tinyxml2::XMLElement *itemNode);
         int         parse_month_name(const char *monthName);
         time_t      parse_last_build_date(const char *lastBuildDate);

@@ -224,6 +224,19 @@ void OLED::menu_add(MenuType *menu, MenuType *submenu, const char *path, const c
     // Add menu item at the tail
     temp->next = new_entry;
     new_entry->prev = temp;
+
+    // Refresh the menu
+    show_menu();
+}
+
+// Helper function to add SD file to files menu
+void OLED::menu_add_sd_file() {
+    
+}
+
+// Helper function to add RSS link to RSS menu
+void OLED::menu_add_rss_link(const char *link, const char *title) {
+    menu_add(rss_menu, NULL, link, title);  // TODO
 }
 
 // Deletes all nodes in the given menu
@@ -254,16 +267,16 @@ void OLED::menu_delete(MenuType *menu) {
     menu->head = menu->active_head = NULL;
 }
 
-// Populates the file list from SD card
-void OLED::menu_populate_files_list(void) {
-
-    MenuNodeType *entry = current_menu->head;  // Start at the top of the active menu
+// Prepares the given menu for an updated file/feed list
+void OLED::menu_prep_for_list(MenuType *menu) {
     
-    // If not in the files menu, find the node attached the the files menu
-    while (current_menu != files_menu && entry) {
+    MenuNodeType *entry = current_menu->head;  // Start at the top of the active menu
 
-        // Found the load files node
-        if (entry->child == files_menu) {
+    // If not in the given menu, find the node attached that menu
+    while (current_menu != menu && entry) {
+
+        // Found the given menu node
+        if (entry->child == menu) {
             break;
         }
 
@@ -271,17 +284,34 @@ void OLED::menu_populate_files_list(void) {
         entry = entry->next;
     }
 
-    // Get the file listing
-    FileListType *files = sd_get_filelist();
-
     // Clear out the menu nodes if they already exist
-    if ((current_menu == files_menu && current_menu->head) ||
-        (current_menu != files_menu && entry->child->head)) {
-        menu_delete(files_menu);
+    if ((current_menu == menu && current_menu->head) ||
+        (current_menu != menu && entry->child->head)) {
+        menu_delete(menu);
     }
 
     // Add the back button to top of menu
-    menu_add(this->files_menu, NULL, NULL, "< Back");
+    menu_add(menu, NULL, NULL, "< Back");
+}
+
+// Helper function to prep for updated SD file list
+void OLED::menu_prep_for_sd_update(void) {
+    menu_prep_for_list(files_menu);
+}
+
+// Helper function to prep for updated RSS feed
+void OLED::menu_prep_for_rss_update(void) {
+    menu_prep_for_list(rss_menu);
+}
+
+// Populates the file list from SD card
+void OLED::menu_populate_files_list(void) {
+
+    // Prep the file menu for updated SD list
+    menu_prep_for_sd_update();
+
+    // Get the file listing
+    FileListType *files = sd_get_filelist();
 
     // Create a submenu of files
     for (auto i = 0; i < files->num_files; i++) {
@@ -1067,7 +1097,6 @@ void OLED::parse_report() {
     // Refresh the screen on card detect event to update file list
      if ((_report.rfind("[MSG:INFO: SD Card Detect Event]", 0) == 0) && (current_menu == files_menu)) {
         menu_populate_files_list();
-        show_menu();
         return;
     }   
 }

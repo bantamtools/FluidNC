@@ -87,33 +87,6 @@ namespace WebUI {
     // Destructor
     RSSReader::~RSSReader() { end(); }
 
-    // Prepares the RSS menu to receive an updated feed
-    void RSSReader::prep_rss_menu(void) {
-
-        MenuNodeType *entry = config->_oled->current_menu->head;  // Start at the top of the active menu
-        
-        // If not in the RSS menu, find the node attached the the RSS menu
-        while (config->_oled->current_menu != config->_oled->rss_menu && entry) {
-
-            // Found the RSS feed node
-            if (entry->child == config->_oled->rss_menu) {
-                break;
-            }
-
-            // Advance the pointer
-            entry = entry->next;
-        }
-
-        // Clear out the menu nodes if they already exist
-        if ((config->_oled->current_menu == config->_oled->rss_menu && config->_oled->current_menu->head) ||
-            (config->_oled->current_menu != config->_oled->rss_menu && entry->child->head)) {
-            config->_oled->menu_delete(config->_oled->rss_menu);
-        }
-
-        // Add the back button to top of menu
-        config->_oled->menu_add(config->_oled->rss_menu, NULL, NULL, "< Back");
-    }
-
     // Parses the items in RSS data
     void RSSReader::parse_item(tinyxml2::XMLElement *itemNode) {
 
@@ -125,7 +98,7 @@ namespace WebUI {
         log_info("Title: " << title << ", Link: " << link);
 
          // Add the item to the RSS menu on screen
-        config->_oled->menu_add(config->_oled->rss_menu, NULL, NULL, title);  // TODO
+        config->_oled->menu_add_rss_link(link, title);  // TODO
     }
 
     // Parses a three-letter month name into an integer
@@ -217,7 +190,7 @@ namespace WebUI {
                             log_info("*Feed is updated*");
 
                             // Prep the RSS menu on screen
-                            prep_rss_menu();
+                            config->_oled->menu_prep_for_rss_update();
                         
                         // Feed hasn't changed, terminate RSS connection
                         } else {
@@ -255,9 +228,6 @@ namespace WebUI {
                     }
                 }
             }
-
-            // Update the RSS menu
-            config->_oled->show_menu();
         
         // Connection to RSS server failed
         } else {
