@@ -1,21 +1,14 @@
 #pragma once
 
 #include "esp_timer.h"
-
 #include "Config.h"
-
 #include "Configuration/Configurable.h"
-
 #include "Channel.h"
 #include "SSD1306_I2C.h"
 #include "Limits.h"
-
-#include "Driver/sdspi.h"
-
-#include <HTTPClient.h>
-
-#define MENU_NAME_MAX_STR   40
-#define MENU_NAME_MAX_PATH  255
+#include "Menu.h"
+//#include "Driver/sdspi.h"
+//#include <HTTPClient.h>
 
 // Jogging settings
 #define JOG_X_STEP              1.0
@@ -24,32 +17,7 @@
 #define JOG_TIMER_MS            250
 #define JOG_FEEDRATE            1000.0
 
-extern const char* git_info_short;
-extern const char* fluidnc_version;
-
 typedef const uint8_t* font_t;
-
-typedef struct MenuNodeType
-{
-    // Menu neighbor attributes
-    struct MenuNodeType *prev;
-    struct MenuNodeType *next;
-
-    // Submenu attributes
-    struct MenuType *child;
-
-    // Menu entry characteristics
-    char display_name[MENU_NAME_MAX_STR];
-    char path[MENU_NAME_MAX_PATH];
-    bool selected;
-
-} MenuNodeType;
-
-typedef struct MenuType {
-    struct MenuType *parent;
-    struct MenuNodeType *head;
-    struct MenuNodeType *active_head;
-} MenuType;
 
 // Jogging states
 enum class JogState : uint8_t {
@@ -79,22 +47,7 @@ public:
     static Layout radioAddrLayout;
     static Layout connectWifiLayout;
 
-    bool menu_is_files_list(void);
-    struct MenuNodeType *menu_get_selected();
-    void menu_enter_submenu();
-    void menu_exit_submenu();
-    JogState menu_get_jog_state();
-    void menu_set_jog_state(JogState);
-    void menu_show_error(String);
-    void menu_add_sd_file();
-    void menu_add_rss_link(const char *link, const char *title);
-    void menu_prep_for_sd_update();
-    void menu_prep_for_rss_update();
-
 private:
-
-    MenuType *main_menu, *files_menu, *jogging_menu, *rss_menu, *settings_menu, *version_menu, *current_menu;
-    int enc_diff = 0;
 
     std::string _report;
 
@@ -112,15 +65,8 @@ private:
 
     uint8_t _i2c_num = 0;
 
-    struct MenuNodeType *menu_get_active_tail(MenuType *, int);
-    void menu_initialize(MenuType *, MenuType *);
-    void menu_add(MenuType *, MenuType *, const char *, const char *);
-    void menu_delete(MenuType *);
-    void menu_prep_for_list(MenuType *menu);
-    void menu_populate_files_list();
-    void menu_init();
-    void menu_update_selection(int);
-
+    int _enc_diff = 0;
+    
     void parse_report();
     void parse_status_report();
     void parse_gcode_report();
@@ -169,8 +115,12 @@ public:
     virtual ~OLED() = default;
 
     void init();
+    void refresh_display();
+    JogState get_jog_state();
+    void set_jog_state(JogState);
 
     OLEDDisplay* _oled;
+    Menu* _menu;
 
     // Configurable
 
