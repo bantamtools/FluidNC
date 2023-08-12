@@ -5,12 +5,12 @@
 Menu::Menu() {
 
     // Allocate memory for the menus
-    _main_menu = (MenuType*)malloc(sizeof(struct MenuType));
-    _files_menu = (MenuType*)malloc(sizeof(struct MenuType));
-    _jogging_menu = (MenuType*)malloc(sizeof(struct MenuType));
-    _rss_menu = (MenuType*)malloc(sizeof(struct MenuType));
-    _settings_menu = (MenuType*)malloc(sizeof(struct MenuType));
-    _version_menu = (MenuType*)malloc(sizeof(struct MenuType));
+    _main_menu = new struct MenuType;
+    _files_menu = new struct MenuType;
+    _jogging_menu = new struct MenuType;
+    _rss_menu = new struct MenuType;
+    _settings_menu = new struct MenuType;
+    _version_menu = new struct MenuType;
 
     // Initialize the menus
     initialize(_main_menu, NULL);
@@ -22,6 +22,29 @@ Menu::Menu() {
 
     // Set main menu as current
     _current_menu = _main_menu;
+}
+
+// Destructor
+Menu::~Menu() {
+
+    // Set main menu as none
+    _current_menu = nullptr;
+
+    // Remove all the menu nodes
+    remove(_version_menu);
+    remove(_settings_menu);
+    remove(_rss_menu);
+    remove(_jogging_menu);
+    remove(_files_menu);
+    remove(_main_menu);
+
+    // Deallocate memory for the menus
+    delete(_version_menu);
+    delete(_settings_menu);
+    delete(_rss_menu);
+    delete(_jogging_menu);
+    delete(_files_menu);
+    delete(_main_menu);
 }
 
 // Returns true if the current menu is the files menu
@@ -220,7 +243,7 @@ void Menu::prep_for_list(MenuType *menu) {
     // Clear out the menu nodes if they already exist
     if ((_current_menu == menu && _current_menu->head) ||
         (_current_menu != menu && entry->child->head)) {
-        delete(menu);
+        remove(menu);
     }
 
     // Add the back button to top of menu
@@ -272,9 +295,6 @@ void Menu::init(void) {
     add(_jogging_menu, NULL, NULL, "Jog X");
     add(_jogging_menu, NULL, NULL, "Jog Y");
     add(_jogging_menu, NULL, NULL, "Jog Z");
-
-    // RSS Menu
-    add(_rss_menu, NULL, NULL, "< Back");
 
     // Settings Menu
     add(_settings_menu, NULL, NULL, "< Back");

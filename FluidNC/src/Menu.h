@@ -45,7 +45,7 @@ private:
 public:
 
     Menu();
-    virtual ~Menu() = default;
+    ~Menu();
 
     void init();
     bool is_files_list();
