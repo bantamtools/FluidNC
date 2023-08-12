@@ -60,8 +60,6 @@ namespace WebUI {
 
     // Processes any RSS reader changes
     void RSSReader::handle() {
-
-        return; //TEMP
         
         if (_started) {
 
@@ -231,6 +229,9 @@ namespace WebUI {
                     }
                 }
             }
+
+            // Refresh the display
+            config->_oled->refresh_display();
         
         // Connection to RSS server failed
         } else {
