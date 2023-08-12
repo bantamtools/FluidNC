@@ -159,9 +159,8 @@ void OLED::init() {
 
     _oled->display();
 
-    // Initialize the menu
-    _menu = new Menu();
-    _menu->init();
+    // Build the menu
+    _menu->build();
 
     // Not jogging at init
     jog_state = JogState::Idle;

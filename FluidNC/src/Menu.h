@@ -37,7 +37,7 @@ private:
     MenuType *_main_menu, *_files_menu, *_jogging_menu, *_rss_menu, *_settings_menu, *_version_menu, *_current_menu;
 
     struct MenuNodeType *get_active_tail(MenuType *, int);
-    void initialize(MenuType *, MenuType *);
+    void init(MenuType *, MenuType *);
     void add(MenuType *, MenuType *, const char *, const char *);
     void remove(MenuType *);
     void prep_for_list(MenuType *menu);
@@ -47,7 +47,7 @@ public:
     Menu();
     ~Menu();
 
-    void init();
+    void build();
     bool is_files_list();
     struct MenuNodeType *get_active_head();
     struct MenuNodeType *get_selected();

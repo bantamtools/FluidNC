@@ -119,7 +119,7 @@ public:
     void set_jog_state(JogState);
 
     OLEDDisplay* _oled;
-    Menu* _menu;
+    Menu* _menu = new Menu();
 
     // Configurable
 

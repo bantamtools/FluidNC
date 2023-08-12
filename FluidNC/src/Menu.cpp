@@ -13,12 +13,12 @@ Menu::Menu() {
     _version_menu = new struct MenuType;
 
     // Initialize the menus
-    initialize(_main_menu, NULL);
-    initialize(_files_menu, _main_menu);
-    initialize(_jogging_menu, _main_menu);
-    initialize(_rss_menu, _main_menu);
-    initialize(_settings_menu, _main_menu);
-    initialize(_version_menu, _settings_menu);
+    init(_main_menu, NULL);
+    init(_files_menu, _main_menu);
+    init(_jogging_menu, _main_menu);
+    init(_rss_menu, _main_menu);
+    init(_settings_menu, _main_menu);
+    init(_version_menu, _settings_menu);
 
     // Set main menu as current
     _current_menu = _main_menu;
@@ -138,7 +138,7 @@ struct MenuNodeType *Menu::get_active_tail(MenuType *menu, int max_active_entrie
 }
 
 // Initializes a menu with default settings
-void Menu::initialize(MenuType *menu, MenuType *parent) {
+void Menu::init(MenuType *menu, MenuType *parent) {
     
     // Initialize the menu to empty with no active window
     menu->head = menu->active_head = NULL;
@@ -280,8 +280,8 @@ void Menu::populate_files_list(void) {
     }
 }
 
-// Initializes the menu subsystem
-void Menu::init(void) {
+// Builds the menu system
+void Menu::build(void) {
 
     // Main Menu
     add(_main_menu, NULL, NULL, "Home");
