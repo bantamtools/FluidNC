@@ -83,6 +83,11 @@ void OLED::set_jog_state(JogState state) {
     jog_state = state;
 }
 
+// Returns true if OLED is active and ready
+bool OLED::is_active() {
+    return _active;
+}
+
 void OLED::show(Layout& layout, const char* msg) {
     if (_width < layout._width_required) {
         return;
@@ -166,6 +171,7 @@ void OLED::init() {
     allChannels.registration(this);
     setReportInterval(250);
 
+    _active = true;
 }
 
 Channel* OLED::pollLine(char* line) {
@@ -411,6 +417,9 @@ void OLED::show_all(float *axes, bool isMpos, bool *limits) {
 }
 
 void OLED::refresh_display(bool menu_only) {
+
+    if (!_active) return;
+    
     if (menu_only) {
         show_menu();
     } else {

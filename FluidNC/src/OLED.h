@@ -101,6 +101,7 @@ private:
     OLEDDISPLAY_GEOMETRY _geometry = GEOMETRY_128_64;
 
     bool _error = false;
+    bool _active = false;
 
 public:
     OLED() : Channel("oled") {}
@@ -117,6 +118,7 @@ public:
     void popup_msg(String msg);
     JogState get_jog_state();
     void set_jog_state(JogState);
+    bool is_active();
 
     OLEDDisplay* _oled;
     Menu* _menu = new Menu();
