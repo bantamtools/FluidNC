@@ -1097,6 +1097,7 @@ void OLED::parse_report() {
     // Refresh the screen on card detect event to update file list
      if ((_report.rfind("[MSG:INFO: SD Card Detect Event]", 0) == 0) && (current_menu == files_menu)) {
         menu_populate_files_list();
+        show_menu();
         return;
     }   
 }
