@@ -1,4 +1,5 @@
 #include "Menu.h"
+#include "Machine/MachineConfig.h"
 
 // Returns true if the current menu is the files menu
  bool Menu::is_files_list(void) {
@@ -63,15 +64,6 @@ void Menu::exit_submenu(void) {
         // Refresh the display
         config->_oled->refresh_display();
     }
-}
-
-// Display an error message temporarily
-void Menu::show_error(String msg) {
-
-    // Show error message for 2s then restore display
-    show_error(msg);
-    delay_ms(2000);
-    config->_oled->refresh_display();
 }
 
 // Helper function to return the active tail

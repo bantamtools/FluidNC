@@ -1109,42 +1109,42 @@ static void protocol_do_enter() {
         case State::Idle:
             
             // Home command
-            if (strcmp(config->_oled->menu_get_selected()->display_name, "Home") == 0) {
+            if (strcmp(config->_oled->_menu->get_selected()->display_name, "Home") == 0) {
                 Machine::Homing::run_cycles(Machine::Homing::AllCycles);
 
             // Display homing error if try to jog unhomed
-            } else if (strstr(config->_oled->menu_get_selected()->display_name, "Jog") && Machine::Homing::_phase == Machine::Homing::Phase::None)   {
+            } else if (strstr(config->_oled->_menu->get_selected()->display_name, "Jog") && Machine::Homing::_phase == Machine::Homing::Phase::None)   {
 
                 // Display error
-                config->_oled->menu_show_error("Machine not homed");
+                config->_oled->popup_msg("Machine not homed");
 
             // Jog command
-            } else if (strstr(config->_oled->menu_get_selected()->display_name, "Jog ")) {
+            } else if (strstr(config->_oled->_menu->get_selected()->display_name, "Jog ")) {
 
-                char axis = (strrchr(config->_oled->menu_get_selected()->display_name, ' ') + 1)[0];
+                char axis = (strrchr(config->_oled->_menu->get_selected()->display_name, ' ') + 1)[0];
 
                 // Enter jogging mode if not active
-                if (config->_oled->menu_get_jog_state() == JogState::Idle) {
-                    config->_oled->menu_set_jog_state(JogState::Scrolling);
+                if (config->_oled->get_jog_state() == JogState::Idle) {
+                    config->_oled->set_jog_state(JogState::Scrolling);
 
                 // Exit jogging mode if press 
                 } else {
-                    config->_oled->menu_set_jog_state(JogState::Idle);
+                    config->_oled->set_jog_state(JogState::Idle);
                 }
 
             // Back button
-            } else if (strcmp(config->_oled->menu_get_selected()->display_name, "< Back") == 0) {
-                config->_oled->menu_exit_submenu();
+            } else if (strcmp(config->_oled->_menu->get_selected()->display_name, "< Back") == 0) {
+                config->_oled->_menu->exit_submenu();
 
             // Run files command if files menu
-            } else if (config->_oled->menu_is_files_list()) {
+            } else if (config->_oled->_menu->is_files_list()) {
 
-                InputFile *infile = new InputFile("sd", config->_oled->menu_get_selected()->path, WebUI::AuthenticationLevel::LEVEL_ADMIN, allChannels);
+                InputFile *infile = new InputFile("sd", config->_oled->_menu->get_selected()->path, WebUI::AuthenticationLevel::LEVEL_ADMIN, allChannels);
                 allChannels.registration(infile);
             
             // Otherwise, enter the submenu if it exists
             } else {
-                config->_oled->menu_enter_submenu();
+                config->_oled->_menu->enter_submenu();
             }
             break;
 

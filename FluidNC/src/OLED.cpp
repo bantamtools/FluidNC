@@ -415,6 +415,15 @@ void OLED::refresh_display() {
     show_all(saved_axes, saved_isMpos, saved_limits);
 }
 
+// Display a popup message temporarily
+void OLED::popup_msg(String msg) {
+
+    // Show error message for 2s then restore display
+    show_error(msg);
+    delay_ms(2000);
+    refresh_display();
+}
+
 void OLED::parse_numbers(std::string s, float* nums, int maxnums) {
     size_t pos     = 0;
     size_t nextpos = -1;
@@ -674,7 +683,7 @@ void OLED::parse_encoder() {
     if ((sys.state == State::Idle) && (jog_state == JogState::Scrolling)) {
 
         // Extract axis from menu item
-        char *axis = (strrchr(menu_get_selected()->display_name, ' ') + 1);
+        char *axis = (strrchr(_menu->get_selected()->display_name, ' ') + 1);
 
         // Start timer if not active
         if (!jog_timer_active) {

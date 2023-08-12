@@ -1,23 +1,12 @@
 #pragma once
 
-//#include "esp_timer.h"
-
-//#include "Config.h"
-//#include "Configuration/Configurable.h"
-#include "Machine/MachineConfig.h"
-//#include "Channel.h"
-//#include "SSD1306_I2C.h"
-//#include "Limits.h"
-#include "Driver/sdspi.h"
-//#include <HTTPClient.h>
+#include "Config.h"
 
 #define MENU_NAME_MAX_STR   40
 #define MENU_NAME_MAX_PATH  255
 
 extern const char* git_info_short;
 extern const char* fluidnc_version;
-
-//typedef const uint8_t* font_t;
 
 typedef struct MenuNodeType
 {
@@ -65,17 +54,16 @@ public:
     virtual ~Menu() = default;
 
     void init();
-    bool is_files_list(void);
+    bool is_files_list();
     struct MenuNodeType *get_active_head();
     struct MenuNodeType *get_selected();
     void enter_submenu();
     void exit_submenu();
-    void show_error(String);
     void add_sd_file();
     void add_rss_link(const char *link, const char *title);
     void prep_for_sd_update();
     void prep_for_rss_update();
     void populate_files_list();
     bool is_full_width();
-    void update_selection(int, int);
+    void update_selection(int max_active_entries, int enc_diff);
 };

@@ -7,8 +7,6 @@
 #include "SSD1306_I2C.h"
 #include "Limits.h"
 #include "Menu.h"
-//#include "Driver/sdspi.h"
-//#include <HTTPClient.h>
 
 // Jogging settings
 #define JOG_X_STEP              1.0
@@ -116,6 +114,7 @@ public:
 
     void init();
     void refresh_display();
+    void popup_msg(String msg);
     JogState get_jog_state();
     void set_jog_state(JogState);
 

@@ -60,6 +60,7 @@ namespace WebUI {
 
     // Processes any RSS reader changes
     void RSSReader::handle() {
+        
         if (_started) {
 
             // Poll the XML data and refresh the list after wait expires or after boot
@@ -98,7 +99,7 @@ namespace WebUI {
         log_info("Title: " << title << ", Link: " << link);
 
          // Add the item to the RSS menu on screen
-        config->_oled->menu_add_rss_link(link, title);  // TODO
+        config->_oled->_menu->add_rss_link(link, title);  // TODO
     }
 
     // Parses a three-letter month name into an integer
@@ -190,7 +191,7 @@ namespace WebUI {
                             log_info("*Feed is updated*");
 
                             // Prep the RSS menu on screen
-                            config->_oled->menu_prep_for_rss_update();
+                            config->_oled->_menu->prep_for_rss_update();
                         
                         // Feed hasn't changed, terminate RSS connection
                         } else {
