@@ -38,6 +38,7 @@ private:
 
     struct MenuNodeType *get_active_tail(MenuType *, int);
     void init(MenuType *, MenuType *);
+    void build();
     void add(MenuType *, MenuType *, const char *, const char *);
     void remove(MenuType *);
     void prep_for_list(MenuType *menu);
@@ -47,17 +48,15 @@ public:
     Menu();
     ~Menu();
 
-    void build();
     bool is_files_list();
     struct MenuNodeType *get_active_head();
     struct MenuNodeType *get_selected();
     void enter_submenu();
     void exit_submenu();
-    void add_sd_file();
+    void add_sd_file(char *path);
     void add_rss_link(const char *link, const char *title);
     void prep_for_sd_update();
     void prep_for_rss_update();
-    void populate_files_list();
     bool is_full_width();
     void update_selection(int max_active_entries, int enc_diff);
 };

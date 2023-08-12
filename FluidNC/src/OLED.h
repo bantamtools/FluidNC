@@ -113,7 +113,7 @@ public:
     virtual ~OLED() = default;
 
     void init();
-    void refresh_display();
+    void refresh_display(bool menu_only = false);
     void popup_msg(String msg);
     JogState get_jog_state();
     void set_jog_state(JogState);

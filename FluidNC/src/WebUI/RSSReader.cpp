@@ -141,7 +141,7 @@ namespace WebUI {
 
     // Fetch an RSS feed and parse the data
     void RSSReader::fetch_and_parse() {
-
+        
         bool insideItem = false;
         char c;
         String rssChunk = "";
@@ -230,8 +230,8 @@ namespace WebUI {
                 }
             }
 
-            // Refresh the display
-            config->_oled->refresh_display();
+            // Refresh the menu
+            config->_oled->refresh_display(true);
         
         // Connection to RSS server failed
         } else {

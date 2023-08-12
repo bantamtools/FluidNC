@@ -22,6 +22,9 @@ Menu::Menu() {
 
     // Set main menu as current
     _current_menu = _main_menu;
+
+    // Build the initial menu
+    build();
 }
 
 // Destructor
@@ -87,12 +90,6 @@ void Menu::enter_submenu(void) {
         // Make the submenu active
         _current_menu = selected_entry->child;      
 
-        // Populate the files list if SD file menu
-        if (_current_menu == _files_menu) {
-
-            populate_files_list();
-        }   
-        
         // Refresh the display
         config->_oled->refresh_display();
     }
@@ -186,8 +183,13 @@ void Menu::add(MenuType *menu, MenuType *submenu, const char *path, const char *
 }
 
 // Helper function to add SD file to files menu
-void Menu::add_sd_file() {
-    
+void Menu::add_sd_file(char *path) {
+
+    // Extract the display name from the full path
+    char *filename = strrchr(path, '/') + 1;
+        
+    // Initialize the files menu and attach nodes
+    add(_files_menu, NULL, path, filename);
 }
 
 // Helper function to add RSS link to RSS menu
@@ -258,26 +260,6 @@ void Menu::prep_for_sd_update(void) {
 // Helper function to prep for updated RSS feed
 void Menu::prep_for_rss_update(void) {
     prep_for_list(_rss_menu);
-}
-
-// Populates the file list from SD card
-void Menu::populate_files_list(void) {
-
-    // Prep the file menu for updated SD list
-    prep_for_sd_update();
-
-    // Get the file listing
-    FileListType *files = sd_get_filelist();
-
-    // Create a submenu of files
-    for (auto i = 0; i < files->num_files; i++) {
-
-        // Extract the display name from the full path
-        char *filename = strrchr(files->path[i], '/') + 1;
-        
-        // Initialize the files menu and attach nodes
-        add(_files_menu, NULL, files->path[i], filename);
-    }
 }
 
 // Builds the menu system

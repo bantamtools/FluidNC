@@ -159,10 +159,6 @@ void OLED::init() {
 
     _oled->display();
 
-    // Build the menu
-    _menu->build();
-
-    // Not jogging at init
     jog_state = JogState::Idle;
 
     delay_ms(1000);
@@ -414,8 +410,12 @@ void OLED::show_all(float *axes, bool isMpos, bool *limits) {
     _oled->display();
 }
 
-void OLED::refresh_display() {
-    show_all(saved_axes, saved_isMpos, saved_limits);
+void OLED::refresh_display(bool menu_only) {
+    if (menu_only) {
+        show_menu();
+    } else {
+        show_all(saved_axes, saved_isMpos, saved_limits);
+    }
 }
 
 // Display a popup message temporarily
@@ -770,14 +770,7 @@ void OLED::parse_report() {
     if (_report.rfind("[MSG:INFO: Encoder difference -> ", 0) == 0) {
         parse_encoder();
         return;
-    }
-
-    // Refresh the screen on card detect event to update file list
-     if ((_report.rfind("[MSG:INFO: SD Card Detect Event]", 0) == 0) && (_menu->is_files_list())) {
-        _menu->populate_files_list();
-        show_menu();
-        return;
-    }   
+    } 
 }
 
 // This is how the OLED driver receives channel data
