@@ -268,11 +268,11 @@ void sd_populate_files_menu() {
                 }
             }
         }
-
-        // Refresh the menu
-        config->_oled->refresh_display(true);
         
         // Unmount the SD card
         sd_unmount();
     }
+
+    // Refresh the menu
+    config->_oled->refresh_display(true);
 }
