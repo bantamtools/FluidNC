@@ -1,6 +1,29 @@
 #include "Menu.h"
 #include "Machine/MachineConfig.h"
 
+// Constructor
+Menu::Menu() {
+
+    // Allocate memory for the menus
+    _main_menu = (MenuType*)malloc(sizeof(struct MenuType));
+    _files_menu = (MenuType*)malloc(sizeof(struct MenuType));
+    _jogging_menu = (MenuType*)malloc(sizeof(struct MenuType));
+    _rss_menu = (MenuType*)malloc(sizeof(struct MenuType));
+    _settings_menu = (MenuType*)malloc(sizeof(struct MenuType));
+    _version_menu = (MenuType*)malloc(sizeof(struct MenuType));
+
+    // Initialize the menus
+    initialize(_main_menu, NULL);
+    initialize(_files_menu, _main_menu);
+    initialize(_jogging_menu, _main_menu);
+    initialize(_rss_menu, _main_menu);
+    initialize(_settings_menu, _main_menu);
+    initialize(_version_menu, _settings_menu);
+
+    // Set main menu as current
+    _current_menu = _main_menu;
+}
+
 // Returns true if the current menu is the files menu
  bool Menu::is_files_list(void) {
     return (_current_menu == _files_menu);
@@ -137,9 +160,6 @@ void Menu::add(MenuType *menu, MenuType *submenu, const char *path, const char *
     // Add menu item at the tail
     temp->next = new_entry;
     new_entry->prev = temp;
-
-    // Refresh the display
-    config->_oled->refresh_display();
 }
 
 // Helper function to add SD file to files menu
@@ -239,25 +259,6 @@ void Menu::populate_files_list(void) {
 
 // Initializes the menu subsystem
 void Menu::init(void) {
-
-    // Allocate memory for the menus
-    _main_menu = (MenuType*)malloc(sizeof(struct MenuType));
-    _files_menu = (MenuType*)malloc(sizeof(struct MenuType));
-    _jogging_menu = (MenuType*)malloc(sizeof(struct MenuType));
-    _rss_menu = (MenuType*)malloc(sizeof(struct MenuType));
-    _settings_menu = (MenuType*)malloc(sizeof(struct MenuType));
-    _version_menu = (MenuType*)malloc(sizeof(struct MenuType));
-
-    // Initialize the menus
-    initialize(_main_menu, NULL);
-    initialize(_files_menu, _main_menu);
-    initialize(_jogging_menu, _main_menu);
-    initialize(_rss_menu, _main_menu);
-    initialize(_settings_menu, _main_menu);
-    initialize(_version_menu, _settings_menu);
-
-    // Set main menu as current
-    _current_menu = _main_menu;
 
     // Main Menu
     add(_main_menu, NULL, NULL, "Home");

@@ -44,13 +44,7 @@ private:
 
 public:
 
-    Menu() {};
-
-    Menu(const Menu&) = delete;
-    Menu(Menu&&)      = delete;
-    Menu& operator=(const Menu&) = delete;
-    Menu& operator=(Menu&&) = delete;
-
+    Menu();
     virtual ~Menu() = default;
 
     void init();

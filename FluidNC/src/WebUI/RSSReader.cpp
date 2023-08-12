@@ -60,6 +60,8 @@ namespace WebUI {
 
     // Processes any RSS reader changes
     void RSSReader::handle() {
+
+        return; //TEMP
         
         if (_started) {
 

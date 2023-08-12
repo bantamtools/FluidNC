@@ -158,15 +158,19 @@ void OLED::init() {
     _oled->drawXbm(0, 18, 128, 26, bantam_logo_bits);
 
     _oled->display();
+
+    // Initialize the menu
+    _menu = new Menu();
+    _menu->init();
+
+    // Not jogging at init
+    jog_state = JogState::Idle;
+
     delay_ms(1000);
 
     allChannels.registration(this);
     setReportInterval(250);
 
-    _menu->init();
-
-    // Not jogging at init
-    jog_state = JogState::Idle;
 }
 
 Channel* OLED::pollLine(char* line) {
