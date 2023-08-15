@@ -1,5 +1,21 @@
 // Copyright (c) 2023 -	Matt Staniszewski
 
+#ifndef ENABLE_WIFI
+#include "RSSReader.h"
+#include "../Machine/MachineConfig.h"
+
+namespace WebUI {
+    RSSReader rssReader;
+
+    RSSReader::RSSReader() {}
+    RSSReader::~RSSReader() { end(); }
+
+    bool RSSReader::begin() { return false; }
+    void RSSReader::end() {}
+    void RSSReader::handle() {}
+}
+#else
+
 #include "../Config.h"
 #include "WifiConfig.h"  // wifi_config.Hostname()
 #include "../Machine/MachineConfig.h"
@@ -309,3 +325,4 @@ namespace WebUI {
         rssClient.stop();
     }
 }
+#endif
