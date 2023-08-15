@@ -24,8 +24,8 @@ namespace WebUI {
         bool        _started;
         String      _web_server;
         String      _web_rss_address;
-        uint32_t    _wait_period_ms;
-        uint32_t    _wait_start_time_ms;
+        uint32_t    _refresh_period_sec;
+        uint32_t    _refresh_start_ms;
         time_t      _last_build_date;
     
         void        parse_item(tinyxml2::XMLElement *itemNode);
@@ -36,4 +36,5 @@ namespace WebUI {
 
     extern RSSReader rssReader;
     extern StringSetting* rss_url;
+    extern IntSetting* rss_refresh_sec;
 }

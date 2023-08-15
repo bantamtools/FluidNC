@@ -13,6 +13,7 @@ namespace WebUI {
 namespace WebUI {
 
     StringSetting* rss_url;
+    IntSetting* rss_refresh_sec;
 
     static const String DEFAULT_RSS_WEB_SERVER  = "mattstaniszewski.net";
     static const String DEFAULT_RSS_ADDRESS     = "/test_feed.xml";
@@ -20,18 +21,21 @@ namespace WebUI {
     static const int MIN_RSS_URL = 0;
     static const int MAX_RSS_URL = 2083; // Based on Chrome, IE; other browsers allow more characters   
 
-    static const int DEFAULT_RSS_WAIT_PERIOD_MS = 10000;
+    static const int DEFAULT_RSS_REFRESH_SEC = 86400;   // 24 hours
+    static const int MIN_RSS_REFRESH_SEC = 0;           // 0 = off
+    static const int MAX_RSS_REFRESH_SEC = 604800;      // 1 week
 
     // Constructor
     RSSReader::RSSReader() {
         _web_server         = DEFAULT_RSS_WEB_SERVER;
         _web_rss_address    = DEFAULT_RSS_ADDRESS;
-        _wait_period_ms     = DEFAULT_RSS_WAIT_PERIOD_MS;
-        _wait_start_time_ms = 0;
+        _refresh_period_sec = DEFAULT_RSS_REFRESH_SEC;
+        _refresh_start_ms   = 0;
         _last_build_date    = 0;
         _started            = false;
 
         rss_url = new StringSetting("RSS URL", WEBSET, WA, NULL, "RSS/URL", DEFAULT_RSS_FULL_URL.c_str(), MIN_RSS_URL, MAX_RSS_URL, NULL);
+        rss_refresh_sec = new IntSetting("RSS Refresh Time (s)", WEBSET, WA, NULL, "RSS/RefreshTimeSec", DEFAULT_RSS_REFRESH_SEC, MIN_RSS_REFRESH_SEC, MAX_RSS_REFRESH_SEC, NULL);
     }
 
     // Starts the RSS reader subsystem
@@ -48,44 +52,54 @@ namespace WebUI {
 
         // Pull settings from WebUI if successful Wi-Fi connection
         if (res) {
-            
-            std::string url = std::string(rss_url->get());
-            std::string host, path;
 
-            // Parse the server and address from the URL
-            size_t found = 0;
+            // Grab the refresh period
+            _refresh_period_sec = rss_refresh_sec->get();
 
-            // URL starts with http(s)
-            if (url.rfind("http", 0) == 0) {
-                found = url.find_first_of(":");
-                found += 3; // Step over colon and slashes
-            }
-            
-            size_t found1 = url.find_first_of(":", found);
+            // RSS feed disabled
+            if (_refresh_period_sec == 0) {
+                res = false;
 
-            // Port found
-            if (std::string::npos != found1) {
-                host = url.substr(found, found1 - found);
-                size_t found2 = url.find_first_of("/", found1);
-                if (std::string::npos != found2) {
-                    path = url.substr(found2);
-                }
-
-            // No port
+            // RSS enabled, configure URL
             } else {
-                found1 = url.find_first_of("/", found);
+                
+                // Parse the server and address from the URL
+                std::string url = std::string(rss_url->get());
+                std::string host, path;
+                size_t found = 0;
+
+                // URL starts with http(s)
+                if (url.rfind("http", 0) == 0) {
+                    found = url.find_first_of(":");
+                    found += 3; // Step over colon and slashes
+                }
+                
+                size_t found1 = url.find_first_of(":", found);
+
+                // Port found
                 if (std::string::npos != found1) {
                     host = url.substr(found, found1 - found);
-                    path = url.substr(found1);
+                    size_t found2 = url.find_first_of("/", found1);
+                    if (std::string::npos != found2) {
+                        path = url.substr(found2);
+                    }
+
+                // No port
+                } else {
+                    found1 = url.find_first_of("/", found);
+                    if (std::string::npos != found1) {
+                        host = url.substr(found, found1 - found);
+                        path = url.substr(found1);
+                    }
                 }
-            }
 
-            _web_server = String(host.c_str());
-            _web_rss_address = String(path.c_str());
+                _web_server = String(host.c_str());
+                _web_rss_address = String(path.c_str());
 
-            // Invalid URL, fail to start
-            if ((_web_server.length() == 0) || (_web_rss_address.length() == 0)) {
-                res = false;
+                // Invalid URL, fail to start
+                if ((_web_server.length() == 0) || (_web_rss_address.length() == 0)) {
+                    res = false;
+                }
             }
         }
 
@@ -105,8 +119,8 @@ namespace WebUI {
 
         _web_server         = "";
         _web_rss_address    = "";
-        _wait_period_ms     = 0;
-        _wait_start_time_ms = 0;
+        _refresh_period_sec = 0;
+        _refresh_start_ms   = 0;
         _last_build_date    = 0;
         _started            = false;
     }
@@ -116,9 +130,9 @@ namespace WebUI {
         
         if (_started) {
 
-            // Poll the XML data and refresh the list after wait expires or after boot
-            if ((_wait_start_time_ms == 0) || 
-                ((millis() - _wait_start_time_ms) >= DEFAULT_RSS_WAIT_PERIOD_MS)) {
+            // Poll the XML data and refresh the list after refresh period expires or after boot
+            if ((_refresh_start_ms == 0) || 
+                ((millis() - _refresh_start_ms) >= (_refresh_period_sec * 1000))) {
 
                 // Parse XML data
                 fetch_and_parse();
@@ -126,8 +140,8 @@ namespace WebUI {
                 // DEBUG: Print Heap
                 //log_warn("Heap: " << xPortGetFreeHeapSize());
 
-                // Set new wait start time
-                _wait_start_time_ms = millis();
+                // Set new refresh start time
+                _refresh_start_ms = millis();
             }
         }
     }
