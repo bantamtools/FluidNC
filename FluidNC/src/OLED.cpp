@@ -233,6 +233,7 @@ void OLED::show_menu() {
     if (jog_state == JogState::Idle) {
 
         _menu->update_selection(menu_max_active_entries, _enc_diff);
+        _enc_diff = 0; // Reset to prevent multiple scrolls
     }
 
     // Traverse the list and print out each menu entry name
