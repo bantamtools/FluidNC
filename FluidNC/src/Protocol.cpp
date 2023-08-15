@@ -1113,7 +1113,7 @@ static void protocol_do_enter() {
                 Machine::Homing::run_cycles(Machine::Homing::AllCycles);
 
             // Display homing error if try to jog unhomed
-            } else if (strstr(config->_oled->_menu->get_selected()->display_name, "Jog") && Machine::Homing::_phase == Machine::Homing::Phase::None)   {
+            } else if (strstr(config->_oled->_menu->get_selected()->display_name, "Jog") && !config->_axes->_homed)   {
 
                 // Display error
                 config->_oled->popup_msg("Machine not homed");
