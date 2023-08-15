@@ -278,6 +278,12 @@ void Menu::build(void) {
     add(_jogging_menu, NULL, NULL, "Jog Y");
     add(_jogging_menu, NULL, NULL, "Jog Z");
 
+    // Files Menu
+    add(_files_menu, NULL, NULL, "< Back");
+
+    // RSS Menu
+    add(_rss_menu, NULL, NULL, "< Back");  // Prevents fault if invalid RSS url
+
     // Settings Menu
     add(_settings_menu, NULL, NULL, "< Back");
     //add(_settings_menu, NULL, NULL, "Update");  // WebUI already includes OTA functionality

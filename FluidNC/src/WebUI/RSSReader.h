@@ -35,4 +35,5 @@ namespace WebUI {
     };
 
     extern RSSReader rssReader;
+    extern StringSetting* rss_url;
 }

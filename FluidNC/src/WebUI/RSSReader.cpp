@@ -12,8 +12,14 @@ namespace WebUI {
 
 namespace WebUI {
 
+    StringSetting* rss_url;
+
     static const String DEFAULT_RSS_WEB_SERVER  = "mattstaniszewski.net";
     static const String DEFAULT_RSS_ADDRESS     = "/test_feed.xml";
+    static const String DEFAULT_RSS_FULL_URL    = DEFAULT_RSS_WEB_SERVER + DEFAULT_RSS_ADDRESS;
+    static const int MIN_RSS_URL = 0;
+    static const int MAX_RSS_URL = 2083; // Based on Chrome, IE; other browsers allow more characters   
+
     static const int DEFAULT_RSS_WAIT_PERIOD_MS = 10000;
 
     // Constructor
@@ -24,6 +30,8 @@ namespace WebUI {
         _wait_start_time_ms = 0;
         _last_build_date    = 0;
         _started            = false;
+
+        rss_url = new StringSetting("RSS URL", WEBSET, WA, NULL, "RSS/URL", DEFAULT_RSS_FULL_URL.c_str(), MIN_RSS_URL, MAX_RSS_URL, NULL);
     }
 
     // Starts the RSS reader subsystem
@@ -37,10 +45,55 @@ namespace WebUI {
         if ((WiFi.getMode() != WIFI_MODE_STA) && (WiFi.getMode() != WIFI_MODE_APSTA)) {
             res = false;
         }
+
+        // Pull settings from WebUI if successful Wi-Fi connection
+        if (res) {
+            
+            std::string url = std::string(rss_url->get());
+            std::string host, path;
+
+            // Parse the server and address from the URL
+            size_t found = 0;
+
+            // URL starts with http(s)
+            if (url.rfind("http", 0) == 0) {
+                found = url.find_first_of(":");
+                found += 3; // Step over colon and slashes
+            }
+            
+            size_t found1 = url.find_first_of(":", found);
+
+            // Port found
+            if (std::string::npos != found1) {
+                host = url.substr(found, found1 - found);
+                size_t found2 = url.find_first_of("/", found1);
+                if (std::string::npos != found2) {
+                    path = url.substr(found2);
+                }
+
+            // No port
+            } else {
+                found1 = url.find_first_of("/", found);
+                if (std::string::npos != found1) {
+                    host = url.substr(found, found1 - found);
+                    path = url.substr(found1);
+                }
+            }
+
+            _web_server = String(host.c_str());
+            _web_rss_address = String(path.c_str());
+
+            // Invalid URL, fail to start
+            if ((_web_server.length() == 0) || (_web_rss_address.length() == 0)) {
+                res = false;
+            }
+        }
+
         if (!res) {
             end();
         }
         _started = res;
+
         return _started;
     }
 
