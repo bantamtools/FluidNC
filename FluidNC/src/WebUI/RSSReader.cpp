@@ -138,6 +138,9 @@ namespace WebUI {
         }
         _started = res;
 
+        //TEMP
+        sd_download_file(NULL);
+        
         return _started;
     }
 
@@ -336,9 +339,6 @@ namespace WebUI {
                     }
                     
                 }
-
-                //TEMP
-                sd_download_file(NULL);
             }
 
             // Refresh the menu

@@ -226,50 +226,71 @@ unmount2() {
 
 void sd_download_file(char *link) {
 
-    WiFiClient client;
-    if (client.connect("mattstaniszewski.net", 80)) {
+    WiFiClient sdDownloadClient;
 
-        client.setNoDelay(1);
+    // Connect to selected server
+    if (sdDownloadClient.connect("mattstaniszewski.net", 80)) {
 
-        client.print("GET ");
-        client.print("/rss/Apple.gcode");
-        client.print(" HTTP/1.1\r\n");
-        client.print("Host: ");
-        client.print("mattstaniszewski.net");
-        client.print("\r\n");
-        client.print("Connection: keep-alive\r\n\r\n");
+        // Set no delay
+        sdDownloadClient.setNoDelay(1);
 
-        while (client.connected() && !client.available()) {
+        // Make GET request for selected link, use keep-alive for faster download
+        sdDownloadClient.print("GET ");
+        sdDownloadClient.print("/rss/Apple.gcode");
+        sdDownloadClient.print(" HTTP/1.1\r\n");
+        sdDownloadClient.print("Host: ");
+        sdDownloadClient.print("mattstaniszewski.net");
+        sdDownloadClient.print("\r\n");
+        sdDownloadClient.print("Connection: keep-alive\r\n\r\n");
+
+        // Wait for HTTP connection
+        while (sdDownloadClient.connected() && !sdDownloadClient.available()) {
             delay(1);
         }
 
+        // Determine the content length and skip rest of headers
         int contentLength = 0;
         String contentLengthHeaderName = "Content-Length: ";
+        while (sdDownloadClient.available()) {
 
-        while (client.available()) {
-            String line = client.readStringUntil('\n');
+            String line = sdDownloadClient.readStringUntil('\n');
+            line.trim(); // Remove whitespace
+            
+            // Save off content length (used for percent calculations)
             if (line.startsWith(contentLengthHeaderName)) {
                 contentLength = line.substring(contentLengthHeaderName.length()).toInt();
+            }
+
+            // Read until find end of the headers (so we don't write them into our file)
+            if (line.length() == 0) {
                 break;
             }
         }
         
+        // Open the write file on SD
         FileStream *file = new FileStream("Apple.gcode", "w", "sd");
-
         if (file) {
+
             int bytesRead = 0;
             int totalBytesRead = 0;
-            uint8_t buffer[128];
+            uint8_t buffer[1024];
             int i = 0;
 
             log_info("Starting download...");
-            while (client.connected() || client.available()) {
-                if (client.available()) {
-                    bytesRead = client.readBytes(buffer, sizeof(buffer));
+
+            // Download file
+            while (sdDownloadClient.connected() || sdDownloadClient.available()) {
+                if (sdDownloadClient.available()) {
+                    bytesRead = sdDownloadClient.readBytes(buffer, sizeof(buffer));
                     file->write(buffer, bytesRead);
                     totalBytesRead += bytesRead;
+
+                    // Calculate and print percent every 10 iterations (so we don't jam up log channel)
                     float percent = ((float)totalBytesRead / (float)contentLength) * 100;
-                    log_info("Downloaded: " << percent << "%");
+                    if (++i == 10) {
+                        i = 0;
+                        log_info("Downloaded: " << percent << "%");
+                    }
                 }
             }
             delete(file);
@@ -278,10 +299,13 @@ void sd_download_file(char *link) {
         } else {
             log_info("Error opening file");
         }
+        
     } else {
         log_info("Connection to server failed");
     }
-    client.stop();
+
+    // Close the connection
+    sdDownloadClient.stop();
 }
 
 void sd_populate_files_menu() {
