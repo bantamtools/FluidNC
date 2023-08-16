@@ -51,6 +51,7 @@ namespace WebUI {
         time_t          _new_update_time;
         nvs_handle_t    _handle;
 
+        bool            parse_server_address(std::string url, String *server, String *address);
         void            parse_item(tinyxml2::XMLElement *itemNode);
         int             parse_month_name(const char *monthName);
         time_t          parse_pub_date(const char *pubDate);

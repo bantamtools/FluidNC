@@ -93,43 +93,8 @@ namespace WebUI {
             // RSS enabled, configure URL
             } else {
                 
-                // Parse the server and address from the URL
-                std::string url = std::string(rss_url->get());
-                std::string host, path;
-                size_t found = 0;
-
-                // URL starts with http(s)
-                if (url.rfind("http", 0) == 0) {
-                    found = url.find_first_of(":");
-                    found += 3; // Step over colon and slashes
-                }
-                
-                size_t found1 = url.find_first_of(":", found);
-
-                // Port found
-                if (std::string::npos != found1) {
-                    host = url.substr(found, found1 - found);
-                    size_t found2 = url.find_first_of("/", found1);
-                    if (std::string::npos != found2) {
-                        path = url.substr(found2);
-                    }
-
-                // No port
-                } else {
-                    found1 = url.find_first_of("/", found);
-                    if (std::string::npos != found1) {
-                        host = url.substr(found, found1 - found);
-                        path = url.substr(found1);
-                    }
-                }
-
-                _web_server = String(host.c_str());
-                _web_rss_address = String(path.c_str());
-
-                // Invalid URL, fail to start
-                if ((_web_server.length() == 0) || (_web_rss_address.length() == 0)) {
-                    res = false;
-                }
+                // Parse the URL
+                res = parse_server_address(rss_url->get(), &_web_server, &_web_rss_address);
             }
         }
 
@@ -192,6 +157,48 @@ namespace WebUI {
 
     // Destructor
     RSSReader::~RSSReader() { end(); }
+
+    // Parses the server and address from a full URL
+    bool RSSReader::parse_server_address(std::string url, String *server, String *address) {
+
+        std::string host, path;
+        size_t found = 0;
+        bool res = true;
+
+        // URL starts with http(s)
+        if (url.rfind("http", 0) == 0) {
+            found = url.find_first_of(":");
+            found += 3; // Step over colon and slashes
+        }
+        
+        size_t found1 = url.find_first_of(":", found);
+
+        // Port found
+        if (std::string::npos != found1) {
+            host = url.substr(found, found1 - found);
+            size_t found2 = url.find_first_of("/", found1);
+            if (std::string::npos != found2) {
+                path = url.substr(found2);
+            }
+
+        // No port
+        } else {
+            found1 = url.find_first_of("/", found);
+            if (std::string::npos != found1) {
+                host = url.substr(found, found1 - found);
+                path = url.substr(found1);
+            }
+        }
+
+        *server = String(host.c_str());
+        *address = String(path.c_str());
+
+        // Invalid URL, fail to start
+        if ((_web_server.length() == 0) || (_web_rss_address.length() == 0)) {
+            res = false;
+        }
+        return res;
+    }
 
     // Parses a three-letter month name into an integer
     int RSSReader::parse_month_name(const char *monthName) {
