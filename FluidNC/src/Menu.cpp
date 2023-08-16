@@ -193,8 +193,10 @@ void Menu::add_sd_file(char *path) {
 }
 
 // Helper function to add RSS link to RSS menu
-void Menu::add_rss_link(const char *link, const char *title) {
-    add(_rss_menu, NULL, link, title);  // TODO
+void Menu::add_rss_link(const char *link, const char *title, bool is_updated) {
+
+    // Add item to menu
+    add(_rss_menu, NULL, link, title);
 }
 
 // Deletes all nodes in the given menu

@@ -47,8 +47,10 @@ namespace WebUI {
         _web_rss_address    = DEFAULT_RSS_ADDRESS;
         _refresh_period_sec = DEFAULT_RSS_REFRESH_SEC;
         _refresh_start_ms   = 0;
-        _last_build_date    = 0;
+        _last_update_time   = 0;
+        _new_update_time    = 0;
         _started            = false;
+        _handle             = 0;
 
         rss_url = new StringSetting("RSS URL", WEBSET, WA, NULL, "RSS/URL", DEFAULT_RSS_FULL_URL.c_str(), MIN_RSS_URL, MAX_RSS_URL, NULL);
         rss_refresh_sec = new IntSetting("RSS Refresh Time (s)", WEBSET, WA, NULL, "RSS/RefreshTimeSec", DEFAULT_RSS_REFRESH_SEC, MIN_RSS_REFRESH_SEC, MAX_RSS_REFRESH_SEC, NULL);
@@ -64,6 +66,18 @@ namespace WebUI {
         bool res = true;
         if ((WiFi.getMode() != WIFI_MODE_STA) && (WiFi.getMode() != WIFI_MODE_APSTA)) {
             res = false;
+        }
+
+        // Get the last updated time from NVS
+        if (res) {
+            if (nvs_open("rss", NVS_READWRITE, &_handle) == ESP_OK) {
+                esp_err_t ret = nvs_get_i32(_handle, "update_time", (int32_t*)&_last_update_time);
+                if (ret != ESP_OK && ret != ESP_ERR_NVS_NOT_FOUND) {
+                    res = false;
+                }
+            } else {
+                res = false;
+            }
         }
 
         // Pull settings from WebUI if successful Wi-Fi connection
@@ -137,8 +151,13 @@ namespace WebUI {
         _web_rss_address    = "";
         _refresh_period_sec = 0;
         _refresh_start_ms   = 0;
-        _last_build_date    = 0;
+        _last_update_time   = 0;
+        _new_update_time    = 0;
         _started            = false;
+
+        // Close NVS handle
+        nvs_close(_handle);  
+        _handle = 0;
     }
 
     // Processes any RSS reader changes
@@ -171,55 +190,74 @@ namespace WebUI {
     // Destructor
     RSSReader::~RSSReader() { end(); }
 
-    // Parses the items in RSS data
-    void RSSReader::parse_item(tinyxml2::XMLElement *itemNode) {
-
-        // Parse and process <title> and <link> elements
-        const char *title = itemNode->FirstChildElement("title")->GetText();
-        const char *link = itemNode->FirstChildElement("link")->GetText();
-        
-        // Print them out
-        log_info("Title: " << title << ", Link: " << link);
-
-         // Add the item to the RSS menu on screen
-        config->_oled->_menu->add_rss_link(link, title);  // TODO
-    }
-
     // Parses a three-letter month name into an integer
     int RSSReader::parse_month_name(const char *monthName) {
 
-        if (strcmp(monthName, "Jan") == 0) return 0;
-        if (strcmp(monthName, "Feb") == 0) return 1;
-        if (strcmp(monthName, "Mar") == 0) return 2;
-        if (strcmp(monthName, "Apr") == 0) return 3;
-        if (strcmp(monthName, "May") == 0) return 4;
-        if (strcmp(monthName, "Jun") == 0) return 5;
-        if (strcmp(monthName, "Jul") == 0) return 6;
-        if (strcmp(monthName, "Aug") == 0) return 7;
-        if (strcmp(monthName, "Sep") == 0) return 8;
-        if (strcmp(monthName, "Oct") == 0) return 9;
-        if (strcmp(monthName, "Nov") == 0) return 10;
-        if (strcmp(monthName, "Dec") == 0) return 11;
+        if (strncmp(monthName, "Jan", 3) == 0) return 0;
+        if (strncmp(monthName, "Feb", 3) == 0) return 1;
+        if (strncmp(monthName, "Mar", 3) == 0) return 2;
+        if (strncmp(monthName, "Apr", 3) == 0) return 3;
+        if (strncmp(monthName, "May", 3) == 0) return 4;
+        if (strncmp(monthName, "Jun", 3) == 0) return 5;
+        if (strncmp(monthName, "Jul", 3) == 0) return 6;
+        if (strncmp(monthName, "Aug", 3) == 0) return 7;
+        if (strncmp(monthName, "Sep", 3) == 0) return 8;
+        if (strncmp(monthName, "Oct", 3) == 0) return 9;
+        if (strncmp(monthName, "Nov", 3) == 0) return 10;
+        if (strncmp(monthName, "Dec", 3) == 0) return 11;
         
         return -1;  // Invalid month name
     }
 
-    // Parses the last build date in RSS data
-    time_t RSSReader::parse_last_build_date(const char *lastBuildDate) {
+    // Parses the published date for the given value
+    time_t RSSReader::parse_pub_date(const char *pubDate) {
 
         struct tm tmStruct;
         memset(&tmStruct, 0, sizeof(tmStruct));
+
+        // Copy the string so don't modify input
+        char pubDateCopy[64];
+        strncpy(pubDateCopy, pubDate, sizeof(pubDateCopy) - 1);
+        pubDateCopy[sizeof(pubDateCopy) - 1] = '\0'; // Null-terminate the copy
         
-        // Parse date and time components from the lastBuildDate string
-        sscanf(lastBuildDate, "%*3s, %d %3s %4d %2d:%2d:%2d %*3s",
-                &tmStruct.tm_mday, lastBuildDate, &tmStruct.tm_year,
+        // Parse date and time components from the pubDate string
+        sscanf(pubDateCopy, "%*3s, %d %3s %4d %2d:%2d:%2d %*3s",
+                &tmStruct.tm_mday, pubDateCopy, &tmStruct.tm_year,
                 &tmStruct.tm_hour, &tmStruct.tm_min, &tmStruct.tm_sec);
         
         tmStruct.tm_year -= 1900;  // Adjust year to be relative to 1900
-        tmStruct.tm_mon = parse_month_name(lastBuildDate); // Implement parse_month_name
+        tmStruct.tm_mon = parse_month_name(pubDateCopy);
         
         // Convert the struct tm to a Unix timestamp
         return mktime(&tmStruct);
+    }
+
+    // Parses the items in RSS data
+    void RSSReader::parse_item(tinyxml2::XMLElement *itemNode) {
+
+        bool is_updated = false;
+
+        // Parse and process <title> and <link> elements
+        const char *title = itemNode->FirstChildElement("title")->GetText();
+        const char *link = itemNode->FirstChildElement("link")->GetText();
+        const char *pubDate = itemNode->FirstChildElement("pubDate")->GetText();
+
+        // Convert pubDate to a timestamp and compare to last update
+        time_t timestamp = parse_pub_date(pubDate);  // NOTE: Destructive, modifies
+
+        // Newer than last NVS timestamp, flag update and save off value if newest
+        if (timestamp > _last_update_time) {
+            is_updated = true;
+            if (timestamp > _new_update_time) {
+                _new_update_time = timestamp;
+            }
+        }
+
+        // Print elements out
+        log_info("Title: " << title << ", Link: " << link << ", pubDate: " << itemNode->FirstChildElement("pubDate")->GetText() << ((is_updated) ? "*" : ""));
+
+         // Add the item to the RSS menu on screen
+        config->_oled->_menu->add_rss_link(link, title, is_updated);
     }
 
     // Fetch an RSS feed and parse the data
@@ -250,38 +288,14 @@ namespace WebUI {
             // RSS data available
             while (rssClient.connected() || rssClient.available()) {
 
+                // Prep the RSS menu on screen
+                config->_oled->_menu->prep_for_rss_update();
+
                 while (rssClient.available()) {
 
                     // Read a byte at a time into RSS chunk
                     c = rssClient.read();
                     rssChunk += c;
-
-                    // Check for the last build date - assumes it is before items (as per RSS specification)
-                    if (c == '>' && rssChunk.endsWith("</lastBuildDate>")) {
-
-                        size_t start = rssChunk.lastIndexOf(">", rssChunk.indexOf("</lastBuildDate>"));
-                        lastBuildDate = rssChunk.substring(start + 1, rssChunk.length() - 14); // Extract the date
-                        
-                        // Convert the last build date string to a time_t value
-                        time_t timestamp = parse_last_build_date(lastBuildDate.c_str());
-                        
-                        // Print the last build date as a Unix timestamp
-                        log_info("Last Build Date: " << (int32_t)timestamp);
-
-                        // Feed is updated, notify and update listing
-                        if (timestamp > _last_build_date) {
-                            _last_build_date = timestamp;
-                            log_info("*Feed is updated*");
-
-                            // Prep the RSS menu on screen
-                            config->_oled->_menu->prep_for_rss_update();
-                        
-                        // Feed hasn't changed, terminate RSS connection
-                        } else {
-                            rssClient.stop();
-                            return;
-                        }
-                    }
 
                     // Check for the end of an item
                     if (itemNode && c == '>' && rssChunk.endsWith("</item>")) {
@@ -310,6 +324,17 @@ namespace WebUI {
                         itemNode = rssDoc.NewElement("item");
                         rssChunk = "<item>";
                     }
+                }
+
+                // Once gone through all RSS entries, update the last update time to
+                // the newest one available
+                if (_new_update_time > _last_update_time) {
+                    if (nvs_set_i32(_handle, "update_time", _new_update_time) == ESP_OK) {
+                        _last_update_time = _new_update_time;
+                    } else {
+                        log_warn("Failed to store RSS update time in NVS!");
+                    }
+                    
                 }
             }
 

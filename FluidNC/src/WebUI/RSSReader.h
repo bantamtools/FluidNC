@@ -4,6 +4,7 @@
 
 #include <cstdint>
 #include "../OLED.h"
+#include <nvs.h>
 
 #ifndef ENABLE_WIFI
 
@@ -30,27 +31,29 @@ namespace WebUI {
     public:
         RSSReader();
 
-        bool        begin();
-        void        end();
-        void        handle();
-        bool        started();
-        String      getUrl();
+        bool            begin();
+        void            end();
+        void            handle();
+        bool            started();
+        String          getUrl();
         
         ~RSSReader();
 
     private:
 
-        bool        _started;
-        String      _web_server;
-        String      _web_rss_address;
-        uint32_t    _refresh_period_sec;
-        uint32_t    _refresh_start_ms;
-        time_t      _last_build_date;
+        bool            _started;
+        String          _web_server;
+        String          _web_rss_address;
+        uint32_t        _refresh_period_sec;
+        uint32_t        _refresh_start_ms;
+        time_t          _last_update_time;
+        time_t          _new_update_time;
+        nvs_handle_t    _handle;
 
-        void        parse_item(tinyxml2::XMLElement *itemNode);
-        int         parse_month_name(const char *monthName);
-        time_t      parse_last_build_date(const char *lastBuildDate);
-        void        fetch_and_parse();
+        void            parse_item(tinyxml2::XMLElement *itemNode);
+        int             parse_month_name(const char *monthName);
+        time_t          parse_pub_date(const char *pubDate);
+        void            fetch_and_parse();
     };
 
     extern RSSReader rssReader; 

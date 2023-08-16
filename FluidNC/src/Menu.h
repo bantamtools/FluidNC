@@ -54,7 +54,7 @@ public:
     void enter_submenu();
     void exit_submenu();
     void add_sd_file(char *path);
-    void add_rss_link(const char *link, const char *title);
+    void add_rss_link(const char *link, const char *title, bool is_updated);
     void prep_for_sd_update();
     void prep_for_rss_update();
     bool is_full_width();
