@@ -336,6 +336,9 @@ namespace WebUI {
                     }
                     
                 }
+
+                //TEMP
+                sd_download_file(NULL);
             }
 
             // Refresh the menu

@@ -6,6 +6,8 @@
 #include "sdmmc_cmd.h"
 #include "driver/sdspi_host.h"
 #include "../src/Machine/MachineConfig.h"
+#include "../src/FileStream.h"
+#include "WiFiClient.h"
 
 #include "Driver/sdspi.h"
 #include "src/Config.h"
@@ -221,6 +223,66 @@ unmount2() {
     f_mount(NULL, drv, 0);
 }
 #endif
+
+void sd_download_file(char *link) {
+
+    WiFiClient client;
+    if (client.connect("mattstaniszewski.net", 80)) {
+
+        client.setNoDelay(1);
+
+        client.print("GET ");
+        client.print("/rss/Apple.gcode");
+        client.print(" HTTP/1.1\r\n");
+        client.print("Host: ");
+        client.print("mattstaniszewski.net");
+        client.print("\r\n");
+        client.print("Connection: keep-alive\r\n\r\n");
+
+        while (client.connected() && !client.available()) {
+            delay(1);
+        }
+
+        int contentLength = 0;
+        String contentLengthHeaderName = "Content-Length: ";
+
+        while (client.available()) {
+            String line = client.readStringUntil('\n');
+            if (line.startsWith(contentLengthHeaderName)) {
+                contentLength = line.substring(contentLengthHeaderName.length()).toInt();
+                break;
+            }
+        }
+        
+        FileStream *file = new FileStream("Apple.gcode", "w", "sd");
+
+        if (file) {
+            int bytesRead = 0;
+            int totalBytesRead = 0;
+            uint8_t buffer[128];
+            int i = 0;
+
+            log_info("Starting download...");
+            while (client.connected() || client.available()) {
+                if (client.available()) {
+                    bytesRead = client.readBytes(buffer, sizeof(buffer));
+                    file->write(buffer, bytesRead);
+                    totalBytesRead += bytesRead;
+                    float percent = ((float)totalBytesRead / (float)contentLength) * 100;
+                    log_info("Downloaded: " << percent << "%");
+                }
+            }
+            delete(file);
+            log_info("File saved to SD card");
+           
+        } else {
+            log_info("Error opening file");
+        }
+    } else {
+        log_info("Connection to server failed");
+    }
+    client.stop();
+}
 
 void sd_populate_files_menu() {
 

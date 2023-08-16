@@ -13,4 +13,5 @@ void sd_deinit_slot();
 
 std::error_code sd_mount(int max_files = 1);
 
+void sd_download_file(char *link);
 void sd_populate_files_menu();
