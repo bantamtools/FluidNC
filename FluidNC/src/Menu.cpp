@@ -145,7 +145,7 @@ void Menu::init(MenuType *menu, MenuType *parent) {
 }
 
 // Adds a node entry to the given menu
-void Menu::add(MenuType *menu, MenuType *submenu, const char *path, const char *display_name) {
+void Menu::add(MenuType *menu, MenuType *submenu, const char *path, const char *display_name, bool updated) {
 
     // Allocate memory for the new entry
     struct MenuNodeType* new_entry = (MenuNodeType*)malloc(sizeof(struct MenuNodeType));
@@ -159,6 +159,7 @@ void Menu::add(MenuType *menu, MenuType *submenu, const char *path, const char *
     if (display_name) strncpy(new_entry->display_name, display_name, MENU_NAME_MAX_STR);    // Cuts off long display names
     if (path) strncpy(new_entry->path, path, MENU_NAME_MAX_PATH);                           // Cuts off long file paths
     new_entry->selected = false;
+    new_entry->updated = updated;
 
     // No menu entries, insert as the head, set as active window head and select it
     if (menu->head == NULL) {
@@ -196,7 +197,7 @@ void Menu::add_sd_file(char *path) {
 void Menu::add_rss_link(const char *link, const char *title, bool is_updated) {
 
     // Add item to menu
-    add(_rss_menu, NULL, link, title);
+    add(_rss_menu, NULL, link, title, is_updated);
 }
 
 // Deletes all nodes in the given menu

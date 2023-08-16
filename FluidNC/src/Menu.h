@@ -21,6 +21,7 @@ typedef struct MenuNodeType
     char display_name[MENU_NAME_MAX_STR];
     char path[MENU_NAME_MAX_PATH];
     bool selected;
+    bool updated; // optional updated flag (used for RSS updates, etc)
 
 } MenuNodeType;
 
@@ -36,11 +37,11 @@ private:
 
     MenuType *_main_menu, *_files_menu, *_jogging_menu, *_rss_menu, *_settings_menu, *_version_menu, *_current_menu;
 
-    struct MenuNodeType *get_active_tail(MenuType *, int);
-    void init(MenuType *, MenuType *);
+    struct MenuNodeType *get_active_tail(MenuType *menu, int max_active_entries);
+    void init(MenuType *menu, MenuType *parent);
     void build();
-    void add(MenuType *, MenuType *, const char *, const char *);
-    void remove(MenuType *);
+    void add(MenuType *menu, MenuType *submenu, const char *path, const char *display_name, bool updated = false);
+    void remove(MenuType *menu);
     void prep_for_list(MenuType *menu);
 
 public:

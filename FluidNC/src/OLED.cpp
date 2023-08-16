@@ -97,14 +97,14 @@ void OLED::show(Layout& layout, const char* msg) {
     _oled->drawString(layout._x, layout._y, msg);
 }
 
-OLED::Layout OLED::stateLayout          = { 0, 0, 0, ArialMT_Plain_10, TEXT_ALIGN_LEFT };
-OLED::Layout OLED::elapsedTimeLayout    = { 63, 0, 128, ArialMT_Plain_10, TEXT_ALIGN_CENTER };
-OLED::Layout OLED::filenameLayout       = { 63, 13, 128, ArialMT_Plain_10, TEXT_ALIGN_CENTER };
-OLED::Layout OLED::percentLayout128     = { 128, 0, 128, ArialMT_Plain_10, TEXT_ALIGN_RIGHT };
-OLED::Layout OLED::percentLayout64      = { 64, 0, 64, ArialMT_Plain_10, TEXT_ALIGN_RIGHT };
-OLED::Layout OLED::posLabelLayout       = { 110, 13, 128, ArialMT_Plain_10, TEXT_ALIGN_RIGHT };
-OLED::Layout OLED::radioAddrLayout      = { 128, 0, 128, ArialMT_Plain_10, TEXT_ALIGN_RIGHT };
-OLED::Layout OLED::connectWifiLayout    = { 63, 52, 128, ArialMT_Plain_10, TEXT_ALIGN_CENTER };
+OLED::Layout OLED::stateLayout          = { 0, 0, 0, DejaVu_Sans_10, TEXT_ALIGN_LEFT };
+OLED::Layout OLED::elapsedTimeLayout    = { 63, 0, 128, DejaVu_Sans_10, TEXT_ALIGN_CENTER };
+OLED::Layout OLED::filenameLayout       = { 63, 13, 128, DejaVu_Sans_10, TEXT_ALIGN_CENTER };
+OLED::Layout OLED::percentLayout128     = { 128, 0, 128, DejaVu_Sans_10, TEXT_ALIGN_RIGHT };
+OLED::Layout OLED::percentLayout64      = { 64, 0, 64, DejaVu_Sans_10, TEXT_ALIGN_RIGHT };
+OLED::Layout OLED::posLabelLayout       = { 110, 13, 128, DejaVu_Sans_10, TEXT_ALIGN_RIGHT };
+OLED::Layout OLED::radioAddrLayout      = { 128, 0, 128, DejaVu_Sans_10, TEXT_ALIGN_RIGHT };
+OLED::Layout OLED::connectWifiLayout    = { 63, 52, 128, DejaVu_Sans_10, TEXT_ALIGN_CENTER };
 
 void OLED::afterParse() {
     if (!config->_i2c[_i2c_num]) {
@@ -219,7 +219,7 @@ void OLED::show_menu() {
     _oled->setTextAlignment(TEXT_ALIGN_LEFT);
 
     // Set up font and menu window
-    _oled->setFont(ArialMT_Plain_10);
+    _oled->setFont(DejaVu_Sans_10);
     menu_height = 13;
     (_menu->is_full_width()) ? menu_width = 128 : menu_width = 64;
     menu_max_active_entries = 4;
@@ -246,8 +246,8 @@ void OLED::show_menu() {
         _oled->fillRect(0, 13 + (menu_height * i), menu_width, menu_height);
         (entry->selected) ? _oled->setColor(BLACK) : _oled->setColor(WHITE);
 
-        // Write out the entry name
-        truncated_draw_string(13 + (menu_height * i), entry->display_name, ArialMT_Plain_10);
+        // Write out the entry name, bolding updated ones
+        truncated_draw_string(13 + (menu_height * i), entry->display_name, (entry->updated ? DejaVu_Sans_Bold_10 : DejaVu_Sans_10));
 
         // Advance the line and pointer
         entry = entry->next;
@@ -304,7 +304,7 @@ void OLED::show_file() {
 
         show(elapsedTimeLayout, time_str);
 
-        truncated_draw_string(14, _filename, ArialMT_Plain_10);
+        truncated_draw_string(14, _filename, DejaVu_Sans_10);
 
         _oled->drawProgressBar(0, 26, 120, 10, pct);
     } else {
@@ -345,7 +345,7 @@ void OLED::show_dro(float* axes, bool isMpos, bool* limits) {
 
     show(posLabelLayout, isMpos ? "M Pos" : "W Pos");
 
-    _oled->setFont(ArialMT_Plain_10);
+    _oled->setFont(DejaVu_Sans_10);
     uint8_t oled_y_pos;
     for (uint8_t axis = X_AXIS; axis < n_axis; axis++) {
         oled_y_pos = ((_height == 64) ? 24 : 17) + (axis * 10);
@@ -399,7 +399,7 @@ void OLED::show_error(String msg) {
     _oled->setColor(WHITE);
 
     // Draw message
-    _oled->setFont(ArialMT_Plain_10);
+    _oled->setFont(DejaVu_Sans_10);
     _oled->drawString(0, 13, msg);
     _oled->display();
 }
@@ -633,7 +633,7 @@ void OLED::parse_STA() {
     size_t start = strlen("[MSG:INFO: Connecting to STA SSID:");
     _radio_info  = _report.substr(start, _report.size() - start - 1);
 
-    auto fh = font_height(ArialMT_Plain_10);
+    auto fh = font_height(DejaVu_Sans_10);
     show(connectWifiLayout, "Connecting to Wi-Fi...");
     _oled->display();
 }
@@ -644,10 +644,10 @@ void OLED::parse_IP() {
     _radio_addr  = _report.substr(start, _report.size() - start - 1);
 
     _oled->clear();
-    auto fh = font_height(ArialMT_Plain_10);
-    wrapped_draw_string(0, "Wi-Fi Info", ArialMT_Plain_10);
-    wrapped_draw_string(fh, "Network ID: " + _radio_info, ArialMT_Plain_10);
-    wrapped_draw_string(fh * 2, "IP Addr: " + _radio_addr, ArialMT_Plain_10);
+    auto fh = font_height(DejaVu_Sans_10);
+    wrapped_draw_string(0, "Wi-Fi Info", DejaVu_Sans_10);
+    wrapped_draw_string(fh, "Network ID: " + _radio_info, DejaVu_Sans_10);
+    wrapped_draw_string(fh * 2, "IP Addr: " + _radio_addr, DejaVu_Sans_10);
     _oled->display();
     delay_ms(_radio_delay);
 }
@@ -664,9 +664,9 @@ void OLED::parse_AP() {
     _radio_addr = _report.substr(ip_start, ip_end - ip_start);
 
     _oled->clear();
-    auto fh = font_height(ArialMT_Plain_10);
-    wrapped_draw_string(0, _radio_info, ArialMT_Plain_10);
-    wrapped_draw_string(fh * 2, _radio_addr, ArialMT_Plain_10);
+    auto fh = font_height(DejaVu_Sans_10);
+    wrapped_draw_string(0, _radio_info, DejaVu_Sans_10);
+    wrapped_draw_string(fh * 2, _radio_addr, DejaVu_Sans_10);
     _oled->display();
     delay_ms(_radio_delay);
 }
@@ -678,7 +678,7 @@ void OLED::parse_BT() {
     _radio_info += btname.c_str();
 
     _oled->clear();
-    wrapped_draw_string(0, _radio_info, ArialMT_Plain_10);
+    wrapped_draw_string(0, _radio_info, DejaVu_Sans_10);
     _oled->display();
     delay_ms(_radio_delay);
 }
