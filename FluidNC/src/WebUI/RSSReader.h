@@ -35,7 +35,8 @@ namespace WebUI {
         void            end();
         void            handle();
         bool            started();
-        String          getUrl();
+        String          get_url();
+        void            download_file(char *link);
         
         ~RSSReader();
 

@@ -139,7 +139,7 @@ namespace WebUI {
         _started = res;
 
         //TEMP
-        sd_download_file(NULL);
+        download_file(NULL);
         
         return _started;
     }
@@ -188,7 +188,7 @@ namespace WebUI {
     bool RSSReader::started() { return _started; }
 
     // Returns the RSS URL
-    String RSSReader::getUrl() { return (_web_server + _web_rss_address); }
+    String RSSReader::get_url() { return (_web_server + _web_rss_address); }
 
     // Destructor
     RSSReader::~RSSReader() { end(); }
@@ -351,6 +351,91 @@ namespace WebUI {
         
         // End the RSS connection
         rssClient.stop();
+    }
+
+    // Downloads the specified RSS feed link to SD card
+    void RSSReader::download_file(char *link) {
+
+        WiFiClient download_client;
+
+        // Connect to selected server
+        if (download_client.connect("mattstaniszewski.net", 80)) {
+
+            // Set no delay
+            download_client.setNoDelay(1);
+
+            // Make GET request for selected link, use keep-alive for faster download
+            download_client.print("GET ");
+            download_client.print("/rss/Apple.gcode");
+            download_client.print(" HTTP/1.1\r\n");
+            download_client.print("Host: ");
+            download_client.print("mattstaniszewski.net");
+            download_client.print("\r\n");
+            download_client.print("Connection: keep-alive\r\n\r\n");
+
+            // Wait for HTTP connection
+            while (download_client.connected() && !download_client.available()) {
+                delay(1);
+            }
+
+            // Determine the content length and skip rest of headers
+            int content_length = 0;
+            String content_length_header_name = "Content-Length: ";
+            while (download_client.available()) {
+
+                String line = download_client.readStringUntil('\n');
+                line.trim(); // Remove whitespace
+                
+                // Save off content length (used for percent calculations)
+                if (line.startsWith(content_length_header_name)) {
+                    content_length = line.substring(content_length_header_name.length()).toInt();
+                }
+
+                // Read until find end of the headers (so we don't write them into our file)
+                if (line.length() == 0) {
+                    break;
+                }
+            }
+            
+            // Open the write file on SD
+            FileStream *file = new FileStream("Apple.gcode", "w", "sd");
+            if (file) {
+
+                int bytes_read = 0;
+                int total_bytes_read = 0;
+                uint8_t buffer[1024];
+                int i = 0;
+
+                log_info("Starting download...");
+
+                // Download file
+                while (download_client.connected() || download_client.available()) {
+                    if (download_client.available()) {
+                        bytes_read = download_client.readBytes(buffer, sizeof(buffer));
+                        file->write(buffer, bytes_read);
+                        total_bytes_read += bytes_read;
+
+                        // Calculate and print percent every 10 iterations (so we don't jam up log channel)
+                        float percent = ((float)total_bytes_read / (float)content_length) * 100;
+                        if (++i == 10) {
+                            i = 0;
+                            log_info("Downloaded: " << percent << "%");
+                        }
+                    }
+                }
+                delete(file);
+                log_info("File saved to SD card");
+            
+            } else {
+                log_info("Error opening file");
+            }
+
+        } else {
+            log_info("Connection to server failed");
+        }
+
+        // Close the connection
+        download_client.stop();
     }
 }
 #endif

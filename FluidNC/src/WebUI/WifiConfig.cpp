@@ -312,7 +312,7 @@ namespace WebUI {
         LogStream s2(out, "RSS Reader: ");
         s2 << (rssReader.started() ? "Enabled" : "Disabled");
         if (rssReader.started()) {
-            s2 << " (" << rssReader.getUrl().c_str() << ")";
+            s2 << " (" << rssReader.get_url().c_str() << ")";
         }
     }
 

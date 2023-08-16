@@ -6,8 +6,6 @@
 #include "sdmmc_cmd.h"
 #include "driver/sdspi_host.h"
 #include "../src/Machine/MachineConfig.h"
-#include "../src/FileStream.h"
-#include "WiFiClient.h"
 
 #include "Driver/sdspi.h"
 #include "src/Config.h"
@@ -223,90 +221,6 @@ unmount2() {
     f_mount(NULL, drv, 0);
 }
 #endif
-
-void sd_download_file(char *link) {
-
-    WiFiClient sdDownloadClient;
-
-    // Connect to selected server
-    if (sdDownloadClient.connect("mattstaniszewski.net", 80)) {
-
-        // Set no delay
-        sdDownloadClient.setNoDelay(1);
-
-        // Make GET request for selected link, use keep-alive for faster download
-        sdDownloadClient.print("GET ");
-        sdDownloadClient.print("/rss/Apple.gcode");
-        sdDownloadClient.print(" HTTP/1.1\r\n");
-        sdDownloadClient.print("Host: ");
-        sdDownloadClient.print("mattstaniszewski.net");
-        sdDownloadClient.print("\r\n");
-        sdDownloadClient.print("Connection: keep-alive\r\n\r\n");
-
-        // Wait for HTTP connection
-        while (sdDownloadClient.connected() && !sdDownloadClient.available()) {
-            delay(1);
-        }
-
-        // Determine the content length and skip rest of headers
-        int contentLength = 0;
-        String contentLengthHeaderName = "Content-Length: ";
-        while (sdDownloadClient.available()) {
-
-            String line = sdDownloadClient.readStringUntil('\n');
-            line.trim(); // Remove whitespace
-            
-            // Save off content length (used for percent calculations)
-            if (line.startsWith(contentLengthHeaderName)) {
-                contentLength = line.substring(contentLengthHeaderName.length()).toInt();
-            }
-
-            // Read until find end of the headers (so we don't write them into our file)
-            if (line.length() == 0) {
-                break;
-            }
-        }
-        
-        // Open the write file on SD
-        FileStream *file = new FileStream("Apple.gcode", "w", "sd");
-        if (file) {
-
-            int bytesRead = 0;
-            int totalBytesRead = 0;
-            uint8_t buffer[1024];
-            int i = 0;
-
-            log_info("Starting download...");
-
-            // Download file
-            while (sdDownloadClient.connected() || sdDownloadClient.available()) {
-                if (sdDownloadClient.available()) {
-                    bytesRead = sdDownloadClient.readBytes(buffer, sizeof(buffer));
-                    file->write(buffer, bytesRead);
-                    totalBytesRead += bytesRead;
-
-                    // Calculate and print percent every 10 iterations (so we don't jam up log channel)
-                    float percent = ((float)totalBytesRead / (float)contentLength) * 100;
-                    if (++i == 10) {
-                        i = 0;
-                        log_info("Downloaded: " << percent << "%");
-                    }
-                }
-            }
-            delete(file);
-            log_info("File saved to SD card");
-           
-        } else {
-            log_info("Error opening file");
-        }
-        
-    } else {
-        log_info("Connection to server failed");
-    }
-
-    // Close the connection
-    sdDownloadClient.stop();
-}
 
 void sd_populate_files_menu() {
 
