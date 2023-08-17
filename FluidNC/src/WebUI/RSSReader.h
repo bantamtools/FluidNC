@@ -2,6 +2,9 @@
 
 #pragma once
 
+#include <limits>
+#include <sstream>
+#include <iomanip>
 #include <cstdint>
 #include "../OLED.h"
 #include <nvs.h>

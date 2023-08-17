@@ -102,9 +102,6 @@ namespace WebUI {
             end();
         }
         _started = res;
-
-        //TEMP
-        download_file("http://mattstaniszewski.net/rss/Apple.gcode");
         
         return _started;
     }
@@ -422,8 +419,6 @@ namespace WebUI {
                 uint8_t buffer[1024];
                 int i = 0;
 
-                log_info("Starting download...");
-
                 // Download file
                 while (download_client.connected() || download_client.available()) {
                     if (download_client.available()) {
@@ -435,19 +430,21 @@ namespace WebUI {
                         float percent = ((float)total_bytes_read / (float)content_length) * 100;
                         if (++i == 10) {
                             i = 0;
-                            log_info("Downloaded: " << percent << "%");
+                            std::ostringstream s;
+                            s << "DL:" << std::fixed << std::setprecision(2) << percent << "," << filename.c_str();
+                            log_info("DL:" << percent << "," << filename.c_str());
                         }
                     }
                 }
                 delete(file);
-                log_info("File saved to SD card");
+                log_info("File download completed");
             
             } else {
-                log_info("Error opening file");
+                log_warn("Error opening file");
             }
 
         } else {
-            log_info("Connection to server failed");
+            log_warn("Connection to server failed");
         }
 
         // Close the connection

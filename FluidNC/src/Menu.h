@@ -49,7 +49,8 @@ public:
     Menu();
     ~Menu();
 
-    bool is_files_list();
+    bool is_files_menu();
+    bool is_rss_menu();
     struct MenuNodeType *get_active_head();
     struct MenuNodeType *get_selected();
     void enter_submenu();

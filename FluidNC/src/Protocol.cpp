@@ -18,6 +18,7 @@
 #include "MotionControl.h"  // PARKING_MOTION_LINE_NUMBER
 #include "Settings.h"       // settings_execute_startup
 #include "Machine/LimitPin.h"
+#include "WebUI/RSSReader.h"
 
 volatile ExecAlarm rtAlarm;  // Global realtime executor bitflag variable for setting various alarms.
 
@@ -1136,12 +1137,17 @@ static void protocol_do_enter() {
             } else if (strcmp(config->_oled->_menu->get_selected()->display_name, "< Back") == 0) {
                 config->_oled->_menu->exit_submenu();
 
-            // Run files command if files menu
-            } else if (config->_oled->_menu->is_files_list()) {
+            // Run file command if files menu
+            } else if (config->_oled->_menu->is_files_menu()) {
 
                 InputFile *infile = new InputFile("sd", config->_oled->_menu->get_selected()->path, WebUI::AuthenticationLevel::LEVEL_ADMIN, allChannels);
                 allChannels.registration(infile);
-            
+
+            // Download file command if RSS menu
+            } else if (config->_oled->_menu->is_rss_menu()) {
+
+                WebUI::rssReader.download_file(config->_oled->_menu->get_selected()->path);
+
             // Otherwise, enter the submenu if it exists
             } else {
                 config->_oled->_menu->enter_submenu();

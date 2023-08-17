@@ -487,7 +487,7 @@ void OLED::parse_status_report() {
         pos        = nextpos + 1;
         nextpos    = _report.find_first_of("|", pos);
         auto field = _report.substr(pos, nextpos - pos);
-        // MPos:, WPos:, Bf:, Ln:, FS:, Pn:, WCO:, Ov:, A:, SD: (ISRs:, Heap:)
+        // MPos:, WPos:, Bf:, Ln:, FS:, Pn:, WCO:, Ov:, A:, SD:, DL: (ISRs:, Heap:)
         auto colon = field.find_first_of(":");
         auto tag   = field.substr(0, colon);
         auto value = field.substr(colon + 1);
@@ -592,6 +592,12 @@ void OLED::parse_status_report() {
             // Trim to just the file name (no path)
             _filename     = _filename.substr(_filename.rfind('/') + 1);
             continue;
+        }
+        if (tag == "DL") {  // Download
+
+            _filename = "DOWNLOAD";
+            continue;
+
         }
     }
     show_all(axes, isMpos, limits);

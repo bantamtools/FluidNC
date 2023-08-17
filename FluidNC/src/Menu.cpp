@@ -51,8 +51,13 @@ Menu::~Menu() {
 }
 
 // Returns true if the current menu is the files menu
- bool Menu::is_files_list(void) {
+ bool Menu::is_files_menu(void) {
     return (_current_menu == _files_menu);
+}
+
+// Returns true if the current menu is the RSS menu
+ bool Menu::is_rss_menu(void) {
+    return (_current_menu == _rss_menu);
 }
 
 // Returns the active menu head
