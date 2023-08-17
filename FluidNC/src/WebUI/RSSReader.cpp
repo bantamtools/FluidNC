@@ -94,7 +94,7 @@ namespace WebUI {
             } else {
                 
                 // Parse the URL
-                res = parse_server_address(rss_url->get(), &_web_server, &_web_rss_address);
+                res = parse_server_address(String(rss_url->get()), &_web_server, &_web_rss_address);
             }
         }
 
@@ -159,42 +159,38 @@ namespace WebUI {
     RSSReader::~RSSReader() { end(); }
 
     // Parses the server and address from a full URL
-    bool RSSReader::parse_server_address(std::string url, String *server, String *address) {
+    bool RSSReader::parse_server_address(const String url, String *server, String *address) {
 
-        std::string host, path;
-        size_t found = 0;
+        int found = 0;
         bool res = true;
 
         // URL starts with http(s)
-        if (url.rfind("http", 0) == 0) {
-            found = url.find_first_of(":");
+        if (url.lastIndexOf("http", 0) == 0) {
+            found = url.indexOf(":");
             found += 3; // Step over colon and slashes
         }
         
-        size_t found1 = url.find_first_of(":", found);
+        int found1 = url.indexOf(":", found);
 
         // Port found
-        if (std::string::npos != found1) {
-            host = url.substr(found, found1 - found);
-            size_t found2 = url.find_first_of("/", found1);
-            if (std::string::npos != found2) {
-                path = url.substr(found2);
+        if (found1 >= 0) {
+            *server = url.substring(found, found1);
+            int found2 = url.indexOf("/", found1);
+            if (found2 >= 0) {
+                *address = url.substring(found2);
             }
 
         // No port
         } else {
-            found1 = url.find_first_of("/", found);
-            if (std::string::npos != found1) {
-                host = url.substr(found, found1 - found);
-                path = url.substr(found1);
+            found1 = url.indexOf("/", found);
+            if (found1 >= 0) {
+                *server = url.substring(found, found1);
+                *address = url.substring(found1);
             }
         }
 
-        *server = String(host.c_str());
-        *address = String(path.c_str());
-
         // Invalid URL, fail
-        if ((_web_server.length() == 0) || (_web_rss_address.length() == 0)) {
+        if ((server->length() == 0) || (address->length() == 0)) {
             res = false;
         }
         return res;
@@ -364,13 +360,19 @@ namespace WebUI {
     void RSSReader::download_file(char *link) {
 
         WiFiClient download_client;
-        String server, address;
+        String server, address, filename;
         
         // Parse the URL, return on fail
-        std::string link_str(link);
-        if(!parse_server_address(link_str, &server, &address)) {
+        if(!parse_server_address(String(link), &server, &address)) {
             return;
         }
+
+        // Extract the filename from the address
+        int found = address.lastIndexOf("/");
+        if (found < 0) {
+            return;
+        }
+        filename = address.substring(found + 1);
 
         // Connect to selected server
         if (download_client.connect(server.c_str(), 80)) {
@@ -412,7 +414,7 @@ namespace WebUI {
             }
             
             // Open the write file on SD
-            FileStream *file = new FileStream("Apple.gcode", "w", "sd"); //TODO fix
+            FileStream *file = new FileStream(filename.c_str(), "w", "sd");
             if (file) {
 
                 int bytes_read = 0;
