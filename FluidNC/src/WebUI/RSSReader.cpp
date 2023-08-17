@@ -420,6 +420,7 @@ namespace WebUI {
                 int i = 0;
 
                 // Download file
+                log_info("File download started");
                 while (download_client.connected() || download_client.available()) {
                     if (download_client.available()) {
                         bytes_read = download_client.readBytes(buffer, sizeof(buffer));

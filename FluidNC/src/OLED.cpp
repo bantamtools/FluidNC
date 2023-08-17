@@ -280,7 +280,7 @@ void OLED::show_file() {
     if (_filename.length() == 0) {
         return;
     }
-    if (_state != "Run" || _download_mode && pct == 100) {
+    if (_state != "Run" && pct == 100) {
         // This handles the case where the system returns to idle
         // but shows one last SD report
         return;
@@ -595,20 +595,7 @@ void OLED::parse_status_report() {
             }
             continue;
         }
-        if (tag == "SD") {
-            auto commaPos = value.find_first_of(",");
-            _percent      = std::strtof(value.substr(0, commaPos).c_str(), nullptr);
-            _filename     = value.substr(commaPos + 1);
-
-            // Trim to just the file name (no path)
-            _filename     = _filename.substr(_filename.rfind('/') + 1);
-            continue;
-        }
-        if (tag == "DL") {  // Download
-
-            // Set download flag
-            _download_mode = true;
-
+        if (tag == "SD" || tag == "DL") {
             auto commaPos = value.find_first_of(",");
             _percent      = std::strtof(value.substr(0, commaPos).c_str(), nullptr);
             _filename     = value.substr(commaPos + 1);
@@ -805,6 +792,14 @@ void OLED::parse_report() {
         parse_encoder();
         return;
     } 
+    if (_report.rfind("[MSG:INFO: File download started]", 0) == 0) {
+        _download_mode = true;
+        return;
+    }
+    if (_report.rfind("[MSG:INFO: File download completed]", 0) == 0) {
+        _download_mode = false;
+        return;
+    }
 }
 
 // This is how the OLED driver receives channel data
