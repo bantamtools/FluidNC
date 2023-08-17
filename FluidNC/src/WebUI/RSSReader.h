@@ -46,6 +46,10 @@ namespace WebUI {
 
     private:
 
+        static constexpr UBaseType_t    RSS_FETCH_PRIORITY      = (configMAX_PRIORITIES - 4);
+        static constexpr uint32_t       RSS_FETCH_STACK_SIZE    = 4096;
+        static constexpr uint32_t       RSS_FETCH_PERIODIC_MS   = 100;
+
         bool            _started;
         String          _web_server;
         String          _web_rss_address;
@@ -54,12 +58,13 @@ namespace WebUI {
         time_t          _last_update_time;
         time_t          _new_update_time;
         nvs_handle_t    _handle;
+        bool            _refresh_rss;
 
         bool            parse_server_address(const String url, String *server, String *address);
         void            parse_item(tinyxml2::XMLElement *itemNode);
         int             parse_month_name(const char *monthName);
         time_t          parse_pub_date(const char *pubDate);
-        void            fetch_and_parse();
+        static void     fetch_and_parse_task(void *pvParameters);
     };
 
     extern RSSReader rssReader; 
