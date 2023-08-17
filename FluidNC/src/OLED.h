@@ -54,6 +54,7 @@ private:
 
     std::string _state;
     std::string _filename;
+    bool        _download_mode = false;
 
     float       _percent;
     uint32_t    _run_start_time = 0;

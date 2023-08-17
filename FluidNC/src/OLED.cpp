@@ -212,7 +212,7 @@ void OLED::show_menu() {
     int menu_max_active_entries;
 
     // Don't show menu during Alarm, Run or Hold states
-    if (_state == "Alarm" || _state == "Run" || _state == "Hold:0" || _state == "Hold:1") {
+    if (_state == "Alarm" || _state == "Run" || _state == "Hold:0" || _state == "Hold:1" || _download_mode) {
         return;
     }
 
@@ -264,7 +264,7 @@ void OLED::show_file() {
     if (_state == "Run" && _run_start_time == 0) {
         _run_start_time = millis();
 
-    } else if (_state == "Idle" || pct == 100) {
+    } else if ((_state == "Idle" && !_download_mode) || pct == 100) {
         _run_start_time = 0;
         _prev_run_time = 0;
         return;
@@ -280,7 +280,7 @@ void OLED::show_file() {
     if (_filename.length() == 0) {
         return;
     }
-    if (_state != "Run" && pct == 100) {
+    if (_state != "Run" || _download_mode && pct == 100) {
         // This handles the case where the system returns to idle
         // but shows one last SD report
         return;
@@ -295,29 +295,40 @@ void OLED::show_file() {
     if (_width == 128) {
         show(percentLayout128, std::to_string(pct) + '%');
 
-        // Calculate and display the elapsed time
-        uint32_t elapsed_time = (millis() - _run_start_time + _prev_run_time) / 1000;
-        snprintf(time_str, 10, "%02d:%02d:%02d", 
-            (elapsed_time / 3600),          // hours
-            ((elapsed_time % 3600) / 60),   // minutes
-            ((elapsed_time % 3600) % 60));  // seconds
+        if (_download_mode) {
+            
+            truncated_draw_string(14, "Downloading:", DejaVu_Sans_10);
+            truncated_draw_string(26, _filename, DejaVu_Sans_10);
+            _oled->drawProgressBar(0, 39, 120, 10, pct);          
 
-        show(elapsedTimeLayout, time_str);
+        } else {
 
-        truncated_draw_string(14, _filename, DejaVu_Sans_10);
+            // Calculate and display the elapsed time
+            uint32_t elapsed_time = (millis() - _run_start_time + _prev_run_time) / 1000;
+            snprintf(time_str, 10, "%02d:%02d:%02d", 
+                (elapsed_time / 3600),          // hours
+                ((elapsed_time % 3600) / 60),   // minutes
+                ((elapsed_time % 3600) % 60));  // seconds
 
-        _oled->drawProgressBar(0, 26, 120, 10, pct);
+            show(elapsedTimeLayout, time_str);
+
+            truncated_draw_string(14, _filename, DejaVu_Sans_10);
+
+            _oled->drawProgressBar(0, 26, 120, 10, pct);
+        }
     } else {
         show(percentLayout64, std::to_string(pct) + '%');
     }
 
     // Display pause/resume message at bottom
-    if (_state == "Hold:0" || _state == "Hold:1") {
-        _oled->drawString(0, 39, "Click to RESUME");
-    } else {
-        _oled->drawString(0, 39, "Click to PAUSE");
+    if (!_download_mode) {
+        if (_state == "Hold:0" || _state == "Hold:1") {
+            _oled->drawString(0, 39, "Click to RESUME");
+        } else {
+            _oled->drawString(0, 39, "Click to PAUSE");
+        }
+        _oled->drawString(0, 52, "Long Press to CANCEL");
     }
-    _oled->drawString(0, 52, "Long Press to CANCEL");
 }
 void OLED::show_dro(float* axes, bool isMpos, bool* limits) {
 
@@ -369,7 +380,7 @@ void OLED::show_dro(float* axes, bool isMpos, bool* limits) {
 }
 
 void OLED::show_radio_info() {
-    if ((_state == "Run" && _filename.length()) || _state == "Hold:0" || _state == "Hold:1") {
+    if (((_state == "Run" || _download_mode) && _filename.length()) || _state == "Hold:0" || _state == "Hold:1") {
         return;
     }
 
@@ -479,8 +490,8 @@ void OLED::parse_status_report() {
     bool limits[MAX_N_AXIS] = { false };
 
     static float axes[MAX_N_AXIS];
-    bool  isMpos = false;
-    _filename    = "";
+    bool  isMpos    = false;
+    _filename       = "";
 
     // ... handle it
     while (nextpos != std::string::npos) {
@@ -595,9 +606,16 @@ void OLED::parse_status_report() {
         }
         if (tag == "DL") {  // Download
 
-            _filename = "DOWNLOAD";
-            continue;
+            // Set download flag
+            _download_mode = true;
 
+            auto commaPos = value.find_first_of(",");
+            _percent      = std::strtof(value.substr(0, commaPos).c_str(), nullptr);
+            _filename     = value.substr(commaPos + 1);
+
+            // Trim to just the file name (no path)
+            _filename     = _filename.substr(_filename.rfind('/') + 1);
+            continue;
         }
     }
     show_all(axes, isMpos, limits);
