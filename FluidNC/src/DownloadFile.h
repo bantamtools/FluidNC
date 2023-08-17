@@ -35,6 +35,7 @@ public:
     Channel& getChannel() { return _out; }
 
     // Channel methods
+    void     autoReport() override;
     size_t   write(const uint8_t* buffer, size_t length) override;
 
     ~DownloadFile();
