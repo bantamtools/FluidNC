@@ -7,6 +7,7 @@
 #include <iomanip>
 #include <cstdint>
 #include "../OLED.h"
+#include "../DownloadFile.h"
 #include <nvs.h>
 
 #ifndef ENABLE_WIFI

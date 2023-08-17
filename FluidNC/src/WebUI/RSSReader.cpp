@@ -411,7 +411,7 @@ namespace WebUI {
             }
             
             // Open the write file on SD
-            FileStream *file = new FileStream(filename.c_str(), "w", "sd");
+            DownloadFile *file = new DownloadFile(filename.c_str(), content_length, allChannels);
             if (file) {
 
                 int bytes_read = 0;
@@ -424,16 +424,6 @@ namespace WebUI {
                     if (download_client.available()) {
                         bytes_read = download_client.readBytes(buffer, sizeof(buffer));
                         file->write(buffer, bytes_read);
-                        total_bytes_read += bytes_read;
-
-                        // Calculate and print percent every 10 iterations (so we don't jam up log channel)
-                        float percent = ((float)total_bytes_read / (float)content_length) * 100;
-                        if (++i == 10) {
-                            i = 0;
-                            std::ostringstream s;
-                            s << "DL:" << std::fixed << std::setprecision(2) << percent << "," << filename.c_str();
-                            log_info("DL:" << percent << "," << filename.c_str());
-                        }
                     }
                 }
                 delete(file);
