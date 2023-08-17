@@ -104,7 +104,7 @@ namespace WebUI {
         _started = res;
 
         //TEMP
-        download_file(NULL);
+        download_file("http://mattstaniszewski.net/rss/Apple.gcode");
         
         return _started;
     }
@@ -193,7 +193,7 @@ namespace WebUI {
         *server = String(host.c_str());
         *address = String(path.c_str());
 
-        // Invalid URL, fail to start
+        // Invalid URL, fail
         if ((_web_server.length() == 0) || (_web_rss_address.length() == 0)) {
             res = false;
         }
@@ -364,19 +364,26 @@ namespace WebUI {
     void RSSReader::download_file(char *link) {
 
         WiFiClient download_client;
+        String server, address;
+        
+        // Parse the URL, return on fail
+        std::string link_str(link);
+        if(!parse_server_address(link_str, &server, &address)) {
+            return;
+        }
 
         // Connect to selected server
-        if (download_client.connect("mattstaniszewski.net", 80)) {
+        if (download_client.connect(server.c_str(), 80)) {
 
             // Set no delay
             download_client.setNoDelay(1);
 
             // Make GET request for selected link, use keep-alive for faster download
             download_client.print("GET ");
-            download_client.print("/rss/Apple.gcode");
+            download_client.print(address.c_str());
             download_client.print(" HTTP/1.1\r\n");
             download_client.print("Host: ");
-            download_client.print("mattstaniszewski.net");
+            download_client.print(server.c_str());
             download_client.print("\r\n");
             download_client.print("Connection: keep-alive\r\n\r\n");
 
@@ -405,7 +412,7 @@ namespace WebUI {
             }
             
             // Open the write file on SD
-            FileStream *file = new FileStream("Apple.gcode", "w", "sd");
+            FileStream *file = new FileStream("Apple.gcode", "w", "sd"); //TODO fix
             if (file) {
 
                 int bytes_read = 0;
