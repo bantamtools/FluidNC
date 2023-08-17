@@ -236,7 +236,7 @@ void Menu::remove(MenuType *menu) {
 // Prepares the given menu for an updated file/feed list
 void Menu::prep_for_list(MenuType *menu) {
     
-    MenuNodeType *entry = _current_menu->head;  // Start at the top of the active menu
+    MenuNodeType *entry = _main_menu->head;  // Start at the top of the main menu
 
     // If not in the given menu, find the node attached that menu
     while (_current_menu != menu && entry) {

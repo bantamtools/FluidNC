@@ -798,8 +798,12 @@ void OLED::parse_report() {
     }
     if (_report.rfind("[MSG:INFO: File download completed]", 0) == 0) {
         _download_mode = false;
+
+        // Update the files list on SD card and exit to main menu
+        sd_populate_files_menu();
         _oled->clear();
-        refresh_display();
+        _menu->exit_submenu();
+        
         return;
     }
 }
