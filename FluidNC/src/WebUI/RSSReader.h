@@ -40,8 +40,8 @@ namespace WebUI {
         void            handle();
         bool            started();
         String          get_url();
-        bool            parse_server_address(const String url, String *server, String *address);
-
+        void            download_file(char *link);
+        
         ~RSSReader();
 
     private:
@@ -60,6 +60,7 @@ namespace WebUI {
         nvs_handle_t    _handle;
         bool            _refresh_rss;
 
+        bool            parse_server_address(const String url, String *server, String *address);
         void            parse_item(tinyxml2::XMLElement *itemNode);
         int             parse_month_name(const char *monthName);
         time_t          parse_pub_date(const char *pubDate);

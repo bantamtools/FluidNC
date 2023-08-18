@@ -380,5 +380,92 @@ namespace WebUI {
             vTaskDelay(RSS_FETCH_PERIODIC_MS/portTICK_PERIOD_MS);
         }
     }
+
+    // Downloads the specified RSS feed link to SD card
+    void RSSReader::download_file(char *link) {
+
+        WiFiClient download_client;
+        String server, address, filename;
+        
+        // Parse the URL, return on fail
+        if(!parse_server_address(String(link), &server, &address)) {
+            return;
+        }
+
+        // Extract the filename from the address
+        int found = address.lastIndexOf("/");
+        if (found < 0) {
+            return;
+        }
+        filename = address.substring(found + 1);
+
+        // Connect to selected server
+        if (download_client.connect(server.c_str(), 80)) {
+
+            // Set no delay
+            download_client.setNoDelay(1);
+
+            // Make GET request for selected link, use keep-alive for faster download
+            download_client.print("GET ");
+            download_client.print(address.c_str());
+            download_client.print(" HTTP/1.1\r\n");
+            download_client.print("Host: ");
+            download_client.print(server.c_str());
+            download_client.print("\r\n");
+            download_client.print("Connection: keep-alive\r\n\r\n");
+
+            // Wait for HTTP connection
+            while (download_client.connected() && !download_client.available()) {
+                delay(1);
+            }
+
+            // Determine the content length and skip rest of headers
+            int content_length = 0;
+            String content_length_header_name = "Content-Length: ";
+            while (download_client.available()) {
+
+                String line = download_client.readStringUntil('\n');
+                line.trim(); // Remove whitespace
+                
+                // Save off content length (used for percent calculations)
+                if (line.startsWith(content_length_header_name)) {
+                    content_length = line.substring(content_length_header_name.length()).toInt();
+                }
+
+                // Read until find end of the headers (so we don't write them into our file)
+                if (line.length() == 0) {
+                    break;
+                }
+            }
+            
+            // Open the write file on SD
+            DownloadFile *file = new DownloadFile(filename.c_str(), content_length, allChannels);
+            if (file) {
+
+                int bytes_read = 0;
+                uint8_t buffer[1024];
+
+                // Download file
+                log_info("File download started");
+                while (download_client.connected() || download_client.available()) {
+                    if (download_client.available()) {
+                        bytes_read = download_client.readBytes(buffer, sizeof(buffer));
+                        file->write(buffer, bytes_read);
+                    }
+                }
+                delete(file);
+                log_info("File download completed");
+            
+            } else {
+                log_warn("Error opening file");
+            }
+
+        } else {
+            log_warn("Connection to server failed");
+        }
+
+        // Close the connection
+        download_client.stop();
+    }
 }
 #endif
