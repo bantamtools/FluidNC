@@ -2,8 +2,10 @@
 
 #pragma once
 
-#include "WebUI/Authentication.h"
 #include "FileStream.h"  // FileStream and Channel
+#include "WiFiClient.h"
+#include "Settings.h"
+#include "WebUI/RSSReader.h"
 #include "Error.h"
 
 #include <cstdint>
@@ -11,19 +13,22 @@
 class DownloadFile : public FileStream {
 private:
 
+    String _link;
     int _total_bytes_read;
-    int _size;
+    int _content_length;
 
     // The channel that triggered the use of this file, through which
     // status about the use of this file will be reported.
     Channel& _out;
+
+    void begin();
 
 public:
     static std::string _progress;
 
     // path is the full path to the file
     // channel is the I/O channel on which status about the use of this file will be reported
-    DownloadFile(const char* path, int size, Channel& out);
+    DownloadFile(const char* link, const char* title, Channel& out);
 
     DownloadFile(const DownloadFile&) = delete;
     DownloadFile& operator=(const DownloadFile&) = delete;
