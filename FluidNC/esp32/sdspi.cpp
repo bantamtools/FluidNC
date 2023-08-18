@@ -222,6 +222,24 @@ unmount2() {
 }
 #endif
 
+bool sd_card_is_present() {
+
+    bool res = false;
+
+    // SD card already mounted
+    if (sd_is_mounted) {
+        res = true;
+
+    // Otherwise, attempt to mount it and unmount again if found
+    } else if (!sd_mount()) {
+
+        sd_unmount();
+        res = true;
+    }
+
+    return res;
+}
+
 void sd_populate_files_menu() {
 
     std::error_code ec;
