@@ -298,6 +298,9 @@ namespace WebUI {
                 // Connected to RSS server
                 if (rssClient.connect(instance->_web_server.c_str(), 80)) {
 
+                    // Prep the RSS menu on screen
+                    config->_oled->_menu->prep_for_rss_update();
+
                     // GET Request
                     rssClient.print("GET ");
                     rssClient.print(instance->_web_rss_address.c_str());
@@ -306,12 +309,9 @@ namespace WebUI {
                     rssClient.print(instance->_web_server.c_str());
                     rssClient.print("\r\n");
                     rssClient.print("Connection: close\r\n\r\n");
-
+                   
                     // RSS data available
                     while (rssClient.connected() || rssClient.available()) {
-
-                        // Prep the RSS menu on screen
-                        config->_oled->_menu->prep_for_rss_update();
 
                         while (rssClient.available()) {
 
