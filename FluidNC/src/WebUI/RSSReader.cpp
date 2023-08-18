@@ -443,9 +443,7 @@ namespace WebUI {
             if (file) {
 
                 int bytes_read = 0;
-                int total_bytes_read = 0;
                 uint8_t buffer[1024];
-                int i = 0;
 
                 // Download file
                 log_info("File download started");
