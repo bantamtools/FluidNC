@@ -386,6 +386,12 @@ namespace WebUI {
 
         WiFiClient download_client;
         String server, address, filename;
+
+        // Check for SD card, send message and return on fail
+        if (!sd_card_is_present()) {
+            config->_oled->popup_msg("Please insert SD card");
+            return;
+        }
         
         // Parse the URL, return on fail
         if(!parse_server_address(String(link), &server, &address)) {
