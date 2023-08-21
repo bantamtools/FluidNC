@@ -28,7 +28,6 @@ private:
     Channel& _out;
 
     uint32_t _line_num;  // the most recent line number read
-    uint32_t _prev_report_interval; // previous auto-reporting interval, restored after input file killed
     bool     _readyNext = true;
 
 public:

@@ -37,6 +37,8 @@ namespace Machine {
         Pin _sharedStepperDisable;
         Pin _sharedStepperReset;
 
+        bool _homed = false;
+
         int   _numberAxis = 0;
         Axis* _axis[MAX_N_AXIS];
 

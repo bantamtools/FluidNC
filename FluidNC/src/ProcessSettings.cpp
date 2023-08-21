@@ -271,6 +271,10 @@ static Error isStuck() {
         rtAlarm = ExecAlarm::ControlPin;
         return Error::CheckDoor;
     }
+    // Skip stuck alarm if enter pressed (long press)
+    if (config->_control->enter_pressed()) {
+        return Error::Ok;
+    }
     if (config->_control->stuck()) {
         log_info("Control pins:" << config->_control->report_status());
         rtAlarm = ExecAlarm::ControlPin;
@@ -737,12 +741,7 @@ static Error setReportInterval(const char* value, WebUI::AuthenticationLevel aut
         return Error::BadNumberFormat;
     }
 
-    // Force interval of 500ms during a run
-    if (sys.state == State::Cycle) {
-        actual = out.setReportInterval(500);
-    } else {
-        actual = out.setReportInterval(intValue);
-    }
+    actual = out.setReportInterval(intValue);
 #if 1
     if (actual) {
         log_info("Channel auto report interval set to " << actual << " ms");

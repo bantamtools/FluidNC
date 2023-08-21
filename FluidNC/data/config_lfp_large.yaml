@@ -37,6 +37,7 @@ planner_blocks: 16
 
 control:
     feed_hold_pin: gpio.36:low
+    long_press_ms: 1000
 
 # uart1:
 #   txd_pin: gpio.22
@@ -70,8 +71,9 @@ axes:
 
   x:
     steps_per_mm: 40
-    max_rate_mm_per_min: 24000
-    acceleration_mm_per_sec2: 2400
+    max_rate_mm_per_min: 10000
+    acceleration_mm_per_sec2: 500
+    rapid_acceleration_mm_per_sec2: 300
     max_travel_mm: 1010
     soft_limits: false
     homing:
@@ -97,8 +99,9 @@ axes:
 
   y:
     steps_per_mm: 40
-    max_rate_mm_per_min: 24000
-    acceleration_mm_per_sec2: 2400
+    max_rate_mm_per_min: 10000
+    acceleration_mm_per_sec2: 500
+    rapid_acceleration_mm_per_sec2: 300
     max_travel_mm: 1024
     soft_limits: false
     homing:
@@ -124,8 +127,9 @@ axes:
 
   z:
     steps_per_mm: 16
-    max_rate_mm_per_min: 1000.000
-    acceleration_mm_per_sec2: 1000.000
+    max_rate_mm_per_min: 30000
+    acceleration_mm_per_sec2: 1000
+    rapid_acceleration_mm_per_sec2: 1000
     max_travel_mm: 25
     soft_limits: false
     homing:

@@ -20,6 +20,7 @@ WebUI::WiFiConfig wifi_config  __attribute__((init_priority(109))) ;
 #    include "WebServer.h"             // webServer.port()
 #    include "TelnetServer.h"          // telnetServer
 #    include "NotificationsService.h"  // notificationsservice
+#    include "RSSReader.h"             // rssReader
 
 #    include <WiFi.h>
 #    include <esp_wifi.h>
@@ -306,6 +307,12 @@ namespace WebUI {
         s << (notificationsService.started() ? "Enabled" : "Disabled");
         if (notificationsService.started()) {
             s << "(" << notificationsService.getTypeString() << ")";
+        }
+
+        LogStream s2(out, "RSS Reader: ");
+        s2 << (rssReader.started() ? "Enabled" : "Disabled");
+        if (rssReader.started()) {
+            s2 << " (" << rssReader.get_url().c_str() << ")";
         }
     }
 

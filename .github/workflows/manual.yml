@@ -34,8 +34,8 @@ jobs:
         pip install --upgrade platformio
     - name: Set release version
       run: |
-        git config user.email "wmb@firmworks.com"
-        git config user.name "Mitch Bradley"
+        git config user.email "devin@bantamtools.com"
+        git config user.name "BantamTools"
         git tag "${{ github.event.inputs.tag }}" -a -m "Release test"
     - name: Build
       run: python build-release.py
@@ -53,11 +53,11 @@ jobs:
         API_TOKEN_GITHUB: ${{ secrets.RELEASE_COPY_TOKEN }}
       with:
         source_folder: 'release/current'
-        destination_repo: 'bdring/fluidnc-releases'
+        destination_repo: 'bantamtools/FluidNC-Release'
         destination_branch: 'main'
         destination_folder: releases/${{ github.event.inputs.tag }}
-        user_email: bdring@buildlog.net
-        user_name: 'Bart Dring'
+        user_email: devin@bantamtools.com
+        user_name: 'Devin-Cooper'
         commit_msg: Release ${{ github.event.inputs.tag }}
     # - name: Upload mac bundle
     #   uses: actions/upload-artifact@v2

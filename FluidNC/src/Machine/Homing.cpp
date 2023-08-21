@@ -324,6 +324,9 @@ namespace Machine {
             sys.state = State::Idle;  // Set to IDLE when complete.
             Stepper::go_idle();       // Set steppers to the settings idle state before returning.
         }
+
+        // Set homed flag
+        config->_axes->_homed = true;
     }
 
     void Homing::nextCycle() {
@@ -422,6 +425,10 @@ namespace Machine {
     // cycle.  The protocol loop will then respond to events and advance
     // the homing state machine through its phases.
     void Homing::run_cycles(AxisMask axisMask) {
+
+        // Clear homed flag
+        config->_axes->_homed = false;
+
         if (!config->_kinematics->canHome(axisMask)) {
             sys.state = State::Alarm;
             return;

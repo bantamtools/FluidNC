@@ -21,6 +21,7 @@ namespace WebUI {
 #    include "WebServer.h"
 #    include "TelnetServer.h"
 #    include "NotificationsService.h"
+#    include "RSSReader.h"
 #    include "Commands.h"
 
 #    include <WiFi.h>
@@ -95,12 +96,14 @@ namespace WebUI {
         webServer.begin();
         telnetServer.begin();
         notificationsService.begin();
+        rssReader.begin();
 
         //be sure we are not is mixed mode in setup
         WiFi.scanNetworks(true);
         return no_error;
     }
     void WiFiServices::end() {
+        rssReader.end();
         notificationsService.end();
         telnetServer.end();
         webServer.end();
@@ -125,6 +128,7 @@ namespace WebUI {
         ArduinoOTA.handle();
         webServer.handle();
         telnetServer.handle();
+        rssReader.handle();
     }
 }
 #endif
