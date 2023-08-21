@@ -349,14 +349,15 @@ namespace WebUI {
                         }
 
                         // Once gone through all RSS entries, update the last update time to
-                        // the newest one available
+                        // the newest one available and popup message about new updates
                         if (instance->_new_update_time > instance->_last_update_time) {
                             if (nvs_set_i32(instance->_handle, "update_time", instance->_new_update_time) == ESP_OK) {
                                 instance->_last_update_time = instance->_new_update_time;
                             } else {
                                 log_warn("Failed to store RSS update time in NVS!");
                             }
-                            
+
+                            config->_oled->popup_msg("New RSS updates!", 5000);
                         }
                         // Check every 100ms
                         vTaskDelay(RSS_FETCH_PERIODIC_MS/portTICK_PERIOD_MS);

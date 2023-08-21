@@ -439,11 +439,11 @@ void OLED::refresh_display(bool menu_only) {
 }
 
 // Display a popup message temporarily
-void OLED::popup_msg(std::string msg) {
+void OLED::popup_msg(std::string msg, int dly) {
 
     // Show error message for 2s then restore display
     show_error(msg);
-    delay_ms(2000);
+    delay_ms(dly);
     refresh_display();
 }
 

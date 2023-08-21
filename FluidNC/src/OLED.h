@@ -116,7 +116,7 @@ public:
 
     void init();
     void refresh_display(bool menu_only = false);
-    void popup_msg(std::string msg);
+    void popup_msg(std::string msg, int dly = 2000);
     JogState get_jog_state();
     void set_jog_state(JogState);
     bool is_active();
