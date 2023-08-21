@@ -84,7 +84,7 @@ private:
     void show_file();
     void show_dro(float* axes, bool isMpos, bool* limits);
     void show_radio_info();
-    void show_error(String);
+    void show_error(std::string);
     void show_all(float *axes, bool isMpos, bool *limits);
 
     void draw_checkbox(int16_t x, int16_t y, int16_t width, int16_t height, bool checked);
@@ -116,7 +116,7 @@ public:
 
     void init();
     void refresh_display(bool menu_only = false);
-    void popup_msg(String msg);
+    void popup_msg(std::string msg);
     JogState get_jog_state();
     void set_jog_state(JogState);
     bool is_active();

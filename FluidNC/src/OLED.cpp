@@ -402,7 +402,7 @@ void OLED::show_radio_info() {
     }
 }
 
-void OLED::show_error(String msg) {
+void OLED::show_error(std::string msg) {
 
     // Clear anything left in error message area
     _oled->setColor(BLACK);
@@ -410,8 +410,7 @@ void OLED::show_error(String msg) {
     _oled->setColor(WHITE);
 
     // Draw message
-    _oled->setFont(DejaVu_Sans_10);
-    _oled->drawString(0, 13, msg);
+    truncated_draw_string(13, msg, DejaVu_Sans_10);
     _oled->display();
 }
 
@@ -440,7 +439,7 @@ void OLED::refresh_display(bool menu_only) {
 }
 
 // Display a popup message temporarily
-void OLED::popup_msg(String msg) {
+void OLED::popup_msg(std::string msg) {
 
     // Show error message for 2s then restore display
     show_error(msg);
