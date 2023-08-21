@@ -61,7 +61,7 @@ private:
     static constexpr int64_t        ULT_PING_TIMEOUT        = 6000;
     static constexpr float          ULT_ROUNDTRIP_M         = 5800.0;
     static constexpr uint32_t       ULT_ROUNDTRIP_CM        = 58;
-    static constexpr uint32_t       ULT_MAX_DISTANCE        = 1000;
+    static constexpr uint32_t       ULT_MAX_DISTANCE        = 100;
 
     static constexpr esp_err_t      ESP_ERR_ULTRASONIC_PING         = 0x200;
     static constexpr esp_err_t      ESP_ERR_ULTRASONIC_PING_TIMEOUT = 0x201;

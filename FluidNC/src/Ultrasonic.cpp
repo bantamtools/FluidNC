@@ -40,8 +40,6 @@
 
 #include "Ultrasonic.h"
 
-static portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED;
-
 // Ultraonic constructor
 Ultrasonic::Ultrasonic() {}
 
@@ -109,8 +107,6 @@ esp_err_t Ultrasonic::measure_raw(uint32_t max_time_us, uint32_t *time_us) {
         return ESP_ERR_INVALID_ARG;
     }
 
-    portENTER_CRITICAL(&mux);
-
     // Ping: Low for 2..4 us, then high 10 us
     _trig_pin.write(0);
     esp_rom_delay_us(ULT_TRIGGER_LOW_DELAY);
@@ -120,7 +116,6 @@ esp_err_t Ultrasonic::measure_raw(uint32_t max_time_us, uint32_t *time_us) {
 
     // Previous ping isn't ended
     if (_echo_pin.read()) {
-        portEXIT_CRITICAL(&mux);
         return ESP_ERR_ULTRASONIC_PING;
     }
 
@@ -129,7 +124,6 @@ esp_err_t Ultrasonic::measure_raw(uint32_t max_time_us, uint32_t *time_us) {
     while (!_echo_pin.read())
     {
         if ((esp_timer_get_time() - start) >= ULT_PING_TIMEOUT) {
-            portEXIT_CRITICAL(&mux);
             return ESP_ERR_ULTRASONIC_PING_TIMEOUT;
         }
     }
@@ -137,15 +131,14 @@ esp_err_t Ultrasonic::measure_raw(uint32_t max_time_us, uint32_t *time_us) {
     // got echo, measuring
     int64_t echo_start = esp_timer_get_time();
     int64_t time = echo_start;
+
     while (_echo_pin.read())
     {
         time = esp_timer_get_time();
         if ((esp_timer_get_time() - echo_start) >= max_time_us) {
-            portEXIT_CRITICAL(&mux);
             return ESP_ERR_ULTRASONIC_ECHO_TIMEOUT;
         }
     }
-    portEXIT_CRITICAL(&mux);
 
     *time_us = time - echo_start;
 

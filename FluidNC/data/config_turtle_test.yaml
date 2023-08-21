@@ -112,7 +112,7 @@ ultrasonic:
   echo_pin: gpio.38
   pause_time_ms: 6000
   pause_distance_cm: 15
-
+  
 # Configure SD card in SPI mode
 spi:
   miso_pin: gpio.8
