@@ -322,11 +322,7 @@ void OLED::show_file() {
 
     // Display pause/resume message at bottom
     if (!_download_mode) {
-        if (_state == "Hold:0" || _state == "Hold:1") {
-            _oled->drawString(0, 39, "Click to RESUME");
-        } else {
-            _oled->drawString(0, 39, "Click to PAUSE");
-        }
+        _oled->drawString(0, 39, "Click to PAUSE/RESUME");
         _oled->drawString(0, 52, "Long Press to CANCEL");
     }
 }

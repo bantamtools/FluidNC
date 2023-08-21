@@ -1,31 +1,6 @@
 name: "Serama"
 board: "Serama"
 
-
-arc_tolerance_mm: 0.002
-#Range: 0.001 to 1.0
-#FluidNC converts arcs into tiny line segment representing the arc. This value determines how closely the segments represent the arc. This value is rarely changed by the user.
-
-junction_deviation_mm: 0.010
-#Range: 0.01 to 1.0
-#Junction deviation is used by the planner to calculate cornering speeds. This is generally not adjusted by the user. Read the firmware source code for a full description.
-
-verbose_errors: false
-#Prints an error string with each error code. This might not be compatible with some gcode senders.
-
-report_inches: false
-#Set to true for inches and false for millimeters. This is only for reporting and not input values.
-
-enable_parking_override_control: false
-#This allows you to override the parking feature via gcode. When true M56 P0 disables parking and M56 P1 enables it.
-
-use_line_numbers: false
-#Allow FluidNC to use line numbers in gcode. To use line numbers, set this to true. Put line numbers in the gcode with N<line number>, like N100. The line number that is currently being executed by the motion planner will be displayed in the status reports with Ln:100. If there is no line number information in the gcode, it will report Ln:0.
-
-planner_blocks: 16
-#Range: 10 - 120
-#This sets the number of blocks used in the planner. You should leave it at the default unless you are tuning for a special application.
-
 start:
   must_home: false
 
@@ -45,7 +20,7 @@ axes:
   shared_stepper_reset_pin: NO_PIN
   
   x:
-    steps_per_mm: 40.16
+    steps_per_mm: 40
     max_rate_mm_per_min: 12000
     acceleration_mm_per_sec2: 7500
     rapid_acceleration_mm_per_sec2: 7500
@@ -60,7 +35,7 @@ axes:
     
     motor0:
       limit_neg_pin: gpio.1:high
-      pulloff_mm: 4
+      pulloff_mm: 3
       stepstick:
         disable_pin: gpio.15:low
         direction_pin: gpio.16
@@ -69,7 +44,7 @@ axes:
       null_motor:
 
   y:
-    steps_per_mm: 33.28
+    steps_per_mm: 34.5
     max_rate_mm_per_min: 12000
     acceleration_mm_per_sec2: 7500
     rapid_acceleration_mm_per_sec2: 7500
@@ -90,15 +65,15 @@ axes:
       null_motor:
 
   z:
-    steps_per_mm: 22.7
+    steps_per_mm: 12.25
     max_rate_mm_per_min: 12000
     acceleration_mm_per_sec2: 70000
     rapid_acceleration_mm_per_sec2: 70000
-    max_travel_mm: 10
+    max_travel_mm: 16
     soft_limits: false
     homing:
       cycle: 1
-      mpos_mm: 0.5
+      mpos_mm: 2
       positive_direction: true
       feed_mm_per_min: 500
       seek_mm_per_min: 1000
@@ -131,6 +106,13 @@ encoder:
   a_pin: gpio.35
   b_pin: gpio.48
 
+# Ultrasonic
+ultrasonic: 
+  trig_pin: gpio.37
+  echo_pin: gpio.38
+  pause_time_ms: 6000
+  pause_distance_cm: 15
+  
 # Configure SD card in SPI mode
 spi:
   miso_pin: gpio.8
@@ -149,6 +131,3 @@ user_outputs:
   digital2_pin: gpio.44
   digital3_pin: gpio.42
   digital4_pin: gpio.6
-
-rss:
-  url: https://www.mattstaniszewski.net/test_feed.xml

@@ -184,11 +184,17 @@ bool pollingPaused = false;
 void polling_loop(void* unused) {
     // Poll the input sources waiting for a complete line to arrive
     for (; true; /*feedLoopWDT(), */ vTaskDelay(0)) {
+
         // Polling is paused when xmodem is using a channel for binary upload
         if (pollingPaused) {
             vTaskDelay(100);
             continue;
         }
+
+        // Read encoder and ultrasonic sensor
+        protocol_read_encoder();
+        protocol_read_ultrasonic();
+
         if (activeChannel) {
             // Poll for realtime characters when waiting for the primary loop
             // (in another thread) to pick up the line.
@@ -259,19 +265,6 @@ static void check_startup_state() {
     }
 }
 
-// Reads the encoder input and prints a report if available
-void protocol_read_encoder() {
-    
-    // Read and report the difference if encoder is active
-    if (config->_encoder->is_active()) {
-
-        int16_t enc_diff = config->_encoder->get_difference();
-        if (enc_diff != 0) {
-            log_info("Encoder difference -> " << enc_diff); // Used by display for updates
-        }
-    }
-}
-
 const uint32_t heapWarnThreshold = 15000;
 
 uint32_t heapLowWater = UINT_MAX;
@@ -330,10 +323,6 @@ void protocol_main_loop() {
             if (heapLowWater < heapWarnThreshold) {
                 log_warn("Low memory: " << heapLowWater << " bytes");
             }
-        }
-        // Read encoder
-        if (config->_encoder) {
-            protocol_read_encoder();
         }
     }
     return; /* Never reached */
@@ -1078,8 +1067,7 @@ static void protocol_do_enter() {
 
             // Click / short press, feedhold job
             } else {
-                protocol_start_holding();
-                sys.state = State::Hold;
+                protocol_send_event(&feedHoldEvent);
             }
             break;
 
@@ -1092,10 +1080,8 @@ static void protocol_do_enter() {
                  // Long press, cancel job
                 if (long_press) {
                     protocol_send_event(&resetEvent);
-                } else if (spindle_stop_ovr.value) {
-                    spindle_stop_ovr.bit.restoreCycle = true;  // Set to restore in suspend routine and cycle start after.
                 } else {
-                    protocol_do_initiate_cycle();
+                    protocol_send_event(&cycleStartEvent);
                 }
             }
             break;
@@ -1155,6 +1141,118 @@ static void protocol_do_enter() {
             break;
 
         default: break;
+    }
+}
+
+// Reads the encoder input and prints a report if available
+void protocol_read_encoder() {
+
+    int16_t enc_diff;
+
+    // Bail if encoder not configured
+    if (!config->_encoder) return;
+    
+    // Read and report the difference if encoder is active
+    if (config->_encoder->is_active()) {
+
+        switch (sys.state) {
+
+            // Encoder does nothing in these states
+            case State::ConfigAlarm:
+            case State::CheckMode:
+            case State::Homing:
+            case State::Sleep:
+            case State::SafetyDoor:
+            case State::Alarm:
+            case State::Cycle:
+            case State::Hold:
+            case State::Jog:
+                break;
+
+            // Read the difference if idle
+            case State::Idle:
+
+                enc_diff = config->_encoder->get_difference();
+                if (enc_diff != 0) {
+                    log_info("Encoder difference -> " << enc_diff); // Used by display for updates
+                }
+                break;
+
+            default: break;
+        }
+    }
+}
+
+static int32_t pauseEndTime = 0;
+static bool pauseActive = false;
+
+// Reads the ultrasonic sensor and TODO
+void protocol_read_ultrasonic() {
+
+    // Bail if ultrasonic sensor not configured
+    if (!config->_ultrasonic) return;
+
+    // Process states if sensor active
+    if (config->_ultrasonic->is_active()) {
+
+        switch (sys.state) {
+
+            // Ultrasonic sensor does nothing in these states
+            case State::ConfigAlarm:
+            case State::CheckMode:
+            case State::Jog:
+            case State::Homing:
+            case State::Sleep:
+            case State::SafetyDoor:
+            case State::Alarm:
+            case State::Idle:
+                break;
+
+            // Feedhold during a cycle if we're within the pause distance and start timer
+            case State::Cycle:
+
+                if (config->_ultrasonic->within_pause_distance()) {
+                    protocol_send_event(&feedHoldEvent);
+                    pauseActive = true;
+                }
+                break;
+
+            // Resume from feedhold after a pause
+            case State::Hold:
+
+                // Once in HOLD, schedule pause for specified time unless already scheduled
+                if (pauseActive && pauseEndTime == 0) {
+                    pauseEndTime = usToEndTicks(config->_ultrasonic->get_pause_time_ms() * 1000);
+                    // pauseEndTime 0 means that a resume is not scheduled. so if we happen to
+                    // land on 0 as an end time, just push it back by one microsecond to get off 0.
+                    if (pauseEndTime == 0) {
+                        pauseEndTime = 1;
+                    }
+
+                // Check to see if we should resume from feedhold
+                // If pauseEndTime is 0, no pause is pending.
+                } else if (pauseActive && pauseEndTime && (getCpuTicks() - pauseEndTime) > 0) {
+                    pauseEndTime = 0;
+
+                    // Still have an object in the way, restart the timer
+                    if (config->_ultrasonic->within_pause_distance()) {
+                        pauseEndTime = usToEndTicks(config->_ultrasonic->get_pause_time_ms() * 1000);
+                        // pauseEndTime 0 means that a resume is not scheduled. so if we happen to
+                        // land on 0 as an end time, just push it back by one microsecond to get off 0.
+                        if (pauseEndTime == 0) {
+                            pauseEndTime = 1;
+                        }
+                        
+                    // Otherwise, resume motion
+                    } else {
+                        pauseActive = false;
+                        protocol_send_event(&cycleStartEvent);
+                    }
+                }
+                break;
+
+            default: break;
+        }
     }
 }
 

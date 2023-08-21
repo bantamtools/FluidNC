@@ -72,6 +72,8 @@ namespace Machine {
 
         handler.section("encoder", _encoder);
 
+        handler.section("ultrasonic", _ultrasonic);
+
         Spindles::SpindleFactory::factory(handler, _spindles);
 
         // TODO: Consider putting these under a gcode: hierarchy level? Or motion control?

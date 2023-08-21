@@ -30,6 +30,7 @@ void protocol_reset();
 void protocol_init();
 
 void protocol_read_encoder();
+void protocol_read_ultrasonic();
 
 // Starts the main loop. It handles all incoming characters from the serial port and executes
 // them as they complete. It is also responsible for finishing the initialization procedures.
