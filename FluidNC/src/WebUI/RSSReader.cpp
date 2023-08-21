@@ -462,6 +462,10 @@ namespace WebUI {
                 }
                 delete(file);
                 log_info("File download completed");
+
+                // Update the files list on SD card and exit to main menu
+                sd_populate_files_menu();
+                config->_oled->_menu->exit_submenu();
             
             } else {
                 log_warn("Error opening file");
