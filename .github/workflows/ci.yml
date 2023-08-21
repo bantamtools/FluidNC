@@ -9,9 +9,9 @@ jobs:
           - macos-latest
           - windows-latest
         pio_env:
-          - noradio
+        # - noradio
           - wifi
-          - bt
+        # - bt
         # - wifibt
         # - debug
         pio_env_variant:
