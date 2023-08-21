@@ -1,5 +1,4 @@
 #include "OLED.h"
-
 #include "Machine/MachineConfig.h"
 
 // Static variables
@@ -47,7 +46,7 @@ static uint8_t bantam_logo_bits[] PROGMEM = {
   0x00, 0xCC, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
   0x00, 0x00, 0x00, 0x00, 0x00, 0x90, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, };
-
+  
 // Jogging timer callback
 static void jog_timer_cb(void* arg)
 {
@@ -74,317 +73,19 @@ static void jog_timer_cb(void* arg)
     jog_timer_active = false;
 }
 
-// Returns true if the current menu is the files menu
- bool OLED::menu_is_files_list(void) {
-    return (current_menu == files_menu);
-}
-
-// Returns the selected entry
-struct MenuNodeType *OLED::menu_get_selected(void) {
-
-    // Traverse the list and print out each menu entry name
-    MenuNodeType *entry = current_menu->active_head; // Start at the beginning of the active window
-    int i = 0;
-    while (entry) {
-
-        // Found selected entry
-        if (entry->selected)
-            break;
-
-        // Advance the line and pointer
-        entry = entry->next;
-    }
-
-    return entry;
-}
-
-// Helper function to enter a submenu
-void OLED::menu_enter_submenu(void) {
-
-    MenuNodeType *selected_entry = this->menu_get_selected();
-
-    // Check if entry has a submenu
-    if (selected_entry->child) {
-
-        // Make the submenu active
-        current_menu = selected_entry->child;      
-
-        // Populate the files list if SD file menu
-        if (current_menu == files_menu) {
-
-            menu_populate_files_list();
-        }   
-        
-        // Refresh the display
-        show_all(saved_axes, saved_isMpos, saved_limits);
-    }
-}
-
-// Helper function to exit a submenu
-void OLED::menu_exit_submenu(void) {
-
-    // Check if submenu has an upper menu
-    if (current_menu->parent) {
-    
-        // Make the upper menu active
-        current_menu = current_menu->parent;
-
-        // Refresh the display
-        show_all(saved_axes, saved_isMpos, saved_limits);
-    }
-}
-
 // Get the jogging state
-JogState OLED::menu_get_jog_state(void) {
+JogState OLED::get_jog_state(void) {
     return jog_state;
 }
 
 // Set the jogging state
-void OLED::menu_set_jog_state(JogState state) {
+void OLED::set_jog_state(JogState state) {
     jog_state = state;
 }
 
-// Display an error message temporarily
-void OLED::menu_show_error(String msg) {
-
-    // Show error message for 2s then restore display
-    show_error(msg);
-    delay_ms(2000);
-    show_all(saved_axes, saved_isMpos, saved_limits);
-}
-
-// Helper function to return the active tail
-struct MenuNodeType *OLED::menu_get_active_tail(MenuType *menu, int menu_max_active_entries) {
-
-    bool active_area = false;
-    struct MenuNodeType *entry;
-    int num_active_nodes = 0;
-
-    // Traverse the linked list
-    entry = menu->head;  // Reset to head
-    while (entry->next && num_active_nodes < (menu_max_active_entries - 1)) {
-
-        // Count the active window nodes
-        if (entry == menu->active_head) {
-            active_area = true;
-        }
-        if (active_area) {
-          num_active_nodes++;  
-        }
-
-        // Go to the next entry
-        entry = entry->next;
-    }
-    return entry;
-}
-
-// Initializes a menu with default settings
-void OLED::menu_initialize(MenuType *menu, MenuType *parent) {
-    
-    // Initialize the menu to empty with no active window
-    menu->head = menu->active_head = NULL;
-
-    // Set the parent menu if one exists
-    menu->parent = parent;
-}
-
-// Adds a node entry to the given menu
-void OLED::menu_add(MenuType *menu, MenuType *submenu, const char *path, const char *display_name) {
-
-    // Allocate memory for the new entry
-    struct MenuNodeType* new_entry = (MenuNodeType*)malloc(sizeof(struct MenuNodeType));
-
-    // Populate the entry
-    new_entry->prev = NULL;
-    new_entry->next = NULL;
-
-    new_entry->child = submenu;
-
-    if (display_name) strncpy(new_entry->display_name, display_name, MENU_NAME_MAX_STR);    // Cuts off long display names
-    if (path) strncpy(new_entry->path, path, MENU_NAME_MAX_PATH);                           // Cuts off long file paths
-    new_entry->selected = false;
-
-    // No menu entries, insert as the head, set as active window head and select it
-    if (menu->head == NULL) {
-        new_entry->prev = NULL;
-        new_entry->selected = true;
-        menu->head = new_entry;
-        menu->active_head = new_entry;
-        return;
-    }
-
-    // List not empty, traverse to the end to add menu item
-    struct MenuNodeType* temp = menu->head;
-
-    // Looking for tail
-    while (temp->next != NULL) {
-        temp = temp->next;
-    }
-
-    // Add menu item at the tail
-    temp->next = new_entry;
-    new_entry->prev = temp;
-}
-
-// Deletes all nodes in the given menu
-void OLED::menu_delete(MenuType *menu) {
-
-    struct MenuNodeType* entry = menu->head;
-
-    // Traverse the menu until empty, clearing the memory for the nodes
-    while(entry) {
-
-        // Attach menu head to next node
-        menu->head = entry->next;
-
-        // Set new node to head unless it's empty
-        if (menu->head) {
-            menu->head->prev = NULL;
-        }
-
-        // Free the old node memory
-        free(entry);
-        entry = NULL;
-
-        // Advance the pointer
-        entry = menu->head;
-    }
-
-    // Mark the head and active head NULL to prevent use-after-free
-    menu->head = menu->active_head = NULL;
-}
-
-// Populates the file list from SD card
-void OLED::menu_populate_files_list(void) {
-
-    MenuNodeType *entry = current_menu->head;  // Start at the top of the active menu
-    
-    // If not in the files menu, find the node attached the the files menu
-    while (current_menu != files_menu && entry) {
-
-        // Found the load files node
-        if (entry->child == files_menu) {
-            break;
-        }
-
-        // Advance the pointer
-        entry = entry->next;
-    }
-
-    // Get the file listing
-    FileListType *files = sd_get_filelist();
-
-    // Clear out the menu nodes if they already exist
-    if ((current_menu == files_menu && current_menu->head) ||
-        (current_menu != files_menu && entry->child->head)) {
-        menu_delete(files_menu);
-    }
-
-    // Add the back button to top of menu
-    menu_add(this->files_menu, NULL, NULL, "< Back");
-
-    // Create a submenu of files
-    for (auto i = 0; i < files->num_files; i++) {
-
-        // Extract the display name from the full path
-        char *filename = strrchr(files->path[i], '/') + 1;
-        
-        // Initialize the files menu and attach nodes
-        menu_add(files_menu, NULL, files->path[i], filename);
-    }
-}
-
-// Initializes the menu subsystem
-void OLED::menu_init(void) {
-
-    // Allocate memory for the menus
-    main_menu = (MenuType*)malloc(sizeof(struct MenuType));
-    files_menu = (MenuType*)malloc(sizeof(struct MenuType));
-    jogging_menu = (MenuType*)malloc(sizeof(struct MenuType));
-    settings_menu = (MenuType*)malloc(sizeof(struct MenuType));
-    version_menu = (MenuType*)malloc(sizeof(struct MenuType));
-
-    // Initialize the menus
-    menu_initialize(main_menu, NULL);
-    menu_initialize(files_menu, main_menu);
-    menu_initialize(jogging_menu, main_menu);
-    menu_initialize(settings_menu, main_menu);
-    menu_initialize(version_menu, settings_menu);
-
-    // Set main menu as current
-    current_menu = main_menu;
-
-    // Main Menu
-    menu_add(main_menu, NULL, NULL, "Home");
-    menu_add(main_menu, jogging_menu, NULL, "Jogging");
-    menu_add(main_menu, files_menu, NULL, "Run from SD");
-    menu_add(main_menu, settings_menu, NULL, "Settings");
-
-    // Jogging Menu
-    menu_add(jogging_menu, NULL, NULL, "< Back");
-    menu_add(jogging_menu, NULL, NULL, "Jog X");
-    menu_add(jogging_menu, NULL, NULL, "Jog Y");
-    menu_add(jogging_menu, NULL, NULL, "Jog Z");
-
-    // Settings Menu
-    menu_add(settings_menu, NULL, NULL, "< Back");
-    //menu_add(settings_menu, NULL, NULL, "Update");  // WebUI already includes OTA functionality
-    menu_add(settings_menu, version_menu, NULL, "Version");
-
-    // Version Menu
-    char bantam_ver_str[MENU_NAME_MAX_STR] = {"Version: "};
-    strncat(bantam_ver_str, git_info_short, MENU_NAME_MAX_STR - 10);
-    char fluidnc_ver_str[MENU_NAME_MAX_STR] = {"FluidNC: "};
-    strncat(fluidnc_ver_str, fluidnc_version, MENU_NAME_MAX_STR - 10);
-
-    menu_add(version_menu, NULL, NULL, "< Back");
-    menu_add(version_menu, NULL, NULL, bantam_ver_str);
-    menu_add(version_menu, NULL, NULL, fluidnc_ver_str);
-
-    // Not jogging at init
-    jog_state = JogState::Idle;
-}
-
-// Updates the current menu selection
-void OLED::menu_update_selection(int menu_max_active_entries) {
-
-    MenuNodeType *entry = current_menu->head;  // Start at the top of the active menu
-    MenuNodeType *active_tail;
-
-    // Lock out scrolling during operation
-    if (sys.state != State::Idle) {
-        return;
-    }
-    
-    while (entry) {
-        
-        // Found selected entry and we have scrolled
-        if (entry->selected && (this->enc_diff != 0)) {
-
-            // Adjust menu selection and active window as needed
-            if (this->enc_diff > 0 && entry->next != NULL) {        // Forwards until hit tail
-                entry->next->selected = true;
-                entry->selected = false;
-                active_tail = this->menu_get_active_tail(current_menu, menu_max_active_entries);
-                if (active_tail->next && active_tail->next->selected) {  // Shift the window once scroll past max entries
-                    current_menu->active_head = current_menu->active_head->next;
-                }
-
-            } else if (this->enc_diff < 0 && entry->prev != NULL) { // Backwards until hit head
-                entry->prev->selected = true;
-                entry->selected = false;
-                if (current_menu->active_head->prev && current_menu->active_head->prev->selected) {  // Shift the window once scroll past max entries
-                    current_menu->active_head = current_menu->active_head->prev;
-                }
-            }
-            break;
-
-        // No update or operation in progress, set current selection entry
-        } else if (entry->selected) {
-            break;
-        }
-        entry = entry->next;      
-    }
+// Returns true if OLED is active and ready
+bool OLED::is_active() {
+    return _active;
 }
 
 void OLED::show(Layout& layout, const char* msg) {
@@ -396,14 +97,14 @@ void OLED::show(Layout& layout, const char* msg) {
     _oled->drawString(layout._x, layout._y, msg);
 }
 
-OLED::Layout OLED::stateLayout          = { 0, 0, 0, ArialMT_Plain_10, TEXT_ALIGN_LEFT };
-OLED::Layout OLED::elapsedTimeLayout    = { 63, 0, 128, ArialMT_Plain_10, TEXT_ALIGN_CENTER };
-OLED::Layout OLED::filenameLayout       = { 63, 13, 128, ArialMT_Plain_10, TEXT_ALIGN_CENTER };
-OLED::Layout OLED::percentLayout128     = { 128, 0, 128, ArialMT_Plain_10, TEXT_ALIGN_RIGHT };
-OLED::Layout OLED::percentLayout64      = { 64, 0, 64, ArialMT_Plain_10, TEXT_ALIGN_RIGHT };
-OLED::Layout OLED::posLabelLayout       = { 110, 13, 128, ArialMT_Plain_10, TEXT_ALIGN_RIGHT };
-OLED::Layout OLED::radioAddrLayout      = { 128, 0, 128, ArialMT_Plain_10, TEXT_ALIGN_RIGHT };
-OLED::Layout OLED::connectWifiLayout    = { 63, 52, 128, ArialMT_Plain_10, TEXT_ALIGN_CENTER };
+OLED::Layout OLED::stateLayout          = { 0, 0, 0, DejaVu_Sans_10, TEXT_ALIGN_LEFT };
+OLED::Layout OLED::elapsedTimeLayout    = { 63, 0, 128, DejaVu_Sans_10, TEXT_ALIGN_CENTER };
+OLED::Layout OLED::filenameLayout       = { 63, 13, 128, DejaVu_Sans_10, TEXT_ALIGN_CENTER };
+OLED::Layout OLED::percentLayout128     = { 128, 0, 128, DejaVu_Sans_10, TEXT_ALIGN_RIGHT };
+OLED::Layout OLED::percentLayout64      = { 64, 0, 64, DejaVu_Sans_10, TEXT_ALIGN_RIGHT };
+OLED::Layout OLED::posLabelLayout       = { 110, 13, 128, DejaVu_Sans_10, TEXT_ALIGN_RIGHT };
+OLED::Layout OLED::radioAddrLayout      = { 128, 0, 128, DejaVu_Sans_10, TEXT_ALIGN_RIGHT };
+OLED::Layout OLED::connectWifiLayout    = { 63, 52, 128, DejaVu_Sans_10, TEXT_ALIGN_CENTER };
 
 void OLED::afterParse() {
     if (!config->_i2c[_i2c_num]) {
@@ -462,12 +163,15 @@ void OLED::init() {
     _oled->drawXbm(0, 18, 128, 26, bantam_logo_bits);
 
     _oled->display();
+
+    jog_state = JogState::Idle;
+
     delay_ms(1000);
 
     allChannels.registration(this);
     setReportInterval(250);
 
-    this->menu_init();
+    _active = true;
 }
 
 Channel* OLED::pollLine(char* line) {
@@ -508,16 +212,16 @@ void OLED::show_menu() {
     int menu_max_active_entries;
 
     // Don't show menu during Alarm, Run or Hold states
-    if (_state == "Alarm" || _state == "Run" || _state == "Hold:0" || _state == "Hold:1") {
+    if (_state == "Alarm" || _state == "Run" || _state == "Hold:0" || _state == "Hold:1" || _download_mode) {
         return;
     }
 
     _oled->setTextAlignment(TEXT_ALIGN_LEFT);
 
     // Set up font and menu window
-    _oled->setFont(ArialMT_Plain_10);
+    _oled->setFont(DejaVu_Sans_10);
     menu_height = 13;
-    (current_menu == files_menu || current_menu == version_menu) ? menu_width = 128 : menu_width = 64;
+    (_menu->is_full_width()) ? menu_width = 128 : menu_width = 64;
     menu_max_active_entries = 4;
 
     // Clear any highlighting left in menu area
@@ -528,11 +232,12 @@ void OLED::show_menu() {
     // Update the menu selection if not jogging
     if (jog_state == JogState::Idle) {
 
-        menu_update_selection(menu_max_active_entries);
+        _menu->update_selection(menu_max_active_entries, _enc_diff);
+        _enc_diff = 0; // Reset to prevent multiple scrolls
     }
 
     // Traverse the list and print out each menu entry name
-    MenuNodeType *entry = current_menu->active_head; // Start at the beginning of the active window
+    MenuNodeType *entry = _menu->get_active_head(); // Start at the beginning of the active window
     int i = 0;
     while (entry && entry->display_name && i < menu_max_active_entries) {
 
@@ -541,8 +246,8 @@ void OLED::show_menu() {
         _oled->fillRect(0, 13 + (menu_height * i), menu_width, menu_height);
         (entry->selected) ? _oled->setColor(BLACK) : _oled->setColor(WHITE);
 
-        // Write out the entry name
-        truncated_draw_string(13 + (menu_height * i), entry->display_name, ArialMT_Plain_10);
+        // Write out the entry name, bolding updated ones
+        truncated_draw_string(13 + (menu_height * i), entry->display_name, (entry->updated ? DejaVu_Sans_Bold_10 : DejaVu_Sans_10));
 
         // Advance the line and pointer
         entry = entry->next;
@@ -559,7 +264,7 @@ void OLED::show_file() {
     if (_state == "Run" && _run_start_time == 0) {
         _run_start_time = millis();
 
-    } else if (_state == "Idle" || pct == 100) {
+    } else if ((_state == "Idle" && !_download_mode) || pct == 100) {
         _run_start_time = 0;
         _prev_run_time = 0;
         return;
@@ -590,29 +295,40 @@ void OLED::show_file() {
     if (_width == 128) {
         show(percentLayout128, std::to_string(pct) + '%');
 
-        // Calculate and display the elapsed time
-        uint32_t elapsed_time = (millis() - _run_start_time + _prev_run_time) / 1000;
-        snprintf(time_str, 10, "%02d:%02d:%02d", 
-            (elapsed_time / 3600),          // hours
-            ((elapsed_time % 3600) / 60),   // minutes
-            ((elapsed_time % 3600) % 60));  // seconds
+        if (_download_mode) {
+            
+            truncated_draw_string(14, "Downloading:", DejaVu_Sans_10);
+            truncated_draw_string(26, _filename, DejaVu_Sans_10);
+            _oled->drawProgressBar(0, 39, 120, 10, pct);          
 
-        show(elapsedTimeLayout, time_str);
+        } else {
 
-        truncated_draw_string(14, _filename, ArialMT_Plain_10);
+            // Calculate and display the elapsed time
+            uint32_t elapsed_time = (millis() - _run_start_time + _prev_run_time) / 1000;
+            snprintf(time_str, 10, "%02d:%02d:%02d", 
+                (elapsed_time / 3600),          // hours
+                ((elapsed_time % 3600) / 60),   // minutes
+                ((elapsed_time % 3600) % 60));  // seconds
 
-        _oled->drawProgressBar(0, 26, 120, 10, pct);
+            show(elapsedTimeLayout, time_str);
+
+            truncated_draw_string(14, _filename, DejaVu_Sans_10);
+
+            _oled->drawProgressBar(0, 26, 120, 10, pct);
+        }
     } else {
         show(percentLayout64, std::to_string(pct) + '%');
     }
 
     // Display pause/resume message at bottom
-    if (_state == "Hold:0" || _state == "Hold:1") {
-        _oled->drawString(0, 39, "Click to RESUME");
-    } else {
-        _oled->drawString(0, 39, "Click to PAUSE");
+    if (!_download_mode) {
+        if (_state == "Hold:0" || _state == "Hold:1") {
+            _oled->drawString(0, 39, "Click to RESUME");
+        } else {
+            _oled->drawString(0, 39, "Click to PAUSE");
+        }
+        _oled->drawString(0, 52, "Long Press to CANCEL");
     }
-    _oled->drawString(0, 52, "Long Press to CANCEL");
 }
 void OLED::show_dro(float* axes, bool isMpos, bool* limits) {
 
@@ -621,8 +337,7 @@ void OLED::show_dro(float* axes, bool isMpos, bool* limits) {
     saved_isMpos = isMpos;
     saved_limits = limits;
 
-    if (_state == "Alarm" || _state == "Hold:0" || _state == "Hold:1" ||
-        current_menu == files_menu || current_menu == version_menu) {
+    if (_state == "Alarm" || _state == "Hold:0" || _state == "Hold:1" || _menu->is_full_width()) {
         return;
     }
 
@@ -641,7 +356,7 @@ void OLED::show_dro(float* axes, bool isMpos, bool* limits) {
 
     show(posLabelLayout, isMpos ? "M Pos" : "W Pos");
 
-    _oled->setFont(ArialMT_Plain_10);
+    _oled->setFont(DejaVu_Sans_10);
     uint8_t oled_y_pos;
     for (uint8_t axis = X_AXIS; axis < n_axis; axis++) {
         oled_y_pos = ((_height == 64) ? 24 : 17) + (axis * 10);
@@ -665,7 +380,7 @@ void OLED::show_dro(float* axes, bool isMpos, bool* limits) {
 }
 
 void OLED::show_radio_info() {
-    if ((_state == "Run" && _filename.length()) || _state == "Hold:0" || _state == "Hold:1") {
+    if (((_state == "Run" || _download_mode) && _filename.length()) || _state == "Hold:0" || _state == "Hold:1") {
         return;
     }
 
@@ -687,7 +402,7 @@ void OLED::show_radio_info() {
     }
 }
 
-void OLED::show_error(String msg) {
+void OLED::show_error(std::string msg) {
 
     // Clear anything left in error message area
     _oled->setColor(BLACK);
@@ -695,8 +410,7 @@ void OLED::show_error(String msg) {
     _oled->setColor(WHITE);
 
     // Draw message
-    _oled->setFont(ArialMT_Plain_10);
-    _oled->drawString(0, 13, msg);
+    truncated_draw_string(13, msg, DejaVu_Sans_10);
     _oled->display();
 }
 
@@ -711,6 +425,26 @@ void OLED::show_all(float *axes, bool isMpos, bool *limits) {
     }
     show_radio_info();
     _oled->display();
+}
+
+void OLED::refresh_display(bool menu_only) {
+
+    if (!_active) return;
+    
+    if (menu_only) {
+        show_menu();
+    } else {
+        show_all(saved_axes, saved_isMpos, saved_limits);
+    }
+}
+
+// Display a popup message temporarily
+void OLED::popup_msg(std::string msg, int dly) {
+
+    // Show error message for 2s then restore display
+    show_error(msg);
+    delay_ms(dly);
+    refresh_display();
 }
 
 void OLED::parse_numbers(std::string s, float* nums, int maxnums) {
@@ -755,15 +489,15 @@ void OLED::parse_status_report() {
     bool limits[MAX_N_AXIS] = { false };
 
     static float axes[MAX_N_AXIS];
-    bool  isMpos = false;
-    _filename    = "";
+    bool  isMpos    = false;
+    _filename       = "";
 
     // ... handle it
     while (nextpos != std::string::npos) {
         pos        = nextpos + 1;
         nextpos    = _report.find_first_of("|", pos);
         auto field = _report.substr(pos, nextpos - pos);
-        // MPos:, WPos:, Bf:, Ln:, FS:, Pn:, WCO:, Ov:, A:, SD: (ISRs:, Heap:)
+        // MPos:, WPos:, Bf:, Ln:, FS:, Pn:, WCO:, Ov:, A:, SD:, DL: (ISRs:, Heap:)
         auto colon = field.find_first_of(":");
         auto tag   = field.substr(0, colon);
         auto value = field.substr(colon + 1);
@@ -860,7 +594,7 @@ void OLED::parse_status_report() {
             }
             continue;
         }
-        if (tag == "SD") {
+        if (tag == "SD" || tag == "DL") {
             auto commaPos = value.find_first_of(",");
             _percent      = std::strtof(value.substr(0, commaPos).c_str(), nullptr);
             _filename     = value.substr(commaPos + 1);
@@ -909,7 +643,7 @@ void OLED::parse_STA() {
     size_t start = strlen("[MSG:INFO: Connecting to STA SSID:");
     _radio_info  = _report.substr(start, _report.size() - start - 1);
 
-    auto fh = font_height(ArialMT_Plain_10);
+    auto fh = font_height(DejaVu_Sans_10);
     show(connectWifiLayout, "Connecting to Wi-Fi...");
     _oled->display();
 }
@@ -920,10 +654,10 @@ void OLED::parse_IP() {
     _radio_addr  = _report.substr(start, _report.size() - start - 1);
 
     _oled->clear();
-    auto fh = font_height(ArialMT_Plain_10);
-    wrapped_draw_string(0, "Wi-Fi Info", ArialMT_Plain_10);
-    wrapped_draw_string(fh, "Network ID: " + _radio_info, ArialMT_Plain_10);
-    wrapped_draw_string(fh * 2, "IP Addr: " + _radio_addr, ArialMT_Plain_10);
+    auto fh = font_height(DejaVu_Sans_10);
+    wrapped_draw_string(0, "Wi-Fi Info", DejaVu_Sans_10);
+    wrapped_draw_string(fh, "Network ID: " + _radio_info, DejaVu_Sans_10);
+    wrapped_draw_string(fh * 2, "IP Addr: " + _radio_addr, DejaVu_Sans_10);
     _oled->display();
     delay_ms(_radio_delay);
 }
@@ -940,9 +674,9 @@ void OLED::parse_AP() {
     _radio_addr = _report.substr(ip_start, ip_end - ip_start);
 
     _oled->clear();
-    auto fh = font_height(ArialMT_Plain_10);
-    wrapped_draw_string(0, _radio_info, ArialMT_Plain_10);
-    wrapped_draw_string(fh * 2, _radio_addr, ArialMT_Plain_10);
+    auto fh = font_height(DejaVu_Sans_10);
+    wrapped_draw_string(0, _radio_info, DejaVu_Sans_10);
+    wrapped_draw_string(fh * 2, _radio_addr, DejaVu_Sans_10);
     _oled->display();
     delay_ms(_radio_delay);
 }
@@ -954,7 +688,7 @@ void OLED::parse_BT() {
     _radio_info += btname.c_str();
 
     _oled->clear();
-    wrapped_draw_string(0, _radio_info, ArialMT_Plain_10);
+    wrapped_draw_string(0, _radio_info, DejaVu_Sans_10);
     _oled->display();
     delay_ms(_radio_delay);
 }
@@ -966,13 +700,13 @@ void OLED::parse_encoder() {
     size_t  end     = _report.rfind("]");
     
     // Save off the encoder difference to update the menu
-    this->enc_diff = stoi(_report.substr(start, end - start));
+    _enc_diff = stoi(_report.substr(start, end - start));
 
     // System IDLE and scrolling to jog
     if ((sys.state == State::Idle) && (jog_state == JogState::Scrolling)) {
 
         // Extract axis from menu item
-        char *axis = (strrchr(menu_get_selected()->display_name, ' ') + 1);
+        char *axis = (strrchr(_menu->get_selected()->display_name, ' ') + 1);
 
         // Start timer if not active
         if (!jog_timer_active) {
@@ -995,21 +729,21 @@ void OLED::parse_encoder() {
         switch (axis[0]) {
             case 'X': 
             
-                saved_axes[X_AXIS] += (JOG_X_STEP * (float)enc_diff); 
+                saved_axes[X_AXIS] += (JOG_X_STEP * (float)_enc_diff); 
                 if (saved_axes[X_AXIS] < limitsMinPosition(X_AXIS)) saved_axes[X_AXIS] = limitsMinPosition(X_AXIS);
                 if (saved_axes[X_AXIS] > limitsMaxPosition(X_AXIS)) saved_axes[X_AXIS] = limitsMaxPosition(X_AXIS);
                 break;
             
             case 'Y': 
             
-                saved_axes[Y_AXIS] += (JOG_Y_STEP * (float)enc_diff);
+                saved_axes[Y_AXIS] += (JOG_Y_STEP * (float)_enc_diff);
                 if (saved_axes[Y_AXIS] < limitsMinPosition(Y_AXIS)) saved_axes[Y_AXIS] = limitsMinPosition(Y_AXIS);
                 if (saved_axes[Y_AXIS] > limitsMaxPosition(Y_AXIS)) saved_axes[Y_AXIS] = limitsMaxPosition(Y_AXIS);
                 break;
 
             case 'Z': 
             
-                saved_axes[Z_AXIS] += (JOG_Z_STEP * (float)enc_diff); 
+                saved_axes[Z_AXIS] += (JOG_Z_STEP * (float)_enc_diff); 
                 if (saved_axes[Z_AXIS] < limitsMinPosition(Z_AXIS)) saved_axes[Z_AXIS] = limitsMinPosition(Z_AXIS);
                 if (saved_axes[Z_AXIS] > limitsMaxPosition(Z_AXIS)) saved_axes[Z_AXIS] = limitsMaxPosition(Z_AXIS);
                 break;
@@ -1056,14 +790,15 @@ void OLED::parse_report() {
     if (_report.rfind("[MSG:INFO: Encoder difference -> ", 0) == 0) {
         parse_encoder();
         return;
-    }
-
-    // Refresh the screen on card detect event to update file list
-     if ((_report.rfind("[MSG:INFO: SD Card Detect Event]", 0) == 0) && (current_menu == files_menu)) {
-        menu_populate_files_list();
-        show_menu();
+    } 
+    if (_report.rfind("[MSG:INFO: File download started]", 0) == 0) {
+        _download_mode = true;
         return;
-    }   
+    }
+    if (_report.rfind("[MSG:INFO: File download completed]", 0) == 0) {
+        _download_mode = false;        
+        return;
+    }
 }
 
 // This is how the OLED driver receives channel data

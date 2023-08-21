@@ -46,6 +46,9 @@ namespace Machine {
             }
         }
 
+        // clear homing flag
+        _homed = false;
+
         config_motors();
     }
 
