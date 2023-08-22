@@ -264,7 +264,7 @@ void OLED::show_file() {
     if (_state == "Run" && _run_start_time == 0) {
         _run_start_time = millis();
 
-    } else if ((_state == "Idle" && !_download_mode) || pct == 100) {
+    } else if ((_state == "Idle" && !sys.suspend.value && !_download_mode) || pct == 100) {
         _run_start_time = 0;
         _prev_run_time = 0;
         return;
