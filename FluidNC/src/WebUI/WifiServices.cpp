@@ -128,7 +128,6 @@ namespace WebUI {
         ArduinoOTA.handle();
         webServer.handle();
         telnetServer.handle();
-        rssReader.handle();
     }
 }
 #endif

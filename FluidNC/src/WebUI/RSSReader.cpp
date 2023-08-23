@@ -45,9 +45,8 @@ namespace WebUI {
     RSSReader::RSSReader() {
         _web_server         = DEFAULT_RSS_WEB_SERVER;
         _web_rss_address    = DEFAULT_RSS_ADDRESS;
-        _refresh_period_sec = DEFAULT_RSS_REFRESH_SEC;
-        _refresh_start_ms   = 0;
         _last_update_time   = 0;
+        _new_update_time    = 0;
         _started            = false;
         _handle             = 0;
         _refresh_rss        = false;
@@ -83,11 +82,8 @@ namespace WebUI {
         // Pull settings from WebUI if successful Wi-Fi connection
         if (res) {
 
-            // Grab the refresh period
-            _refresh_period_sec = rss_refresh_sec->get();
-
-            // RSS feed disabled
-            if (_refresh_period_sec == 0) {
+            // RSS feed disabled if refresh period is zero
+            if (!rss_refresh_sec->get()) {
                 res = false;
 
             // RSS enabled, configure URL
@@ -119,36 +115,14 @@ namespace WebUI {
 
         _web_server         = "";
         _web_rss_address    = "";
-        _refresh_period_sec = 0;
-        _refresh_start_ms   = 0;
         _last_update_time   = 0;
+        _new_update_time    = 0;
         _started            = false;
         _refresh_rss        = false;
 
         // Close NVS handle
         nvs_close(_handle);  
         _handle = 0;
-    }
-
-    // Processes any RSS reader changes
-    void RSSReader::handle() {
-        
-        if (_started) {
-
-            // Poll the XML data and refresh the list after refresh period expires or after boot
-            if ((_refresh_start_ms == 0) || 
-                ((millis() - _refresh_start_ms) >= (_refresh_period_sec * 1000))) {
-
-                // Flag an RSS refresh
-                _refresh_rss = true;
-
-                // DEBUG: Print Heap
-                //log_warn("Heap: " << xPortGetFreeHeapSize());
-
-                // Set new refresh start time
-                _refresh_start_ms = millis();
-            }
-        }
     }
 
     // Check if RSS reader service has been started
@@ -256,6 +230,9 @@ namespace WebUI {
         // Newer than last NVS timestamp, flag update and save off value if newest
         if (timestamp > _last_update_time) {
             is_updated = true;
+            if (timestamp > _new_update_time) {
+                _new_update_time = timestamp;
+            }
         }
 
         // Print elements out
@@ -341,6 +318,18 @@ namespace WebUI {
                                 itemNode = rssDoc.NewElement("item");
                                 rssChunk = "<item>";
                             }
+                        }
+
+                        // Once gone through all RSS entries, update the last update time to
+                        // the newest one available and popup message about new updates
+                        if (instance->_new_update_time > instance->_last_update_time) {
+                            if (nvs_set_i32(instance->_handle, "update_time", instance->_new_update_time) == ESP_OK) {
+                                instance->_last_update_time = instance->_new_update_time;
+                            } else {
+                                log_warn("Failed to store RSS update time in NVS!");
+                            }
+
+                            config->_oled->popup_msg("New RSS updates!", 5000);
                         }
 
                         // Check every 100ms
@@ -461,25 +450,6 @@ namespace WebUI {
 
         // Close the connection
         download_client.stop();
-    }
-
-    // Sets the last update time
-    void RSSReader::set_last_update_time(time_t new_update_time) {
-
-        // Once WebUI refreshes RSS, update the last update time to
-        // the newest one available and popup message about new updates
-        if (nvs_set_i32(_handle, "update_time", new_update_time) == ESP_OK) {
-            _last_update_time = new_update_time;
-        } else {
-            log_warn("Failed to store RSS update time in NVS!");
-        }
-
-        // Commit written value to NVS
-        if (nvs_commit(_handle) != ESP_OK) {
-            log_warn("Failed to commit RSS update time to NVS!");
-        }
-
-        config->_oled->popup_msg("New RSS updates!", 5000);
     }
 }
 #endif

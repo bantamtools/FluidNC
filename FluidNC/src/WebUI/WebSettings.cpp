@@ -107,19 +107,8 @@ Error WebCommand::action(char* value, WebUI::AuthenticationLevel auth_level, Cha
 
 namespace WebUI {
 
-    static Error syncRssRefreshTime(char* parameter, AuthenticationLevel auth_level, Channel& out) {  // ESP902
-        rssReader.sync_refresh_time();
-        return Error::Ok;
-    }
-
-    static Error setRssLastUpdateTime(char* parameter, AuthenticationLevel auth_level, Channel& out) {  // ESP901
-
-        time_t update_time;
-
-        parameter = trim(parameter);
-        sscanf(parameter, "%ld", &update_time);
-        rssReader.set_last_update_time(update_time);
-        
+    static Error syncRssFeed(char* parameter, AuthenticationLevel auth_level, Channel& out) {  // ESP901
+        rssReader.sync();
         return Error::Ok;
     }
 
@@ -722,7 +711,6 @@ namespace WebUI {
         new WebCommand(NULL, WEBCMD, WG, "ESP", "WebUI/Help", showWebHelp, anyState);
 
         new WebCommand(NULL, WEBCMD, WA, "ESP900", "RSS/getLastUpdateTime", getRssLastUpdateTime);
-        new WebCommand(NULL, WEBCMD, WA, "ESP901", "RSS/setLastUpdateTime", setRssLastUpdateTime);
-        new WebCommand(NULL, WEBCMD, WA, "ESP902", "RSS/syncRefreshTime", syncRssRefreshTime);
+        new WebCommand(NULL, WEBCMD, WA, "ESP901", "RSS/syncRssFeed", syncRssFeed);
     }
 }
