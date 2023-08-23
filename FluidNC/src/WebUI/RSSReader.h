@@ -42,7 +42,9 @@ namespace WebUI {
         String          get_url();
         void            download_file(char *link);
         time_t          get_last_update_time() { return _last_update_time; };
-        
+        void            set_last_update_time(time_t new_update_time);
+        void            sync_refresh_time() { _refresh_start_ms = 0; };
+
         ~RSSReader();
 
     private:
@@ -57,7 +59,6 @@ namespace WebUI {
         uint32_t        _refresh_period_sec;
         uint32_t        _refresh_start_ms;
         time_t          _last_update_time;
-        time_t          _new_update_time;
         nvs_handle_t    _handle;
         bool            _refresh_rss;
 

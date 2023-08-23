@@ -48,7 +48,6 @@ namespace WebUI {
         _refresh_period_sec = DEFAULT_RSS_REFRESH_SEC;
         _refresh_start_ms   = 0;
         _last_update_time   = 0;
-        _new_update_time    = 0;
         _started            = false;
         _handle             = 0;
         _refresh_rss        = false;
@@ -123,7 +122,6 @@ namespace WebUI {
         _refresh_period_sec = 0;
         _refresh_start_ms   = 0;
         _last_update_time   = 0;
-        _new_update_time    = 0;
         _started            = false;
         _refresh_rss        = false;
 
@@ -258,9 +256,6 @@ namespace WebUI {
         // Newer than last NVS timestamp, flag update and save off value if newest
         if (timestamp > _last_update_time) {
             is_updated = true;
-            if (timestamp > _new_update_time) {
-                _new_update_time = timestamp;
-            }
         }
 
         // Print elements out
@@ -348,17 +343,6 @@ namespace WebUI {
                             }
                         }
 
-                        // Once gone through all RSS entries, update the last update time to
-                        // the newest one available and popup message about new updates
-                        if (instance->_new_update_time > instance->_last_update_time) {
-                            if (nvs_set_i32(instance->_handle, "update_time", instance->_new_update_time) == ESP_OK) {
-                                instance->_last_update_time = instance->_new_update_time;
-                            } else {
-                                log_warn("Failed to store RSS update time in NVS!");
-                            }
-
-                            config->_oled->popup_msg("New RSS updates!", 5000);
-                        }
                         // Check every 100ms
                         vTaskDelay(RSS_FETCH_PERIODIC_MS/portTICK_PERIOD_MS);
                     }
@@ -477,6 +461,22 @@ namespace WebUI {
 
         // Close the connection
         download_client.stop();
+    }
+
+    // Sets the last update time
+    void RSSReader::set_last_update_time(time_t new_update_time) {
+
+        // Once WebUI refreshes RSS, update the last update time to
+        // the newest one available and popup message about new updates
+        if (new_update_time > _last_update_time) {
+            if (nvs_set_i32(_handle, "update_time", new_update_time) == ESP_OK) {
+                _last_update_time = new_update_time;
+            } else {
+                log_warn("Failed to store RSS update time in NVS!");
+            }
+
+            config->_oled->popup_msg("New RSS updates!", 5000);
+        }
     }
 }
 #endif
