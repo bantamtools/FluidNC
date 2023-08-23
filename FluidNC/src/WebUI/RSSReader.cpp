@@ -32,7 +32,7 @@ namespace WebUI {
     IntSetting* rss_refresh_sec;
 
     static const String DEFAULT_RSS_WEB_SERVER  = "mattstaniszewski.net";
-    static const String DEFAULT_RSS_ADDRESS     = "/test_feed.xml";
+    static const String DEFAULT_RSS_ADDRESS     = "/rss";
     static const String DEFAULT_RSS_FULL_URL    = DEFAULT_RSS_WEB_SERVER + DEFAULT_RSS_ADDRESS;
     static const int MIN_RSS_URL = 0;
     static const int MAX_RSS_URL = 2083; // Based on Chrome, IE; other browsers allow more characters   
