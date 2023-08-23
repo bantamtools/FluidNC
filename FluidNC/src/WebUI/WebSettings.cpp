@@ -106,6 +106,13 @@ Error WebCommand::action(char* value, WebUI::AuthenticationLevel auth_level, Cha
 };
 
 namespace WebUI {
+
+    static Error getRssLastUpdateTime(char* parameter, AuthenticationLevel auth_level, Channel& out) {  // ESP900
+        LogStream s(out, "");
+        s << (int)rssReader.get_last_update_time();
+        return Error::Ok;
+    }
+
     // Used by js/connectdlg.js
     static Error showFwInfo(char* parameter, AuthenticationLevel auth_level, Channel& out) {  // ESP800
         LogStream s(out, "FW version: FluidNC ");
@@ -697,5 +704,7 @@ namespace WebUI {
         new WebCommand(NULL, WEBCMD, WU, "ESP400", "WebUI/List", listSettings, anyState);
         new WebCommand(NULL, WEBCMD, WG, "ESP0", "WebUI/Help", showWebHelp, anyState);
         new WebCommand(NULL, WEBCMD, WG, "ESP", "WebUI/Help", showWebHelp, anyState);
+
+        new WebCommand(NULL, WEBCMD, WA, "ESP900", "RssLastUpdateTime", getRssLastUpdateTime);
     }
 }

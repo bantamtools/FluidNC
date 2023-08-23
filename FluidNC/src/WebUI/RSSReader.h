@@ -41,6 +41,7 @@ namespace WebUI {
         bool            started();
         String          get_url();
         void            download_file(char *link);
+        time_t          get_last_update_time() { return _last_update_time; };
         
         ~RSSReader();
 

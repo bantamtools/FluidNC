@@ -149,6 +149,3 @@ user_outputs:
   digital2_pin: gpio.44
   digital3_pin: gpio.42
   digital4_pin: gpio.6
-
-rss:
-  url: https://www.mattstaniszewski.net/test_feed.xml
