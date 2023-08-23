@@ -9,16 +9,31 @@ namespace Kinematics {
     void DifferentialDrive::group(Configuration::HandlerBase& handler) {
         handler.item("left_motor_axis", _left_motor_axis);
         handler.item("right_motor_axis", _right_motor_axis);
-        handler.item("wheel_radius", _wheel_radius);
+        //handler.item("wheel_radius", _wheel_radius);  // this is folded into the motor config's steps/mm
         handler.item("distance_between_wheels", _distance_between_wheels);
+        handler.item("use_z_delay", _use_z_delay);
         log_info("DD wheel distance: " << _distance_between_wheels);
     }
 
     void DifferentialDrive::init() {
         log_info("Kinematic system: " << name());
-        m_heading = 0.0; // define current heading as zero angle
+        m_heading = 0.0; // define current heading as zero angle (note this faces down positive X)
         m_motor_left = 0.0;
         m_motor_right = 0.0;
+        m_prev_x = 0.0;
+        m_prev_y = 0.0;
+        m_next_x = 0.0;
+        m_next_y = 0.0;
+        m_prev_left = 0.0;
+        m_prev_right = 0.0;
+        m_next_left = 0.0;
+        m_next_right = 0.0;
+        m_left_last_report = 0.0;
+        m_right_last_report = 0.0;
+        m_have_captured_z = false;
+        m_captured_z_target = 0.0;
+        m_captured_z_prev = 0.0;
+        m_captured_z_pldata = NULL;
         init_position();
     }
 
@@ -48,28 +63,48 @@ namespace Kinematics {
         // then move the necessary distance straight forward (+ both motors equally) to the target.
         // Make sure Z and any other axes are passed through unchanged during the final move.
 
-        // TODO .... but I think all of the below is actually going to be wrong because I'm generating relative
-        //  moves and mc_move_motors is expecting absolute moves. So hmm. Have to store our last motor positions I guess?
-
         auto n_axis = config->_axes->_numberAxis;
         float motors[n_axis];
 
         // First check whether we are moving in X/Y at all, if not the equations below won't make sense
         float XY_cartesian_distance = vector_distance(position, target, 2);
         if (XY_cartesian_distance == 0) {
-            motors[0] = m_motor_left; // don't move from current position
-            motors[1] = m_motor_right;
-            for (size_t axis = Z_AXIS; axis < n_axis; axis++) { // pass through any other axis moves (like Z for pen)
+            motors[X_AXIS] = m_motor_left; // don't move from current position
+            motors[Y_AXIS] = m_motor_right;
+            if (_use_z_delay && (target[Z_AXIS] < position[Z_AXIS])) { // capture Z-down only move and save for later
+                motors[Z_AXIS] = position[Z_AXIS]; // don't move
+                m_captured_z_target = target[Z_AXIS];
+                m_captured_z_prev = position[Z_AXIS];
+                m_captured_z_pldata = pl_data;
+                m_have_captured_z = true;
+            } else {
+                motors[Z_AXIS] = target[Z_AXIS];
+            }
+            for (size_t axis = Z_AXIS+1; axis < n_axis; axis++) { // pass through any remaining axis moves
                 motors[axis] = target[axis];
             }
             return mc_move_motors(motors, pl_data);
         }
+        // finished with no X/Y movement case
+
+        // record starting motor positions and cartesian start and end
+        m_prev_left = m_motor_left;
+        m_prev_right = m_motor_right;
+        m_prev_x = position[X_AXIS];
+        m_prev_y = position[Y_AXIS];
+        m_next_x = target[X_AXIS];
+        m_next_y = target[Y_AXIS];
 
         // calc new heading
         //   angle between 2D points = atan2(y2 - y1, x2 - x1)
-        float new_heading = atan2f((target[1]-position[1]),(target[0]-position[0])); // (radians)
+        float new_heading = atan2f((target[Y_AXIS]-position[Y_AXIS]),(target[X_AXIS]-position[X_AXIS])); // (radians)
         // angle diff
         float turn_angle = new_heading - m_heading;
+        // Note this would turn in an arbitrary direction based on what atan gave us; may turn 270 when it could turn 90.
+        if (turn_angle > PI) { turn_angle -= 2.0*PI; }
+        if (turn_angle < -PI) { turn_angle += 2.0*PI; }
+        // Now it should be within +- 180
+        // TODO?: Further optimization: if angle beyond +/-90, could turn the supplementary and move backward - but some media may not draw well backward
         // To turn in place we move each wheel in opposite directions.
         // The distance covered by each wheel is given by the formula
         //      Dist = (angle_radians/2pi)*(wheelbase*pi) = angle*wheelbase/2
@@ -80,41 +115,111 @@ namespace Kinematics {
         // Meanwhile, we need to convert these relative distance movements to absolute targets
         float left_target = m_motor_left + wheel_turn_dist;
         float right_target = m_motor_right - wheel_turn_dist;
-        // Also note this will always turn to the right. Depends how we calc the angle...
-        motors[0] = left_target;
-        motors[1] = right_target;
-        for (size_t axis = Z_AXIS; axis < n_axis; axis++) {
-            motors[axis] = 0.0; // dont move other axes during turn
+        motors[X_AXIS] = left_target;
+        motors[Y_AXIS] = right_target;
+        if (m_have_captured_z) { // if we're holding Z until after turn, keep it at previous value here
+            motors[Z_AXIS] = m_captured_z_prev;
+        } else {
+            motors[Z_AXIS] = target[Z_AXIS];
+        }
+        for (size_t axis = Z_AXIS+1; axis < n_axis; axis++) { // pass through any other axis positions
+            motors[axis] = target[axis];
         }
         // execute the turn and continue
         if (!mc_move_motors(motors, pl_data)) {
             return false;
         }
-        // if we're still here, turn move completed so update current state
+        // if we're still here, turn move was accepted so update accepted state
         m_heading = new_heading;
         m_motor_left = left_target;
         m_motor_right = right_target;
 
+        // if we have a previously captured Z-down move, we execute it here after the turn but before the traverse
+        if(m_have_captured_z) {
+            motors[X_AXIS] = m_motor_left; // no move
+            motors[Y_AXIS] = m_motor_right; // no move
+            motors[Z_AXIS] = m_captured_z_target;
+            m_have_captured_z = false; // clear flag preemptively so we don't try to do this again
+            if (!mc_move_motors(motors, m_captured_z_pldata)) { // execute Z down move
+                return false;
+            }
+        }
+
+        // set starting motor positions for straight move (testing)
+        m_prev_left = m_motor_left;
+        m_prev_right = m_motor_right;
+        m_left_last_report = m_motor_left;
+        m_right_last_report = m_motor_right;
+
         // Now just move forward the required distance to the target
-        left_target = m_motor_left + XY_cartesian_distance;
-        right_target = m_motor_right + XY_cartesian_distance;
-        motors[0] = left_target;
-        motors[1] = right_target;
-        for (size_t axis = Z_AXIS; axis < n_axis; axis++) { // pass through any other axis moves (like Z for pen)
+        m_next_left = m_motor_left + XY_cartesian_distance;
+        m_next_right = m_motor_right + XY_cartesian_distance;
+        motors[X_AXIS] = m_next_left;
+        motors[Y_AXIS] = m_next_right;
+        for (size_t axis = Z_AXIS; axis < n_axis; axis++) { // pass through any other axis moves
             motors[axis] = target[axis];
         }
         if (!mc_move_motors(motors, pl_data)) {
             return false;
         }
-        m_motor_left = left_target;
-        m_motor_right = right_target;
+        // update accepted state
+        m_motor_left = m_next_left;
+        m_motor_right = m_next_right;
         return true;
     }
 
     void DifferentialDrive::motors_to_cartesian(float* cartesian, float* motors, int n_axis) {
         // Insert conversion from differential drive kinematics to cartesian here.
 
-        // I don't think this is even possible for DiffDrive - our motor position does not tell us our location.
+        // We cannot derive cartesian position from motors in a vacuum, because it's state dependent.
+        // However, we want this so the WebUI shows position. Solution will have to be to keep up a running
+        //  cartesian XY position state. During linear moves, we'll have to store the starting motor pos and interpolate
+        //  to the current motor pos based on the start and end points. Gonna need lots of state.
+
+        // First pass for testing, we're just going to report the position after the last processed move
+        // Note this just set reports to the next target as soon as a move set began, not great
+//        cartesian[X_AXIS] = m_next_x;
+//        cartesian[Y_AXIS] = m_next_y;
+        // now with more state, interpolate motor progress into cartesian progress
+        // I expect this to work during straight moves but turns will report nonsense... and that is indeed the case.
+
+        // idea: we always turn first then move. During turn, X/Y should not change at all (ideally).
+        //  When we are turning, the motors are moving in opposite directions.
+        //  So, still more state for previous in-progress motors report, compare to current, if XY in opp dirs,
+        //  then just return m_prev_xy, if same, do the distance interpolation...
+
+        bool xdir = motors[X_AXIS] > m_left_last_report;
+        bool ydir = motors[Y_AXIS] > m_right_last_report;
+
+        if (xdir != ydir) {
+            // motors moving opposite directions, we're in turning stage, XY should not change yet
+            cartesian[X_AXIS] = m_prev_x;
+            cartesian[Y_AXIS] = m_prev_y;
+            for (size_t axis = Z_AXIS; axis < n_axis; axis++) { // pass through any other axes
+                cartesian[axis] = motors[axis];
+            }
+            m_left_last_report = motors[X_AXIS];
+            m_right_last_report = motors[Y_AXIS];
+            return;
+        }
+
+        // else motors are moving the same direction, we're travelling
+        // this bit is the linear move interpolation (with an escape clause for zero-length moves)
+        if (m_next_left-m_prev_left == 0) {
+            cartesian[X_AXIS] = m_next_x;
+        } else {
+            cartesian[X_AXIS] = m_prev_x + ((motors[X_AXIS]-m_prev_left)/(m_next_left-m_prev_left))*(m_next_x-m_prev_x);
+        }
+        if (m_next_right-m_prev_right == 0) {
+            cartesian[Y_AXIS] = m_next_y;
+        } else {
+            cartesian[Y_AXIS] = m_prev_y + ((motors[Y_AXIS]-m_prev_right)/(m_next_right-m_prev_right))*(m_next_y-m_prev_y);
+        }
+        for (size_t axis = Z_AXIS; axis < n_axis; axis++) { // pass through any other axes
+            cartesian[axis] = motors[axis];
+        }
+        m_left_last_report = motors[X_AXIS];
+        m_right_last_report = motors[Y_AXIS];
     }
 
     void DifferentialDrive::transform_cartesian_to_motors(float* cartesian, float* motors) {
