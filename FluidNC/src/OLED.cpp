@@ -212,7 +212,7 @@ void OLED::show_menu() {
     int menu_max_active_entries;
 
     // Don't show menu during Alarm, Run or Hold states
-    if (_state == "Alarm" || _state == "Run" || _state == "Hold:0" || _state == "Hold:1" || _download_mode) {
+    if (_state == "Alarm" || _state == "Run" || _state == "Hold:0" || _state == "Hold:1" || _download_mode || _popup) {
         return;
     }
 
@@ -333,7 +333,7 @@ void OLED::show_dro(float* axes, bool isMpos, bool* limits) {
     saved_isMpos = isMpos;
     saved_limits = limits;
 
-    if (_state == "Alarm" || _state == "Hold:0" || _state == "Hold:1" || _menu->is_full_width()) {
+    if (_state == "Alarm" || _state == "Hold:0" || _state == "Hold:1" || _menu->is_full_width() || _popup) {
         return;
     }
 
@@ -407,7 +407,7 @@ void OLED::show_error(std::string msg) {
 
     // Draw message
     truncated_draw_string(13, msg, DejaVu_Sans_10);
-    _oled->display();
+    _oled->display();    
 }
 
 void OLED::show_all(float *axes, bool isMpos, bool *limits) {
@@ -438,8 +438,12 @@ void OLED::refresh_display(bool menu_only) {
 void OLED::popup_msg(std::string msg, int dly) {
 
     // Show error message for 2s then restore display
+    // Use flag to prevent other processes from updating screen
+    _popup = true;
     show_error(msg);
-    delay_ms(dly);
+    delay_ms(dly);  
+    _popup = false;
+
     refresh_display();
 }
 

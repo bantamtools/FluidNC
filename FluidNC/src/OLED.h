@@ -65,6 +65,8 @@ private:
     uint8_t _i2c_num = 0;
 
     int _enc_diff = 0;
+
+    bool _popup = false;
     
     void parse_report();
     void parse_status_report();
