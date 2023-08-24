@@ -292,8 +292,10 @@ namespace WebUI {
         // Print elements out
         //log_info("Title: " << title << ", Link: " << link << ", pubDate: " << itemNode->FirstChildElement("pubDate")->GetText() << ((is_updated) ? "*" : ""));
 
-         // Add the item to the RSS menu on screen
-        config->_oled->_menu->add_rss_link(link, title, is_updated);
+        // Add the item to the RSS menu on screen
+        if (config->_oled) {
+            config->_oled->_menu->add_rss_link(link, title, is_updated);
+        }
 
         // Valid item, flag true and increment count
         _valid_feed = true;
@@ -330,7 +332,9 @@ namespace WebUI {
                 instance->_num_entries = 0;
 
                 // Prep the RSS menu on screen
-                config->_oled->_menu->prep_for_rss_update();
+                if (config->_oled) {
+                    config->_oled->_menu->prep_for_rss_update();
+                }
 
                 // Connected to RSS server
                 if (rssClient.connect(instance->_web_server.c_str(), 80)) {
@@ -391,7 +395,9 @@ namespace WebUI {
                                 log_warn("Failed to store RSS update time in NVS!");
                             }
 
-                            config->_oled->popup_msg("New RSS updates!", 5000);
+                            if (config->_oled) {
+                                config->_oled->popup_msg("New RSS updates!", 5000);
+                            }
                         }
 
                         // Check every 100ms
@@ -402,15 +408,19 @@ namespace WebUI {
                     if ((instance->_num_entries == 0) || (!instance->_valid_feed)) {
 
                         // Print error message
-                        config->_oled->_menu->prep_for_rss_update();  // Clear screen of previous entries
-                        config->_oled->_menu->add_rss_link(NULL, "Error: Bad URL/format", false);
-                        config->_oled->refresh_display(true);
+                        if (config->_oled) {
+                            config->_oled->_menu->prep_for_rss_update();  // Clear screen of previous entries
+                            config->_oled->_menu->add_rss_link(NULL, "Error: Bad URL/format", false);
+                            config->_oled->refresh_display(true);
+                        }
                         log_warn("RSS Error: Bad URL or format");
 
                     } else {
 
                         // Refresh the menu
-                        config->_oled->refresh_display(true);
+                        if (config->_oled) {
+                            config->_oled->refresh_display(true);
+                        }
                 
                         log_info("RSS fetch completed");
                     }
@@ -419,8 +429,10 @@ namespace WebUI {
                 } else {
 
                     // Print error message
-                    config->_oled->_menu->add_rss_link(NULL, "Error: Connection failed", false);
-                    config->_oled->refresh_display(true);
+                    if (config->_oled) {
+                        config->_oled->_menu->add_rss_link(NULL, "Error: Connection failed", false);
+                        config->_oled->refresh_display(true);
+                    }
                     log_warn("RSS Error: Connection failed");
                 }
                 
@@ -441,7 +453,9 @@ namespace WebUI {
 
         // Check for SD card, send message and return on fail
         if (!sd_card_is_present()) {
-            config->_oled->popup_msg("Please insert SD card");
+            if (config->_oled) {
+                config->_oled->popup_msg("Please insert SD card");
+            }
             return;
         }
         
@@ -516,7 +530,9 @@ namespace WebUI {
 
                 // Update the files list on SD card and exit to main menu
                 sd_populate_files_menu();
-                config->_oled->_menu->exit_submenu();
+                if (config->_oled) {
+                    config->_oled->_menu->exit_submenu();
+                }
             
             } else {
                 log_warn("Error opening file");

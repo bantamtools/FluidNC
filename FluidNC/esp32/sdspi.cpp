@@ -247,6 +247,11 @@ void sd_populate_files_menu() {
     char file_ext[MENU_NAME_MAX_PATH];
     char file_path[MENU_NAME_MAX_PATH];
 
+    // No display, bail
+    if (!config->_oled) {
+        return;
+    }
+
     // Clear the file list to start
     config->_oled->_menu->prep_for_sd_update();
 

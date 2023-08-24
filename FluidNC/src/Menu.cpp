@@ -96,7 +96,9 @@ void Menu::enter_submenu(void) {
         _current_menu = selected_entry->child;      
 
         // Refresh the display
-        config->_oled->refresh_display();
+        if (config->_oled) {
+            config->_oled->refresh_display();
+        }
     }
 }
 
@@ -110,7 +112,9 @@ void Menu::exit_submenu(void) {
         _current_menu = _current_menu->parent;
 
         // Refresh the display
-        config->_oled->refresh_display();
+        if (config->_oled) {
+            config->_oled->refresh_display();
+        }
     }
 }
 

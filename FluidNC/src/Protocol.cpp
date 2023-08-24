@@ -1094,49 +1094,53 @@ static void protocol_do_enter() {
 
         // Run selected operation when IDLE
         case State::Idle:
+
+            // Be sure display is enabled
+            if (config->_oled) {
             
-            // Home command
-            if (strcmp(config->_oled->_menu->get_selected()->display_name, "Home") == 0) {
-                Machine::Homing::run_cycles(Machine::Homing::AllCycles);
+                // Home command
+                if (strcmp(config->_oled->_menu->get_selected()->display_name, "Home") == 0) {
+                    Machine::Homing::run_cycles(Machine::Homing::AllCycles);
 
-            // Display homing error if try to jog unhomed
-            } else if (strstr(config->_oled->_menu->get_selected()->display_name, "Jog") && !config->_axes->_homed)   {
+                // Display homing error if try to jog unhomed
+                } else if (strstr(config->_oled->_menu->get_selected()->display_name, "Jog") && !config->_axes->_homed)   {
 
-                // Display error
-                config->_oled->popup_msg("Machine not homed");
+                    // Display error
+                    config->_oled->popup_msg("Machine not homed");
 
-            // Jog command
-            } else if (strstr(config->_oled->_menu->get_selected()->display_name, "Jog ")) {
+                // Jog command
+                } else if (strstr(config->_oled->_menu->get_selected()->display_name, "Jog ")) {
 
-                char axis = (strrchr(config->_oled->_menu->get_selected()->display_name, ' ') + 1)[0];
+                    char axis = (strrchr(config->_oled->_menu->get_selected()->display_name, ' ') + 1)[0];
 
-                // Enter jogging mode if not active
-                if (config->_oled->get_jog_state() == JogState::Idle) {
-                    config->_oled->set_jog_state(JogState::Scrolling);
+                    // Enter jogging mode if not active
+                    if (config->_oled->get_jog_state() == JogState::Idle) {
+                        config->_oled->set_jog_state(JogState::Scrolling);
 
-                // Exit jogging mode if press 
-                } else {
-                    config->_oled->set_jog_state(JogState::Idle);
-                }
+                    // Exit jogging mode if press 
+                    } else {
+                        config->_oled->set_jog_state(JogState::Idle);
+                    }
 
-            // Back button
-            } else if (strcmp(config->_oled->_menu->get_selected()->display_name, "< Back") == 0) {
-                config->_oled->_menu->exit_submenu();
+                // Back button
+                } else if (strcmp(config->_oled->_menu->get_selected()->display_name, "< Back") == 0) {
+                    config->_oled->_menu->exit_submenu();
 
-            // Run file command if files menu
-            } else if (config->_oled->_menu->is_files_menu()) {
+                // Run file command if files menu
+                } else if (config->_oled->_menu->is_files_menu()) {
 
-                InputFile *infile = new InputFile("sd", config->_oled->_menu->get_selected()->path, WebUI::AuthenticationLevel::LEVEL_ADMIN, allChannels);
-                allChannels.registration(infile);
+                    InputFile *infile = new InputFile("sd", config->_oled->_menu->get_selected()->path, WebUI::AuthenticationLevel::LEVEL_ADMIN, allChannels);
+                    allChannels.registration(infile);
 
-            // Download file command if RSS menu
-            } else if (config->_oled->_menu->is_rss_menu()) {
+                // Download file command if RSS menu
+                } else if (config->_oled->_menu->is_rss_menu()) {
 #ifdef ENABLE_WIFI
-                WebUI::rssReader.download_file(config->_oled->_menu->get_selected()->path);
+                    WebUI::rssReader.download_file(config->_oled->_menu->get_selected()->path);
 #endif
-            // Otherwise, enter the submenu if it exists
-            } else {
-                config->_oled->_menu->enter_submenu();
+                // Otherwise, enter the submenu if it exists
+                } else {
+                    config->_oled->_menu->enter_submenu();
+                }
             }
             break;
 
