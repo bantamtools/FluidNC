@@ -53,6 +53,8 @@ namespace WebUI {
         static constexpr uint32_t       RSS_FETCH_PERIODIC_MS   = 100;
 
         bool            _started;
+        bool            _valid_feed;
+        int             _num_entries;
         String          _web_server;
         String          _web_rss_address;
         uint32_t        _refresh_period_sec;

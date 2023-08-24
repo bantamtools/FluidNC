@@ -50,6 +50,8 @@ namespace WebUI {
         _last_update_time   = 0;
         _new_update_time    = 0;
         _started            = false;
+        _valid_feed         = false;
+        _num_entries        = 0;
         _handle             = 0;
         _refresh_rss        = false;
 
@@ -125,6 +127,8 @@ namespace WebUI {
         _last_update_time   = 0;
         _new_update_time    = 0;
         _started            = false;
+        _valid_feed         = false;
+        _num_entries        = 0;
         _refresh_rss        = false;
 
         // Close NVS handle
@@ -249,15 +253,33 @@ namespace WebUI {
     // Parses the items in RSS data
     void RSSReader::parse_item(tinyxml2::XMLElement *itemNode) {
 
+        const char *title = NULL;
+        const char *link = NULL;
+        const char *pubDate = NULL;
+        time_t timestamp = -1;
         bool is_updated = false;
 
-        // Parse and process <title> and <link> elements
-        const char *title = itemNode->FirstChildElement("title")->GetText();
-        const char *link = itemNode->FirstChildElement("link")->GetText();
-        const char *pubDate = itemNode->FirstChildElement("pubDate")->GetText();
+        // Parse and process elements
+        if (itemNode->FirstChildElement("title")) { 
+            title = itemNode->FirstChildElement("title")->GetText();
+        }
+        if (itemNode->FirstChildElement("link")) {
+            link = itemNode->FirstChildElement("link")->GetText();
+        }
+        if (itemNode->FirstChildElement("pubDate")) {
+            pubDate = itemNode->FirstChildElement("pubDate")->GetText();
+        }
 
         // Convert pubDate to a timestamp and compare to last update
-        time_t timestamp = parse_pub_date(pubDate);  // NOTE: Destructive, modifies
+        if (pubDate) {
+            timestamp = parse_pub_date(pubDate);  // NOTE: Destructive, modifies
+        }
+
+        // Check for invalid items
+        if (!title || !link || !pubDate || (timestamp < 0)) {
+            _valid_feed = false;
+            return;
+        }
 
         // Newer than last NVS timestamp, flag update and save off value if newest
         if (timestamp > _last_update_time) {
@@ -272,6 +294,10 @@ namespace WebUI {
 
          // Add the item to the RSS menu on screen
         config->_oled->_menu->add_rss_link(link, title, is_updated);
+
+        // Valid item, flag true and increment count
+        _valid_feed = true;
+        _num_entries++;
     }
 
     // Fetch an RSS feed and parse the data
@@ -299,11 +325,15 @@ namespace WebUI {
                 // Clear flag
                 instance->_refresh_rss = false;
 
+                // Set flag to start with valid feed and clear entry count
+                instance->_valid_feed = true;
+                instance->_num_entries = 0;
+
+                // Prep the RSS menu on screen
+                config->_oled->_menu->prep_for_rss_update();
+
                 // Connected to RSS server
                 if (rssClient.connect(instance->_web_server.c_str(), 80)) {
-
-                    // Prep the RSS menu on screen
-                    config->_oled->_menu->prep_for_rss_update();
 
                     // GET Request
                     rssClient.print("GET ");
@@ -313,11 +343,10 @@ namespace WebUI {
                     rssClient.print(instance->_web_server.c_str());
                     rssClient.print("\r\n");
                     rssClient.print("Connection: close\r\n\r\n");
-                   
-                    // RSS data available
-                    while (rssClient.connected() || rssClient.available()) {
+                    
+                    while ((rssClient.connected() || rssClient.available()) && instance->_valid_feed) {
 
-                        while (rssClient.available()) {
+                        while (rssClient.available() && instance->_valid_feed) {
 
                             // Read a byte at a time into RSS chunk
                             c = rssClient.read();
@@ -340,11 +369,12 @@ namespace WebUI {
                                     rssDoc.Clear();
 
                                 } else {
+                                    instance->_valid_feed = false;
                                     log_warn("Failed to parse item XML");
                                 }
                                 rssChunk = "";
                             }
-                            
+
                             // Check for the start of a new item
                             if (!itemNode && c == '>' && rssChunk.endsWith("<item>")) {
                                 itemNode = rssDoc.NewElement("item");
@@ -368,14 +398,30 @@ namespace WebUI {
                         vTaskDelay(RSS_FETCH_PERIODIC_MS/portTICK_PERIOD_MS);
                     }
 
-                    // Refresh the menu
-                    config->_oled->refresh_display(true);
+                    // Bad RSS URL or format
+                    if ((instance->_num_entries == 0) || (!instance->_valid_feed)) {
+
+                        // Print error message
+                        config->_oled->_menu->prep_for_rss_update();  // Clear screen of previous entries
+                        config->_oled->_menu->add_rss_link(NULL, "Error: Bad URL/format", false);
+                        config->_oled->refresh_display(true);
+                        log_warn("RSS Error: Bad URL or format");
+
+                    } else {
+
+                        // Refresh the menu
+                        config->_oled->refresh_display(true);
                 
-                    log_info("RSS fetch completed");
+                        log_info("RSS fetch completed");
+                    }
                 
                 // Connection to RSS server failed
                 } else {
-                    log_warn("Connection failed");
+
+                    // Print error message
+                    config->_oled->_menu->add_rss_link(NULL, "Error: Connection failed", false);
+                    config->_oled->refresh_display(true);
+                    log_warn("RSS Error: Connection failed");
                 }
                 
                 // End the RSS connection
