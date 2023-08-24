@@ -45,6 +45,8 @@ namespace WebUI {
     RSSReader::RSSReader() {
         _web_server         = DEFAULT_RSS_WEB_SERVER;
         _web_rss_address    = DEFAULT_RSS_ADDRESS;
+        _refresh_period_sec = DEFAULT_RSS_REFRESH_SEC;
+        _refresh_start_ms   = 0;
         _last_update_time   = 0;
         _new_update_time    = 0;
         _started            = false;
@@ -82,8 +84,11 @@ namespace WebUI {
         // Pull settings from WebUI if successful Wi-Fi connection
         if (res) {
 
-            // RSS feed disabled if refresh period is zero
-            if (!rss_refresh_sec->get()) {
+            // Grab the refresh period
+            _refresh_period_sec = rss_refresh_sec->get();
+
+            // RSS feed disabled
+            if (_refresh_period_sec == 0) {
                 res = false;
 
             // RSS enabled, configure URL
@@ -115,6 +120,8 @@ namespace WebUI {
 
         _web_server         = "";
         _web_rss_address    = "";
+        _refresh_period_sec = 0;
+        _refresh_start_ms   = 0;
         _last_update_time   = 0;
         _new_update_time    = 0;
         _started            = false;
@@ -123,6 +130,31 @@ namespace WebUI {
         // Close NVS handle
         nvs_close(_handle);  
         _handle = 0;
+    }
+
+    // Processes any RSS reader changes
+    void RSSReader::handle() {
+
+        if (_started) {
+
+            // Poll the XML data and refresh the list after refresh period expires or after boot
+            if ((_refresh_start_ms == 0) || 
+                ((millis() - _refresh_start_ms) >= (_refresh_period_sec * 1000))) {
+
+                // Ensure the WebUI gets the updates first (if available)
+                // before we refresh and set the new update time
+                delay_ms(100);
+
+                // Flag an RSS refresh
+                _refresh_rss = true;
+
+                // DEBUG: Print Heap
+                //log_warn("Heap: " << xPortGetFreeHeapSize());
+
+                // Set new refresh start time
+                _refresh_start_ms = millis();
+            }
+        }
     }
 
     // Check if RSS reader service has been started
