@@ -115,7 +115,7 @@ namespace WebUI {
         j.begin_array("rss");
         j.setCategory("feed");
 
-        MenuNodeType *entry = config->_oled->_menu->get_rss_menu();
+        ListNodeType *entry = config->_oled->_menu->get_rss_menu();
 
         while(entry) {
         

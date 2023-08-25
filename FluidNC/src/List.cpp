@@ -30,7 +30,7 @@ void List::add(ListType *list, ListType *sublist, const char *path, const char *
     new_entry->child = sublist;
 
     if (display_name) strncpy(new_entry->display_name, display_name, LIST_NAME_MAX_STR);    // Cuts off long display names
-    if (path) strncpy(new_entry->path, path, MENU_NAME_MAX_PATH);                           // Cuts off long file paths
+    if (path) strncpy(new_entry->path, path, LIST_NAME_MAX_PATH);                           // Cuts off long file paths
     new_entry->selected = false;
     new_entry->updated = updated;
 

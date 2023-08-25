@@ -37,7 +37,7 @@ protected:
     void remove(ListType *list);
 
 public:
-
+   
     List();
     ~List();
 };
