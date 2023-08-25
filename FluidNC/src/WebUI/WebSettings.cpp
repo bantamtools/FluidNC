@@ -107,6 +107,7 @@ Error WebCommand::action(char* value, WebUI::AuthenticationLevel auth_level, Cha
 
 namespace WebUI {
 
+#ifdef ENABLE_WIFI
     static Error syncRssFeed(char* parameter, AuthenticationLevel auth_level, Channel& out) {  // ESP901
         rssReader.sync();
         return Error::Ok;
@@ -117,6 +118,7 @@ namespace WebUI {
         s << (int)rssReader.get_last_update_time();
         return Error::Ok;
     }
+#endif
 
     // Used by js/connectdlg.js
     static Error showFwInfo(char* parameter, AuthenticationLevel auth_level, Channel& out) {  // ESP800
@@ -710,7 +712,9 @@ namespace WebUI {
         new WebCommand(NULL, WEBCMD, WG, "ESP0", "WebUI/Help", showWebHelp, anyState);
         new WebCommand(NULL, WEBCMD, WG, "ESP", "WebUI/Help", showWebHelp, anyState);
 
+#ifdef ENABLE_WIFI
         new WebCommand(NULL, WEBCMD, WA, "ESP900", "RSS/getLastUpdateTime", getRssLastUpdateTime);
         new WebCommand(NULL, WEBCMD, WA, "ESP901", "RSS/syncRssFeed", syncRssFeed);
+#endif
     }
 }
