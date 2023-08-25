@@ -83,3 +83,17 @@ void List::remove(ListType *list) {
     // Mark the head and active head NULL to prevent use-after-free
     list->head = list->active_head = NULL;
 }
+
+// Prepares the given list for an update
+void List::prep(ListType *list, bool add_back_btn) {
+
+    // Clear out the menu nodes if they already exist
+    if (list->head) {
+        remove(list);
+    }
+
+    // Add the back button to top of list if requested
+    if (add_back_btn) {
+        add(list, NULL, NULL, "< Back");
+    }
+}

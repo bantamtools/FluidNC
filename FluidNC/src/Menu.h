@@ -12,7 +12,6 @@ private:
     ListType *_main_menu, *_files_menu, *_jogging_menu, *_rss_menu, *_settings_menu, *_version_menu, *_current_menu;
 
     struct ListNodeType *get_active_tail(ListType *menu, int max_active_entries);
-    void prep_for_list(ListType *menu);
     void build();
 
 public:

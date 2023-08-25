@@ -35,6 +35,7 @@ protected:
     void init(ListType *list, ListType *parent);
     void add(ListType *list, ListType *sublist, const char *path, const char *display_name, bool updated = false);
     void remove(ListType *list);
+    void prep(ListType *list, bool add_back_btn = true);
 
 public:
    

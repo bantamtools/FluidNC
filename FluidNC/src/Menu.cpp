@@ -165,41 +165,14 @@ void Menu::add_rss_link(const char *link, const char *title, bool is_updated) {
     add(_rss_menu, NULL, link, title, is_updated);
 }
 
-// Prepares the given menu for an updated file/feed list
-void Menu::prep_for_list(ListType *menu) {
-    
-    ListNodeType *entry = _main_menu->head;  // Start at the top of the main menu
-
-    // If not in the given menu, find the node attached that menu
-    while (_current_menu != menu && entry) {
-
-        // Found the given menu node
-        if (entry->child == menu) {
-            break;
-        }
-
-        // Advance the pointer
-        entry = entry->next;
-    }
-
-    // Clear out the menu nodes if they already exist
-    if ((_current_menu == menu && _current_menu->head) ||
-        (_current_menu != menu && entry->child->head)) {
-        remove(menu);
-    }
-
-    // Add the back button to top of menu
-    add(menu, NULL, NULL, "< Back");
-}
-
 // Helper function to prep for updated SD file list
 void Menu::prep_for_sd_update(void) {
-    prep_for_list(_files_menu);
+    prep(_files_menu);
 }
 
 // Helper function to prep for updated RSS feed
 void Menu::prep_for_rss_update(void) {
-    prep_for_list(_rss_menu);
+    prep(_rss_menu);
 }
 
 // Builds the menu system
