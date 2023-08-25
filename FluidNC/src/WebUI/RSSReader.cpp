@@ -43,6 +43,8 @@ namespace WebUI {
 
     // Constructor
     RSSReader::RSSReader() {
+
+        _rss_feed           = new struct ListType;
         _web_server         = DEFAULT_RSS_WEB_SERVER;
         _web_rss_address    = DEFAULT_RSS_ADDRESS;
         _refresh_period_sec = DEFAULT_RSS_REFRESH_SEC;
@@ -57,6 +59,7 @@ namespace WebUI {
 
         rss_url = new StringSetting("RSS URL", WEBSET, WA, NULL, "RSS/URL", DEFAULT_RSS_FULL_URL.c_str(), MIN_RSS_URL, MAX_RSS_URL, NULL);
         rss_refresh_sec = new IntSetting("RSS Refresh Time (s)", WEBSET, WA, NULL, "RSS/RefreshTimeSec", DEFAULT_RSS_REFRESH_SEC, MIN_RSS_REFRESH_SEC, MAX_RSS_REFRESH_SEC, NULL);
+
     }
 
     // Starts the RSS reader subsystem
@@ -69,6 +72,16 @@ namespace WebUI {
         bool res = true;
         if ((WiFi.getMode() != WIFI_MODE_STA) && (WiFi.getMode() != WIFI_MODE_APSTA)) {
             res = false;
+        }
+
+        // Initialize the feed and connect to menu (if available)
+        if (res) {
+
+            if (config->_oled) {
+                config->_oled->_menu->connect_rss_feed(_rss_feed);
+            } else {
+                init(_rss_feed, NULL);
+            }
         }
 
         // Get the last updated time from NVS
@@ -168,7 +181,14 @@ namespace WebUI {
     String RSSReader::get_url() { return (_web_server + _web_rss_address); }
 
     // Destructor
-    RSSReader::~RSSReader() { end(); }
+    RSSReader::~RSSReader() { 
+        
+        end(); 
+
+        // Remove all list nodes and deallocate memory
+        remove(_rss_feed);
+        delete(_rss_feed);    
+    }
 
     // Parses the server and address from a full URL
     bool RSSReader::parse_server_address(const String url, String *server, String *address) {
@@ -292,10 +312,8 @@ namespace WebUI {
         // Print elements out
         //log_info("Title: " << title << ", Link: " << link << ", pubDate: " << itemNode->FirstChildElement("pubDate")->GetText() << ((is_updated) ? "*" : ""));
 
-        // Add the item to the RSS menu on screen
-        if (config->_oled) {
-            config->_oled->_menu->add_rss_link(link, title, is_updated);
-        }
+        // Add the item to the RSS feed
+        add(_rss_feed, NULL, link, title, is_updated);
 
         // Valid item, flag true and increment count
         _valid_feed = true;
@@ -331,10 +349,8 @@ namespace WebUI {
                 instance->_valid_feed = true;
                 instance->_num_entries = 0;
 
-                // Prep the RSS menu on screen
-                if (config->_oled) {
-                    config->_oled->_menu->prep_for_rss_update();
-                }
+                // Prep the RSS feed list
+                instance->prep(instance->_rss_feed);
 
                 // Connected to RSS server
                 if (rssClient.connect(instance->_web_server.c_str(), 80)) {
@@ -407,12 +423,15 @@ namespace WebUI {
                     // Bad RSS URL or format
                     if ((instance->_num_entries == 0) || (!instance->_valid_feed)) {
 
-                        // Print error message
+                        // Report error
+                        instance->prep(instance->_rss_feed);
+                        instance->add(instance->_rss_feed, NULL, NULL, "Error: Bad URL/format", false);
+
+                        // Print error message to display
                         if (config->_oled) {
-                            config->_oled->_menu->prep_for_rss_update();  // Clear screen of previous entries
-                            config->_oled->_menu->add_rss_link(NULL, "Error: Bad URL/format", false);
                             config->_oled->refresh_display(true);
                         }
+
                         log_warn("RSS Error: Bad URL or format");
 
                     } else {
@@ -428,11 +447,14 @@ namespace WebUI {
                 // Connection to RSS server failed
                 } else {
 
-                    // Print error message
+                    // Report error
+                    instance->add(instance->_rss_feed, NULL, NULL, "Error: Connection failed", false);
+
+                    // Print error message to display
                     if (config->_oled) {
-                        config->_oled->_menu->add_rss_link(NULL, "Error: Connection failed", false);
                         config->_oled->refresh_display(true);
                     }
+                    
                     log_warn("RSS Error: Connection failed");
                 }
                 

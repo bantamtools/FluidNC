@@ -21,16 +21,14 @@ public:
 
     bool is_files_menu();
     bool is_rss_menu();
-    struct ListNodeType *get_rss_menu();
+    void connect_rss_feed(ListType *feed);
+
     struct ListNodeType *get_active_head();
     struct ListNodeType *get_selected();
     void enter_submenu();
     void exit_submenu();
     void add_sd_file(char *path);
-    void add_rss_link(const char *link, const char *title, bool is_updated);
     void prep_for_sd_update();
-    void prep_for_rss_update();
     void update_selection(int max_active_entries, int enc_diff);
     bool is_full_width();
-
 };

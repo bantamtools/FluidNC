@@ -8,7 +8,7 @@ Menu::Menu() {
     _main_menu = new struct ListType;
     _files_menu = new struct ListType;
     _jogging_menu = new struct ListType;
-    _rss_menu = new struct ListType;
+    // _rss_menu is handled by RSSReader
     _settings_menu = new struct ListType;
     _version_menu = new struct ListType;
 
@@ -16,7 +16,6 @@ Menu::Menu() {
     init(_main_menu, NULL);
     init(_files_menu, _main_menu);
     init(_jogging_menu, _main_menu);
-    init(_rss_menu, _main_menu);
     init(_settings_menu, _main_menu);
     init(_version_menu, _settings_menu);
 
@@ -36,7 +35,6 @@ Menu::~Menu() {
     // Remove all the menu nodes
     remove(_version_menu);
     remove(_settings_menu);
-    remove(_rss_menu);
     remove(_jogging_menu);
     remove(_files_menu);
     remove(_main_menu);
@@ -44,7 +42,6 @@ Menu::~Menu() {
     // Deallocate memory for the menus
     delete(_version_menu);
     delete(_settings_menu);
-    delete(_rss_menu);
     delete(_jogging_menu);
     delete(_files_menu);
     delete(_main_menu);
@@ -60,9 +57,16 @@ Menu::~Menu() {
     return (_current_menu == _rss_menu);
 }
 
-// Returns the RSS menu for JSON settings
-struct ListNodeType *Menu::get_rss_menu() {
-    return _rss_menu->head;   
+// Connects the RSS feed to the menu system
+void Menu::connect_rss_feed(ListType *feed) {
+
+    // Hook up RSS menu to feed directly
+    _rss_menu = feed;
+
+    // Initialize and connect into menu system
+    init(_rss_menu, _main_menu);
+    add(_main_menu, _rss_menu, NULL, "RSS Feed");
+    add(_rss_menu, NULL, NULL, "< Back");
 }
 
 // Returns the active menu head
@@ -158,21 +162,9 @@ void Menu::add_sd_file(char *path) {
     add(_files_menu, NULL, path, filename);
 }
 
-// Helper function to add RSS link to RSS menu
-void Menu::add_rss_link(const char *link, const char *title, bool is_updated) {
-
-    // Add item to menu
-    add(_rss_menu, NULL, link, title, is_updated);
-}
-
 // Helper function to prep for updated SD file list
 void Menu::prep_for_sd_update(void) {
     prep(_files_menu);
-}
-
-// Helper function to prep for updated RSS feed
-void Menu::prep_for_rss_update(void) {
-    prep(_rss_menu);
 }
 
 // Builds the menu system
@@ -182,7 +174,6 @@ void Menu::build(void) {
     add(_main_menu, NULL, NULL, "Home");
     add(_main_menu, _jogging_menu, NULL, "Jogging");
     add(_main_menu, _files_menu, NULL, "Run from SD");
-    add(_main_menu, _rss_menu, NULL, "RSS Feed");
     add(_main_menu, _settings_menu, NULL, "Settings");
 
     // Jogging Menu
@@ -193,9 +184,6 @@ void Menu::build(void) {
 
     // Files Menu
     add(_files_menu, NULL, NULL, "< Back");
-
-    // RSS Menu
-    add(_rss_menu, NULL, NULL, "< Back");  // Prevents fault if invalid RSS url
 
     // Settings Menu
     add(_settings_menu, NULL, NULL, "< Back");
