@@ -122,7 +122,11 @@ namespace WebUI {
             if (strcmp(entry->display_name, "< Back") != 0) {  // Skip back button
                 j.begin_object();
                 j.member("title", entry->display_name);
-                j.member("link", entry->path);
+                if (!entry->path) {
+                    j.member("link", nullptr);
+                } else {
+                    j.member("link", entry->path);
+                }
                 j.member("updated", entry->updated);
                 j.end_object();
             }
