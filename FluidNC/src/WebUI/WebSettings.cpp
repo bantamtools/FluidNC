@@ -124,6 +124,7 @@ namespace WebUI {
                 j.member("title", entry->display_name);
                 j.member("link", entry->path);
                 j.member("updated", entry->updated);
+                j.end_object();
             }
 
             entry = entry->next;
