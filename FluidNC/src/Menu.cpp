@@ -60,6 +60,11 @@ Menu::~Menu() {
     return (_current_menu == _rss_menu);
 }
 
+// Returns the RSS menu for JSON settings
+struct MenuNodeType *Menu::get_rss_menu() {
+    return _rss_menu->head;   
+}
+
 // Returns the active menu head
 struct MenuNodeType *Menu::get_active_head(void) {
     return _current_menu->active_head;

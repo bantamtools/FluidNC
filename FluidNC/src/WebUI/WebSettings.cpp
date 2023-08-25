@@ -107,6 +107,33 @@ Error WebCommand::action(char* value, WebUI::AuthenticationLevel auth_level, Cha
 
 namespace WebUI {
 
+    // Used by js
+    static Error listRssFeed(char* parameter, AuthenticationLevel auth_level, Channel& out) {  // ESP902
+        JSONencoder j(true, &out);
+        j.begin();
+        j.begin_array("rss");
+        j.setCategory("feed");
+
+        MenuNodeType *entry = config->_oled->_menu->get_rss_menu();
+
+        while(entry) {
+        
+            if (strcmp(entry->display_name, "< Back") != 0) {  // Skip back button
+                j.begin_object();
+                j.member("title", entry->display_name);
+                j.member("link", entry->path);
+                j.member("updated", entry->updated);
+            }
+
+            entry = entry->next;
+        }
+
+        j.end_array();
+        j.end();
+
+        return Error::Ok;
+    }
+
     static Error syncRssFeed(char* parameter, AuthenticationLevel auth_level, Channel& out) {  // ESP901
         rssReader.sync();
         return Error::Ok;
@@ -712,5 +739,6 @@ namespace WebUI {
 
         new WebCommand(NULL, WEBCMD, WA, "ESP900", "RSS/getLastUpdateTime", getRssLastUpdateTime);
         new WebCommand(NULL, WEBCMD, WA, "ESP901", "RSS/syncRssFeed", syncRssFeed);
+        new WebCommand(NULL, WEBCMD, WA, "ESP902", "RSS/listRssFeed", listRssFeed);
     }
 }
