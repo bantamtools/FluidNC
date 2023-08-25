@@ -18,7 +18,7 @@ void List::init(ListType *list, ListType *parent) {
 }
 
 // Adds a node entry to the given list
-void List::add(ListType *list, ListType *sublist, const char *path, const char *display_name, bool updated) {
+void List::add_entry(ListType *list, ListType *sublist, const char *path, const char *display_name, bool updated) {
 
     // Allocate memory for the new entry
     struct ListNodeType* new_entry = (ListNodeType*)malloc(sizeof(struct ListNodeType));
@@ -57,7 +57,7 @@ void List::add(ListType *list, ListType *sublist, const char *path, const char *
 }
 
 // Deletes all nodes in the given list
-void List::remove(ListType *list) {
+void List::remove_entries(ListType *list) {
 
     struct ListNodeType* entry = list->head;
 
@@ -89,11 +89,11 @@ void List::prep(ListType *list, bool add_back_btn) {
 
     // Clear out the menu nodes if they already exist
     if (list->head) {
-        remove(list);
+        remove_entries(list);
     }
 
     // Add the back button to top of list if requested
     if (add_back_btn) {
-        add(list, NULL, NULL, "< Back");
+        add_entry(list, NULL, NULL, "< Back");
     }
 }

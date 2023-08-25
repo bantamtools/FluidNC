@@ -33,11 +33,11 @@ Menu::~Menu() {
     _current_menu = nullptr;
 
     // Remove all the menu nodes
-    remove(_version_menu);
-    remove(_settings_menu);
-    remove(_jogging_menu);
-    remove(_files_menu);
-    remove(_main_menu);
+    remove_entries(_version_menu);
+    remove_entries(_settings_menu);
+    remove_entries(_jogging_menu);
+    remove_entries(_files_menu);
+    remove_entries(_main_menu);
 
     // Deallocate memory for the menus
     delete(_version_menu);
@@ -65,8 +65,8 @@ void Menu::connect_rss_feed(ListType *feed) {
 
     // Initialize and connect into menu system
     init(_rss_menu, _main_menu);
-    add(_main_menu, _rss_menu, NULL, "RSS Feed");
-    add(_rss_menu, NULL, NULL, "< Back");
+    add_entry(_main_menu, _rss_menu, NULL, "RSS Feed");
+    add_entry(_rss_menu, NULL, NULL, "< Back");
 }
 
 // Returns the active menu head
@@ -159,7 +159,7 @@ void Menu::add_sd_file(char *path) {
     char *filename = strrchr(path, '/') + 1;
         
     // Initialize the files menu and attach nodes
-    add(_files_menu, NULL, path, filename);
+    add_entry(_files_menu, NULL, path, filename);
 }
 
 // Helper function to prep for updated SD file list
@@ -171,24 +171,24 @@ void Menu::prep_for_sd_update(void) {
 void Menu::build(void) {
 
     // Main Menu
-    add(_main_menu, NULL, NULL, "Home");
-    add(_main_menu, _jogging_menu, NULL, "Jogging");
-    add(_main_menu, _files_menu, NULL, "Run from SD");
-    add(_main_menu, _settings_menu, NULL, "Settings");
+    add_entry(_main_menu, NULL, NULL, "Home");
+    add_entry(_main_menu, _jogging_menu, NULL, "Jogging");
+    add_entry(_main_menu, _files_menu, NULL, "Run from SD");
+    add_entry(_main_menu, _settings_menu, NULL, "Settings");
 
     // Jogging Menu
-    add(_jogging_menu, NULL, NULL, "< Back");
-    add(_jogging_menu, NULL, NULL, "Jog X");
-    add(_jogging_menu, NULL, NULL, "Jog Y");
-    add(_jogging_menu, NULL, NULL, "Jog Z");
+    add_entry(_jogging_menu, NULL, NULL, "< Back");
+    add_entry(_jogging_menu, NULL, NULL, "Jog X");
+    add_entry(_jogging_menu, NULL, NULL, "Jog Y");
+    add_entry(_jogging_menu, NULL, NULL, "Jog Z");
 
     // Files Menu
-    add(_files_menu, NULL, NULL, "< Back");
+    add_entry(_files_menu, NULL, NULL, "< Back");
 
     // Settings Menu
-    add(_settings_menu, NULL, NULL, "< Back");
-    //add(_settings_menu, NULL, NULL, "Update");  // WebUI already includes OTA functionality
-    add(_settings_menu, _version_menu, NULL, "Version");
+    add_entry(_settings_menu, NULL, NULL, "< Back");
+    //add_entry(_settings_menu, NULL, NULL, "Update");  // WebUI already includes OTA functionality
+    add_entry(_settings_menu, _version_menu, NULL, "Version");
 
     // Version Menu
     char bantam_ver_str[LIST_NAME_MAX_STR] = {"Version: "};
@@ -196,9 +196,9 @@ void Menu::build(void) {
     char fluidnc_ver_str[LIST_NAME_MAX_STR] = {"FluidNC: "};
     strncat(fluidnc_ver_str, fluidnc_version, LIST_NAME_MAX_STR - 10);
 
-    add(_version_menu, NULL, NULL, "< Back");
-    add(_version_menu, NULL, NULL, bantam_ver_str);
-    add(_version_menu, NULL, NULL, fluidnc_ver_str);
+    add_entry(_version_menu, NULL, NULL, "< Back");
+    add_entry(_version_menu, NULL, NULL, bantam_ver_str);
+    add_entry(_version_menu, NULL, NULL, fluidnc_ver_str);
 }
 
 // Updates the current menu selection

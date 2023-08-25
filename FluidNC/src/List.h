@@ -33,8 +33,8 @@ class List {
 protected:
 
     void init(ListType *list, ListType *parent);
-    void add(ListType *list, ListType *sublist, const char *path, const char *display_name, bool updated = false);
-    void remove(ListType *list);
+    void add_entry(ListType *list, ListType *sublist, const char *path, const char *display_name, bool updated = false);
+    void remove_entries(ListType *list);
     void prep(ListType *list, bool add_back_btn = true);
 
 public:
