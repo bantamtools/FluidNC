@@ -425,7 +425,7 @@ namespace WebUI {
 
                         // Report error
                         instance->prep(instance->_rss_feed);
-                        instance->add_entry(instance->_rss_feed, NULL, NULL, "Error: Bad URL/format", false);
+                        instance->add_entry(instance->_rss_feed, NULL, "ERROR", "Error: Bad URL/format", false);
 
                         // Print error message to display
                         if (config->_oled) {
@@ -448,7 +448,7 @@ namespace WebUI {
                 } else {
 
                     // Report error
-                    instance->add_entry(instance->_rss_feed, NULL, NULL, "Error: Connection failed", false);
+                    instance->add_entry(instance->_rss_feed, NULL, "ERROR", "Error: Connection failed", false);
 
                     // Print error message to display
                     if (config->_oled) {
