@@ -63,6 +63,7 @@ namespace Kinematics {
         //float _wheel_radius     = 20.0;
         float _distance_between_wheels = 50.0;
         bool _use_z_delay = false; // attempt to delay Z down moves (engage pen/media) until after in-place turns
+        bool _z_up_min_angle = 30; // raise Z to prev height during turns, for angles greater than this
 
     };
 }
