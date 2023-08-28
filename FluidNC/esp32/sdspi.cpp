@@ -244,8 +244,8 @@ void sd_populate_files_menu() {
 
     std::error_code ec;
     const std::filesystem::path fpath{base_path};
-    char file_ext[MENU_NAME_MAX_PATH];
-    char file_path[MENU_NAME_MAX_PATH];
+    char file_ext[LIST_NAME_MAX_PATH];
+    char file_path[LIST_NAME_MAX_PATH];
 
     // No display, bail
     if (!config->_oled) {
@@ -270,7 +270,7 @@ void sd_populate_files_menu() {
             for (auto const& dir_entry : iter) {
 
                 // Get the file extension and convert to lowercase
-                strncpy(file_ext, dir_entry.path().extension().c_str(), MENU_NAME_MAX_PATH);
+                strncpy(file_ext, dir_entry.path().extension().c_str(), LIST_NAME_MAX_PATH);
                 for (auto i = 0; file_ext[i]; i++) {
                     file_ext[i] = tolower(file_ext[i]);
                 }
@@ -285,7 +285,7 @@ void sd_populate_files_menu() {
                         std::string full_path = dir_entry.path().c_str();
                         std::string short_path = full_path.substr(strlen(base_path));
 
-                        strncpy(file_path, short_path.c_str(), MENU_NAME_MAX_PATH);
+                        strncpy(file_path, short_path.c_str(), LIST_NAME_MAX_PATH);
                         config->_oled->_menu->add_sd_file(file_path);
                     }    
                 }

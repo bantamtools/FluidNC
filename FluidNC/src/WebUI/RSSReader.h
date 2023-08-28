@@ -6,6 +6,7 @@
 #include <sstream>
 #include <iomanip>
 #include <cstdint>
+#include "../List.h"
 #include "../OLED.h"
 #include "../DownloadFile.h"
 #include <nvs.h>
@@ -31,7 +32,7 @@ namespace WebUI {
 #include <tinyxml2.h>
 
 namespace WebUI {
-    class RSSReader {
+    class RSSReader : public List {
     public:
         RSSReader();
 
@@ -43,6 +44,7 @@ namespace WebUI {
         void            download_file(char *link);
         time_t          get_last_update_time() { return _last_update_time; };
         void            sync() { _refresh_start_ms = 0; };
+        ListNodeType    *get_rss_feed() { return _rss_feed->head; };
 
         ~RSSReader();
 
@@ -51,6 +53,8 @@ namespace WebUI {
         static constexpr UBaseType_t    RSS_FETCH_PRIORITY      = (configMAX_PRIORITIES - 4);
         static constexpr uint32_t       RSS_FETCH_STACK_SIZE    = 4096;
         static constexpr uint32_t       RSS_FETCH_PERIODIC_MS   = 100;
+
+        ListType        *_rss_feed;
 
         bool            _started;
         bool            _valid_feed;

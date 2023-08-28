@@ -237,7 +237,7 @@ void OLED::show_menu() {
     }
 
     // Traverse the list and print out each menu entry name
-    MenuNodeType *entry = _menu->get_active_head(); // Start at the beginning of the active window
+    ListNodeType *entry = _menu->get_active_head(); // Start at the beginning of the active window
     int i = 0;
     while (entry && entry->display_name && i < menu_max_active_entries) {
 
