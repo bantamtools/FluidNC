@@ -432,7 +432,7 @@ namespace WebUI {
                             config->_oled->refresh_display(true);
                         }
 
-                        log_warn("RSS Error: Bad URL or format");
+                        log_rss("Error: Bad URL or format");
 
                     } else {
 
@@ -441,7 +441,7 @@ namespace WebUI {
                             config->_oled->refresh_display(true);
                         }
                 
-                        log_info("RSS fetch completed");
+                        log_rss("Fetch completed");
                     }
                 
                 // Connection to RSS server failed
@@ -455,7 +455,7 @@ namespace WebUI {
                         config->_oled->refresh_display(true);
                     }
                     
-                    log_warn("RSS Error: Connection failed");
+                    log_rss("Error: Connection failed");
                 }
                 
                 // End the RSS connection
