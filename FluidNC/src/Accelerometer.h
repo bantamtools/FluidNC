@@ -5,6 +5,7 @@
 #include <stdint.h>
 #include "Configuration/Configurable.h"
 #include "Channel.h"
+#include "ADXL345.h"
 
 // Definitions
 //TBD
@@ -21,6 +22,9 @@ class Accelerometer : public Channel, public Configuration::Configurable {
     bool _error = false;
 
 public:
+
+    ADXL345* _accel;
+
     Accelerometer() : Channel("accelerometer") {}
 
     Accelerometer(const Accelerometer&) = delete;
