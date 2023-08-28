@@ -34,8 +34,8 @@ jobs:
         pip install --upgrade platformio
     - name: Set release version
       run: |
-        git config user.email "wmb@firmworks.com"
-        git config user.name "Mitch Bradley"
+        git config user.email "devin@bantamtools.com"
+        git config user.name "BantamTools"
         git tag "${{ github.event.inputs.tag }}" -a -m "Release test"
     - name: Build
       run: python build-release.py

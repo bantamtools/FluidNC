@@ -18,6 +18,7 @@
 #include "MotionControl.h"  // PARKING_MOTION_LINE_NUMBER
 #include "Settings.h"       // settings_execute_startup
 #include "Machine/LimitPin.h"
+#include "WebUI/RSSReader.h"
 
 volatile ExecAlarm rtAlarm;  // Global realtime executor bitflag variable for setting various alarms.
 
@@ -77,6 +78,8 @@ void protocol_reset() {
 }
 
 static int32_t idleEndTime = 0;
+
+static uint32_t enterStartTime = 0;
 
 /*
   PRIMARY LOOP:
@@ -181,11 +184,17 @@ bool pollingPaused = false;
 void polling_loop(void* unused) {
     // Poll the input sources waiting for a complete line to arrive
     for (; true; /*feedLoopWDT(), */ vTaskDelay(0)) {
+
         // Polling is paused when xmodem is using a channel for binary upload
         if (pollingPaused) {
             vTaskDelay(100);
             continue;
         }
+
+        // Read encoder and ultrasonic sensor
+        protocol_read_encoder();
+        protocol_read_ultrasonic();
+
         if (activeChannel) {
             // Poll for realtime characters when waiting for the primary loop
             // (in another thread) to pick up the line.
@@ -256,19 +265,6 @@ static void check_startup_state() {
     }
 }
 
-// Reads the encoder input and prints a report if available
-void protocol_read_encoder() {
-    
-    // Read and report the difference if encoder is active
-    if (config->_encoder->is_active()) {
-
-        int16_t enc_diff = config->_encoder->get_difference();
-        if (enc_diff != 0) {
-            log_info("Encoder difference -> " << enc_diff); // Used by display for updates
-        }
-    }
-}
-
 const uint32_t heapWarnThreshold = 15000;
 
 uint32_t heapLowWater = UINT_MAX;
@@ -327,10 +323,6 @@ void protocol_main_loop() {
             if (heapLowWater < heapWarnThreshold) {
                 log_warn("Low memory: " << heapLowWater << " bytes");
             }
-        }
-        // Read encoder
-        if (config->_encoder) {
-            protocol_read_encoder();
         }
     }
     return; /* Never reached */
@@ -1042,7 +1034,19 @@ static void protocol_do_card_detect(void* arg) {
 }
 
 static void protocol_do_enter() {
-    
+
+    bool long_press = false;
+
+    // Measure enter press and flag if long press
+    enterStartTime = millis();
+    while (config->_control->enter_pressed() && ((millis() - enterStartTime) < config->_control->_long_press_ms)) {
+        delay_ms(10);
+    }
+    if ((millis() - enterStartTime) >= config->_control->_long_press_ms) {
+        long_press = true;
+    }
+
+    // Enter released, process state changes
     switch (sys.state) {
 
         // Button press does nothing in these states
@@ -1054,20 +1058,30 @@ static void protocol_do_enter() {
         case State::SafetyDoor:
             break;
 
-        // Feedhold during a cycle
+        // Feedhold / cancel during a cycle
         case State::Cycle:
-            protocol_start_holding();
-            sys.state = State::Hold;
+
+            // Long press, cancel job
+            if (long_press) {
+                protocol_send_event(&resetEvent);
+
+            // Click / short press, feedhold job
+            } else {
+                protocol_send_event(&feedHoldEvent);
+            }
             break;
 
-        // Resume from feedhold
+        // Resume / cancel during a feedhold
         case State::Hold:
-            // Cycle start only when IDLE or when a hold is complete and ready to resume.
+
+            // Cycle start / cancel when IDLE or hold is complete and ready to resume.
             if (sys.suspend.bit.holdComplete) {
-                if (spindle_stop_ovr.value) {
-                    spindle_stop_ovr.bit.restoreCycle = true;  // Set to restore in suspend routine and cycle start after.
+
+                 // Long press, cancel job
+                if (long_press) {
+                    protocol_send_event(&resetEvent);
                 } else {
-                    protocol_do_initiate_cycle();
+                    protocol_send_event(&cycleStartEvent);
                 }
             }
             break;
@@ -1080,48 +1094,169 @@ static void protocol_do_enter() {
 
         // Run selected operation when IDLE
         case State::Idle:
+
+            // Be sure display is enabled
+            if (config->_oled) {
             
-            // Home command
-            if (strcmp(config->_oled->menu_get_selected()->display_name, "Home") == 0) {
-                Machine::Homing::run_cycles(Machine::Homing::AllCycles);
+                // Home command
+                if (strcmp(config->_oled->_menu->get_selected()->display_name, "Home") == 0) {
+                    Machine::Homing::run_cycles(Machine::Homing::AllCycles);
 
-            // Display homing error if try to jog unhomed
-            } else if (strstr(config->_oled->menu_get_selected()->display_name, "Jog") && Machine::Homing::_phase == Machine::Homing::Phase::None)   {
+                // Display homing error if try to jog unhomed
+                } else if (strstr(config->_oled->_menu->get_selected()->display_name, "Jog") && !config->_axes->_homed)   {
 
-                // Display error
-                config->_oled->menu_show_error("Machine not homed");
+                    // Display error
+                    config->_oled->popup_msg("Machine not homed");
 
-            // Jog command
-            } else if (strstr(config->_oled->menu_get_selected()->display_name, "Jog ")) {
+                // Jog command
+                } else if (strstr(config->_oled->_menu->get_selected()->display_name, "Jog ")) {
 
-                char axis = (strrchr(config->_oled->menu_get_selected()->display_name, ' ') + 1)[0];
+                    char axis = (strrchr(config->_oled->_menu->get_selected()->display_name, ' ') + 1)[0];
 
-                // Enter jogging mode if not active
-                if (config->_oled->menu_get_jog_state() == JogState::Idle) {
-                    config->_oled->menu_set_jog_state(JogState::Scrolling);
+                    // Enter jogging mode if not active
+                    if (config->_oled->get_jog_state() == JogState::Idle) {
+                        config->_oled->set_jog_state(JogState::Scrolling);
 
-                // Exit jogging mode if press 
+                    // Exit jogging mode if press 
+                    } else {
+                        config->_oled->set_jog_state(JogState::Idle);
+                    }
+
+                // Back button
+                } else if (strcmp(config->_oled->_menu->get_selected()->display_name, "< Back") == 0) {
+                    config->_oled->_menu->exit_submenu();
+
+                // Run file command if files menu
+                } else if (config->_oled->_menu->is_files_menu()) {
+
+                    InputFile *infile = new InputFile("sd", config->_oled->_menu->get_selected()->path, WebUI::AuthenticationLevel::LEVEL_ADMIN, allChannels);
+                    allChannels.registration(infile);
+
+                // Download file command if RSS menu
+                } else if (config->_oled->_menu->is_rss_menu()) {
+#ifdef ENABLE_WIFI
+                    WebUI::rssReader.download_file(config->_oled->_menu->get_selected()->path);
+#endif
+                // Otherwise, enter the submenu if it exists
                 } else {
-                    config->_oled->menu_set_jog_state(JogState::Idle);
+                    config->_oled->_menu->enter_submenu();
                 }
-
-            // Back button
-            } else if (strcmp(config->_oled->menu_get_selected()->display_name, "< Back") == 0) {
-                config->_oled->menu_exit_submenu();
-
-            // Run files command if files menu
-            } else if (config->_oled->menu_is_files_list()) {
-
-                InputFile *infile = new InputFile("sd", config->_oled->menu_get_selected()->path, WebUI::AuthenticationLevel::LEVEL_ADMIN, allChannels);
-                allChannels.registration(infile);
-            
-            // Otherwise, enter the submenu if it exists
-            } else {
-                config->_oled->menu_enter_submenu();
             }
             break;
 
         default: break;
+    }
+}
+
+// Reads the encoder input and prints a report if available
+void protocol_read_encoder() {
+
+    int16_t enc_diff;
+
+    // Bail if encoder not configured
+    if (!config->_encoder) return;
+    
+    // Read and report the difference if encoder is active
+    if (config->_encoder->is_active()) {
+
+        switch (sys.state) {
+
+            // Encoder does nothing in these states
+            case State::ConfigAlarm:
+            case State::CheckMode:
+            case State::Homing:
+            case State::Sleep:
+            case State::SafetyDoor:
+            case State::Alarm:
+            case State::Cycle:
+            case State::Hold:
+            case State::Jog:
+                break;
+
+            // Read the difference if idle
+            case State::Idle:
+
+                enc_diff = config->_encoder->get_difference();
+                if (enc_diff != 0) {
+                    log_info("Encoder difference -> " << enc_diff); // Used by display for updates
+                }
+                break;
+
+            default: break;
+        }
+    }
+}
+
+static int32_t pauseEndTime = 0;
+static bool pauseActive = false;
+
+// Reads the ultrasonic sensor and TODO
+void protocol_read_ultrasonic() {
+
+    // Bail if ultrasonic sensor not configured
+    if (!config->_ultrasonic) return;
+
+    // Process states if sensor active
+    if (config->_ultrasonic->is_active()) {
+
+        switch (sys.state) {
+
+            // Ultrasonic sensor does nothing in these states
+            case State::ConfigAlarm:
+            case State::CheckMode:
+            case State::Jog:
+            case State::Homing:
+            case State::Sleep:
+            case State::SafetyDoor:
+            case State::Alarm:
+            case State::Idle:
+                break;
+
+            // Feedhold during a cycle if we're within the pause distance and start timer
+            case State::Cycle:
+
+                if (config->_ultrasonic->within_pause_distance()) {
+                    protocol_send_event(&feedHoldEvent);
+                    pauseActive = true;
+                }
+                break;
+
+            // Resume from feedhold after a pause
+            case State::Hold:
+
+                // Once in HOLD, schedule pause for specified time unless already scheduled
+                if (pauseActive && pauseEndTime == 0) {
+                    pauseEndTime = usToEndTicks(config->_ultrasonic->get_pause_time_ms() * 1000);
+                    // pauseEndTime 0 means that a resume is not scheduled. so if we happen to
+                    // land on 0 as an end time, just push it back by one microsecond to get off 0.
+                    if (pauseEndTime == 0) {
+                        pauseEndTime = 1;
+                    }
+
+                // Check to see if we should resume from feedhold
+                // If pauseEndTime is 0, no pause is pending.
+                } else if (pauseActive && pauseEndTime && (getCpuTicks() - pauseEndTime) > 0) {
+                    pauseEndTime = 0;
+
+                    // Still have an object in the way, restart the timer
+                    if (config->_ultrasonic->within_pause_distance()) {
+                        pauseEndTime = usToEndTicks(config->_ultrasonic->get_pause_time_ms() * 1000);
+                        // pauseEndTime 0 means that a resume is not scheduled. so if we happen to
+                        // land on 0 as an end time, just push it back by one microsecond to get off 0.
+                        if (pauseEndTime == 0) {
+                            pauseEndTime = 1;
+                        }
+                        
+                    // Otherwise, resume motion
+                    } else {
+                        pauseActive = false;
+                        protocol_send_event(&cycleStartEvent);
+                    }
+                }
+                break;
+
+            default: break;
+        }
     }
 }
 

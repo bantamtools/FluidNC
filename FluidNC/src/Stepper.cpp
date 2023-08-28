@@ -492,6 +492,10 @@ void Stepper::prep_buffer() {
                     prep.exit_speed = sqrtf(exit_speed_sqr);
                 }
 
+                if (pl_block == NULL) {
+                    return;  // No planner blocks. Exit.
+                }
+
                 nominal_speed            = plan_compute_profile_nominal_speed(pl_block);
                 float nominal_speed_sqr  = nominal_speed * nominal_speed;
                 float intersect_distance = 0.5f * (pl_block->millimeters + inv_2_accel * (pl_block->entry_speed_sqr - exit_speed_sqr));

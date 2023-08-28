@@ -18,7 +18,7 @@ namespace Machine {
 
     void CardDetectPin::update(bool value) {
         
-        // Print message to channel to trigger updates
-        log_info("SD Card Detect Event");
+        // Update the files menu based on SD listing
+        sd_populate_files_menu();
     }
 }

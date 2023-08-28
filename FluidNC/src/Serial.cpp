@@ -334,7 +334,7 @@ Channel* pollChannels(char* line) {
     Channel* retval = allChannels.pollLine(line);
 
     WebUI::COMMANDS::handle();      // Handles ESP restart
-    WebUI::wifi_services.handle();  // OTA, webServer, telnetServer polling
+    WebUI::wifi_services.handle();  // OTA, webServer, telnetServer, RSS reader polling
 
     return retval;
 }

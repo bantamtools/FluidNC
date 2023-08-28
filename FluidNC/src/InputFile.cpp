@@ -6,12 +6,7 @@
 #include "Report.h"
 
 InputFile::InputFile(const char* defaultFs, const char* path, WebUI::AuthenticationLevel auth_level, Channel& out) :
-    FileStream(path, "r", defaultFs), _auth_level(auth_level), _out(out), _line_num(0)  {
-
-        // Save off the auto-reporting interval then set to 500ms
-        _prev_report_interval = _out.getReportInterval();
-        _out.setReportInterval(CYCLE_REPORT_INTERVAL);
-    }
+    FileStream(path, "r", defaultFs), _auth_level(auth_level), _out(out), _line_num(0)  {}
 /*
   Read a line from the file
   Returns Error::Ok if a line was read, even if the line was empty.
@@ -50,7 +45,6 @@ void InputFile::ack(Error status) {
             // Do not stop on unsupported commands because most senders do not
             // Stop the file job on other errors
             _notifyf("File job error", "Error:%d in %s at line: %d", status, path(), getLineNumber());
-            _out.setReportInterval(_prev_report_interval);  // restore auto-reporting interval
             allChannels.kill(this);
             return;
         }
@@ -80,13 +74,11 @@ Channel* InputFile::pollLine(char* line) {
             _progress = "";
             _notifyf("File job done", "%s file job succeeded", path());
             log_msg(path() << " file job succeeded");
-            _out.setReportInterval(_prev_report_interval);  // restore auto-reporting interval
             allChannels.kill(this);
             return nullptr;
         default:
             _progress = "";
             log_error(static_cast<int>(err) << " (" << errorString(err) << ") in " << path() << " at line " << getLineNumber());
-            _out.setReportInterval(_prev_report_interval);  // restore auto-reporting interval
             allChannels.kill(this);
             return nullptr;
     }
@@ -96,7 +88,6 @@ void InputFile::stopJob() {
     //Report print stopped
     _notifyf("File print canceled", "Reset during file job at line: %d", getLineNumber());
     log_info("Reset during file job at line: " << getLineNumber());
-    _out.setReportInterval(_prev_report_interval);  // restore auto-reporting interval
     allChannels.kill(this);
 }
 

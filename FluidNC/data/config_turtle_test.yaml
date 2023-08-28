@@ -106,6 +106,13 @@ encoder:
   a_pin: gpio.35
   b_pin: gpio.48
 
+# Ultrasonic
+ultrasonic: 
+  trig_pin: gpio.37
+  echo_pin: gpio.38
+  pause_time_ms: 6000
+  pause_distance_cm: 15
+  
 # Configure SD card in SPI mode
 spi:
   miso_pin: gpio.8
@@ -120,15 +127,7 @@ sdcard:
 # LED (0) and expansion IOs (1-4)
 user_outputs:
   digital0_pin: gpio.5
-
-# Accelerometer
-i2c1:
-  sda_pin: gpio.43
-  scl_pin: gpio.44
-  frequency: 400000
-
-accelerometer:
-  i2c_num: 1
-  i2c_address: 0x53
-  int1_pin: gpio.42
-  int2_pin: gpio.6
+  digital1_pin: gpio.43
+  digital2_pin: gpio.44
+  digital3_pin: gpio.42
+  digital4_pin: gpio.6

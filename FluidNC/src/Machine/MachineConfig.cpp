@@ -73,6 +73,8 @@ namespace Machine {
         handler.section("encoder", _encoder);
 
         handler.section("accelerometer", _accelerometer);
+        
+        handler.section("ultrasonic", _ultrasonic);
 
         Spindles::SpindleFactory::factory(handler, _spindles);
 

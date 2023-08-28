@@ -5,6 +5,7 @@
 #include "ff.h"
 #include "sdmmc_cmd.h"
 #include "driver/sdspi_host.h"
+#include "../src/Machine/MachineConfig.h"
 
 #include "Driver/sdspi.h"
 #include "src/Config.h"
@@ -17,7 +18,6 @@
         }                                                                                                                                  \
     } while (0)
 
-static FileListType sd_files;
 static const String allowed_file_ext[SD_NUM_ALLOWED_EXT] = {".gcode", ".nc", ".txt"};
 static bool sd_is_mounted = false;
 
@@ -109,8 +109,7 @@ bool sd_init_slot(uint32_t freq_hz, int cs_pin, int cd_pin, int wp_pin) {
         CHECK_EXECUTE_RESULT(err, "set slot clock speed failed");
     }
 
-    // Clear file count on file list and mount flag
-    sd_files.num_files = 0;
+    // Clear mount flag
     sd_is_mounted = false;
 
     return true;
@@ -223,14 +222,38 @@ unmount2() {
 }
 #endif
 
-void sd_list_files() {
+bool sd_card_is_present() {
+
+    bool res = false;
+
+    // SD card already mounted
+    if (sd_is_mounted) {
+        res = true;
+
+    // Otherwise, attempt to mount it and unmount again if found
+    } else if (!sd_mount()) {
+
+        sd_unmount();
+        res = true;
+    }
+
+    return res;
+}
+
+void sd_populate_files_menu() {
 
     std::error_code ec;
     const std::filesystem::path fpath{base_path};
-    char file_ext[SD_MAX_STR];
+    char file_ext[LIST_NAME_MAX_PATH];
+    char file_path[LIST_NAME_MAX_PATH];
+
+    // No display, bail
+    if (!config->_oled) {
+        return;
+    }
 
     // Clear the file list to start
-    sd_files.num_files = 0;
+    config->_oled->_menu->prep_for_sd_update();
 
     // SD not mounted, attempt to mount
     if (!sd_is_mounted) {
@@ -247,7 +270,7 @@ void sd_list_files() {
             for (auto const& dir_entry : iter) {
 
                 // Get the file extension and convert to lowercase
-                strncpy(file_ext, dir_entry.path().extension().c_str(), SD_MAX_STR);
+                strncpy(file_ext, dir_entry.path().extension().c_str(), LIST_NAME_MAX_PATH);
                 for (auto i = 0; file_ext[i]; i++) {
                     file_ext[i] = tolower(file_ext[i]);
                 }
@@ -258,30 +281,21 @@ void sd_list_files() {
                     // Found a matching extension, list file
                     if (strcmp(file_ext, allowed_file_ext[i].c_str()) == 0) {
 
-                        // Reached maximum file list, display error and exit listing loop
-                        if (sd_files.num_files == SD_MAX_FILES) {
-                            log_warn("Maximum file list reached, stopped listing files");
-                            break;
-                        }
-
-                        // Save file name to list and increment count
+                        // Save file name to menu
                         std::string full_path = dir_entry.path().c_str();
                         std::string short_path = full_path.substr(strlen(base_path));
 
-                        strncpy(sd_files.path[sd_files.num_files], short_path.c_str(), SD_MAX_STR);
-                        sd_files.num_files++;
+                        strncpy(file_path, short_path.c_str(), LIST_NAME_MAX_PATH);
+                        config->_oled->_menu->add_sd_file(file_path);
                     }    
                 }
             }
         }
-
+        
         // Unmount the SD card
         sd_unmount();
     }
-}
 
-FileListType *sd_get_filelist(void) {
-
-    sd_list_files();
-    return &sd_files;
+    // Refresh the menu
+    config->_oled->refresh_display(true);
 }

@@ -28,6 +28,7 @@
 
 #    include "Encoder.h"
 #    include "Accelerometer.h"
+#    include "Ultrasonic.h"
 
 extern void make_user_commands();
 
@@ -113,6 +114,10 @@ void setup() {
 
             if (config->_accelerometer) {
                 config->_accelerometer->init();
+            }
+
+            if (config->_ultrasonic) {
+                config->_ultrasonic->init();
             }
 
             config->_stepping->init();  // Configure stepper interrupt timers

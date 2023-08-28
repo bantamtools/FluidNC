@@ -23,7 +23,6 @@
 #include "xmodem.h"               // xmodemReceive(), xmodemTransmit()
 #include "StartupLog.h"           // startupLog
 #include "Driver/fluidnc_gpio.h"  // gpio_dump()
-#include "InputFile.h"            // InputFile::CYCLE_REPORT_INTERVAL
 
 #include "FluidPath.h"
 #include "HashFS.h"
@@ -271,6 +270,10 @@ static Error isStuck() {
     if (config->_control->safety_door_ajar()) {
         rtAlarm = ExecAlarm::ControlPin;
         return Error::CheckDoor;
+    }
+    // Skip stuck alarm if enter pressed (long press)
+    if (config->_control->enter_pressed()) {
+        return Error::Ok;
     }
     if (config->_control->stuck()) {
         log_info("Control pins:" << config->_control->report_status());
@@ -738,12 +741,7 @@ static Error setReportInterval(const char* value, WebUI::AuthenticationLevel aut
         return Error::BadNumberFormat;
     }
 
-    // Force interval of 500ms during a run if it gets changed
-    if (sys.state == State::Cycle && out.getReportInterval() != InputFile::CYCLE_REPORT_INTERVAL) {
-        actual = out.setReportInterval(InputFile::CYCLE_REPORT_INTERVAL);
-    } else {
-        actual = out.setReportInterval(intValue);
-    }
+    actual = out.setReportInterval(intValue);
 #if 1
     if (actual) {
         log_info("Channel auto report interval set to " << actual << " ms");

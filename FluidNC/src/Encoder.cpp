@@ -8,11 +8,45 @@ static const char *TAG = "encoder";
 Encoder::Encoder() {
 
     _is_active = false;
+    _ready_flag = false;
 	_pcnt_unit = PCNT_UNIT_0;
+    _current_value = -1;
+    _previous_value = -1;
+    _difference = -1;
 }
 
 // Encoder destructor
 Encoder::~Encoder() {}
+
+// Encoder read task
+void Encoder::read_task(void *pvParameters) {
+
+    // Connect pointer
+    Encoder* instance = static_cast<Encoder*>(pvParameters);
+
+    // Loop forever
+    while(1) {
+
+        // Read new values when data has been read or not initialized
+        if (!instance->_ready_flag) {
+
+            // Save the previous value
+            instance->_previous_value = instance->_current_value;
+
+            // Read the current encoder value
+            pcnt_get_counter_value(instance->_pcnt_unit, &instance->_current_value);
+
+            // Calculate the difference
+            instance->_difference = instance->_current_value - instance->_previous_value;
+
+            // Set ready flag
+            instance->_ready_flag = true;
+        }
+
+        // Check every 10ms
+        vTaskDelay(ENC_READ_PERIODIC_MS/portTICK_PERIOD_MS);
+    }
+}
 
 // Initializes the encoder subsystem
 void Encoder::init() {
@@ -36,7 +70,7 @@ void Encoder::init() {
 	pcnt_config.unit = _pcnt_unit;
 
 	// What to do on the positive / negative edge of pulse input?
-	pcnt_config.pos_mode = PCNT_COUNT_DIS;      // Keep the counter value on the positive edge
+	pcnt_config.pos_mode = PCNT_COUNT_DEC;      // Count down on the positive edge
 	pcnt_config.neg_mode = PCNT_COUNT_INC;      // Count up on the negative edge
 
 	// What to do when control input is low or high?
@@ -61,40 +95,26 @@ void Encoder::init() {
 	// Everything is set up, now go to counting
 	pcnt_counter_resume(_pcnt_unit);
 
+    // Load up the first current value, gives us an accurate difference on first read_task run
+    pcnt_get_counter_value(_pcnt_unit, &_current_value);
+
+    // Start read task
+    xTaskCreate(read_task, "encoder_read_task", ENC_READ_STACK_SIZE, this, ENC_READ_PRIORITY, NULL);
+
     // Set flag
     _is_active = true;
-
-    // Store the current encoder value
-	_previous_value = get_value();
-}
-
-// Get the current encoder value
-int16_t Encoder::get_value() {
-	int16_t value;
-
-    // Return zero if not active
-    if (!_is_active) return 0;
-
-	pcnt_get_counter_value(_pcnt_unit, &value);
-	return value;
 }
 
 // Get the difference between current and previous value
 int16_t Encoder::get_difference() {
 
-    int16_t current_value, difference;
+    // Return zero if not active or not ready yet
+    if (!_is_active || !_ready_flag) return 0;
 
-    // Return zero if not active
-    if (!_is_active) return 0;
+    // Return the difference and clear the flag
+    int16_t difference = _difference;
+    _ready_flag = false;
 
-    // Get the current encoder count and calculate difference
-    current_value = (int16_t)get_value();
-    difference = current_value - _previous_value;
-
-    // Set previous count to current count
-    _previous_value = current_value;
-
-    // Return the difference
     return difference;
 }
 

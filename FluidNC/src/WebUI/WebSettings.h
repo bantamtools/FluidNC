@@ -6,6 +6,8 @@
 
 #include "../Config.h"  // ENABLE_*
 #include "../Settings.h"
+#include "../Menu.h"
+#include "RSSReader.h"
 
 namespace WebUI {
     bool  split_params(char* parameter);

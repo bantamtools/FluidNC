@@ -14,6 +14,8 @@ public:
 
     std::vector<ControlPin*> _pins;
 
+    uint32_t _long_press_ms = 2000;
+
     // Initializes control pins.
     void init();
 
@@ -22,6 +24,7 @@ public:
 
     bool stuck();
     bool safety_door_ajar();
+    bool enter_pressed();
 
     std::string report_status();
 
