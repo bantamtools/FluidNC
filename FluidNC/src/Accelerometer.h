@@ -18,17 +18,6 @@ class Accelerometer : public Configuration::Configurable {
     Pin _int1_pin;  
     Pin _int2_pin;
 
-    bool _error = false;
-
-private:
-
-    static constexpr UBaseType_t    ACCEL_READ_PRIORITY       = (configMAX_PRIORITIES - 3);
-    static constexpr uint32_t       ACCEL_READ_STACK_SIZE     = 4096;
-    static constexpr uint32_t       ACCEL_READ_PERIODIC_MS    = 100;
-
-
-    static void read_task(void *pvParameters);
-
 public:
 
     ADXL345* _accel;
@@ -37,16 +26,9 @@ public:
     ~Accelerometer();
 
     void init();
-    bool is_active();
     void read() {}; // TEMP
    
     // Configuration handlers
     void validate() override;
-    void afterParse() override;
     void group(Configuration::HandlerBase& handler) override;
-    
-protected:
-
-    bool _is_active = false;
-
 };
