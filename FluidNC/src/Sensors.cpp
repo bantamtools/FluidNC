@@ -20,9 +20,15 @@ void Sensors::read_task(void *pvParameters) {
     while(1) {
 
         // Read sensor inputs
-        instance->_encoder->read();
-        instance->_ultrasonic->read();
-        instance->_accelerometer->read();
+        if (instance->_encoder) {
+            instance->_encoder->read();
+        }
+        if (instance->_ultrasonic) {
+            instance->_ultrasonic->read();
+        }
+        if (instance->_accelerometer) {
+            instance->_accelerometer->read();
+        }
 
         // Check every 10ms
         vTaskDelay(SNS_READ_PERIODIC_MS/portTICK_PERIOD_MS);
@@ -55,17 +61,4 @@ void Sensors::group(Configuration::HandlerBase& handler) {
     handler.section("encoder", _encoder);
     handler.section("ultrasonic", _ultrasonic);
     handler.section("accelerometer", _accelerometer);
-}
-
-void Sensors::afterParse() {
-
-    if (_encoder == nullptr) {
-        _encoder = new Encoder();
-    }
-    if (_ultrasonic == nullptr) {
-        _ultrasonic = new Ultrasonic();
-    }
-    if (_accelerometer == nullptr) {
-        _accelerometer = new Accelerometer();
-    }
 }

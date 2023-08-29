@@ -38,5 +38,4 @@ public:
     // Configuration handlers.
     void validate() override;
     void group(Configuration::HandlerBase& handler) override;
-    void afterParse() override;
 };
