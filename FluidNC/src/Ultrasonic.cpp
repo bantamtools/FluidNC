@@ -39,35 +39,13 @@
  */
 
 #include "Ultrasonic.h"
+#include "Machine/MachineConfig.h"
 
 // Ultraonic constructor
 Ultrasonic::Ultrasonic() {}
 
 // Ultrasonic destructor
 Ultrasonic::~Ultrasonic() {}
-
-// Ultrasonic read task
-/*
-void Ultrasonic::read_task(void *pvParameters) {
-
-    uint32_t dist_cm;
-    esp_err_t ret;
-
-    // Connect pointer
-    Ultrasonic* instance = static_cast<Ultrasonic*>(pvParameters);
-
-    // Loop forever
-    while(1) {
-
-        // Read the ultrasonic sensor and save distance if valid
-        if ((ret = instance->measure_cm(ULT_MAX_DISTANCE, &dist_cm)) == ESP_OK) {
-            instance->_dist_cm = dist_cm;
-        }
-
-        // Check every 100ms
-        vTaskDelay(ULT_READ_PERIODIC_MS/portTICK_PERIOD_MS);
-    }
-}*/
 
 // Initializes the ultrasonic subsystem
 void Ultrasonic::init() {
@@ -174,9 +152,67 @@ bool Ultrasonic::within_pause_distance(void) {
     return (_dist_cm <= _pause_distance_cm);
 }
 
-// Returns the configured pause time in milliseconds
-int32_t Ultrasonic::get_pause_time_ms(void) {
-    return _pause_time_ms;
+// Reads the ultrasonic sensor
+void Ultrasonic::read() {
+
+    uint32_t dist_cm;
+
+    // Read the distance and save locally if valid
+    // or set to max distance if error
+    if (measure_cm(ULT_MAX_DISTANCE, &dist_cm) == ESP_OK) {
+        _dist_cm = dist_cm;
+    } else {
+        _dist_cm = ULT_MAX_DISTANCE;
+    }
+
+    // Process the ultrasonic reading based on the current state
+    switch (sys.state) {
+
+        // Feedhold during a cycle if we're within the pause distance and start timer
+        case State::Cycle:
+
+            if (within_pause_distance()) {
+                protocol_send_event(&feedHoldEvent);
+                _pause_active = true;
+            }
+            break;
+
+        // Resume from feedhold after a pause
+        case State::Hold:
+
+            // Once in HOLD, schedule pause for specified time unless already scheduled
+            if (_pause_active && _pause_end_time == 0) {
+                _pause_end_time = usToEndTicks(_pause_time_ms * 1000);
+                // _pause_end_time 0 means that a resume is not scheduled. so if we happen to
+                // land on 0 as an end time, just push it back by one microsecond to get off 0.
+                if (_pause_end_time == 0) {
+                    _pause_end_time = 1;
+                }
+
+            // Check to see if we should resume from feedhold
+            // If _pause_end_time is 0, no pause is pending.
+            } else if (_pause_active && _pause_end_time && (getCpuTicks() - _pause_end_time) > 0) {
+                _pause_end_time = 0;
+
+                // Still have an object in the way, restart the timer
+                if (within_pause_distance()) {
+                    _pause_end_time = usToEndTicks(_pause_time_ms * 1000);
+                    // _pause_end_time 0 means that a resume is not scheduled. so if we happen to
+                    // land on 0 as an end time, just push it back by one microsecond to get off 0.
+                    if (_pause_end_time == 0) {
+                        _pause_end_time = 1;
+                    }
+                    
+                // Otherwise, resume motion
+                } else {
+                    _pause_active = false;
+                    protocol_send_event(&cycleStartEvent);
+                }
+            }
+            break;
+
+        default: break;
+    }
 }
 
 // Configurable functions
@@ -186,7 +222,7 @@ void Ultrasonic::validate() {
         Assert(!_trig_pin.undefined(), "Ultrasonic TRIG pin should be configured.");
         Assert(!_echo_pin.undefined(), "Ultrasonic ECHO pin should be configured.");
         Assert((_pause_time_ms >= 0), "Ultrasonic pause time should be positive.");
-        Assert((_pause_distance_cm >= 0), "Ultrasonic pause distance should be positive.");
+        Assert(((_pause_distance_cm >= 0) && (_pause_distance_cm <= ULT_MAX_DISTANCE)), "Ultrasonic pause distance should be between 0-100cm.");
     }
 }
 

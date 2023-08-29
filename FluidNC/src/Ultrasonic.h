@@ -44,6 +44,7 @@
 
 #include <stdint.h>
 #include "Configuration/Configurable.h"
+#include "Config.h"
 
 // Class
 class Ultrasonic : public Configuration::Configurable {
@@ -69,21 +70,23 @@ private:
 
 protected:
 
+    int32_t _pause_end_time = 0;
+    bool _pause_active = false;
+    
     uint32_t _dist_cm = ULT_MAX_DISTANCE;
 
     esp_err_t measure_raw(uint32_t max_time_us, uint32_t *time_us);
     esp_err_t measure_m(float max_distance, float *distance);
     esp_err_t measure_cm(uint32_t max_distance, uint32_t *distance);
-
+    bool within_pause_distance();
+    
 public:
 
 	Ultrasonic();
     ~Ultrasonic();
 
     void init();
-    bool within_pause_distance();
-    int32_t get_pause_time_ms();
-    void read() {}; //TEMP
+    void read();
 
     // Configuration handlers.
     void validate() override;
