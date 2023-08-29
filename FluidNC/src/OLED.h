@@ -75,7 +75,6 @@ private:
     void parse_IP();
     void parse_AP();
     void parse_BT();
-    void parse_encoder();
 
     void parse_axes(std::string s, float* axes);
     void parse_numbers(std::string s, float* nums, int maxnums);
@@ -122,6 +121,7 @@ public:
     JogState get_jog_state();
     void set_jog_state(JogState);
     bool is_active();
+    void process_encoder(int16_t enc_diff);
 
     OLEDDisplay* _oled;
     Menu* _menu = new Menu();

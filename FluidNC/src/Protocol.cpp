@@ -1144,39 +1144,6 @@ static void protocol_do_enter() {
     }
 }
 
-// Reads the encoder input and prints a report
-void protocol_do_encoder() {
-
-    int16_t enc_diff = 0;
-
-    switch (sys.state) {
-
-        // Encoder does nothing in these states
-        case State::ConfigAlarm:
-        case State::CheckMode:
-        case State::Homing:
-        case State::Sleep:
-        case State::SafetyDoor:
-        case State::Alarm:
-        case State::Cycle:
-        case State::Hold:
-        case State::Jog:
-            break;
-
-        // Read the difference if idle
-        case State::Idle:
-
-            enc_diff = config->_sensors->_encoder->get_difference();
-            log_info("Encoder difference -> " << enc_diff); // Used by display for updates
-            if (enc_diff != 0) {
-                
-            }
-            break;
-
-        default: break;
-    }
-}
-
 static int32_t pauseEndTime = 0;
 static bool pauseActive = false;
 
@@ -1267,8 +1234,6 @@ NoArgEvent motionCancelEvent { protocol_do_motion_cancel };
 NoArgEvent sleepEvent { protocol_do_sleep };
 NoArgEvent debugEvent { report_realtime_debug };
 NoArgEvent enterEvent { protocol_do_enter };
-
-NoArgEvent encoderEvent { protocol_do_encoder };
 
 // Only mc_reset() is permitted to set rtReset.
 NoArgEvent resetEvent { mc_reset };

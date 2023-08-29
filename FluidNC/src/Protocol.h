@@ -103,8 +103,6 @@ extern NoArgEvent resetEvent;
 extern NoArgEvent debugEvent;
 extern NoArgEvent enterEvent;
 
-extern NoArgEvent encoderEvent;
-
 // extern NoArgEvent statusReportEvent;
 
 extern xQueueHandle event_queue;

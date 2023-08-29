@@ -1,13 +1,11 @@
 // Copyright (c) 2023 Matt Staniszewski, Bantam Tools
 
 #include "Encoder.h"
-
-static const char *TAG = "encoder";
+#include "Machine/MachineConfig.h"
 
 // Encoder constructor
 Encoder::Encoder() {
 
-    _is_active = false;
 	_pcnt_unit = PCNT_UNIT_0;
     _current_value = -1;
     _previous_value = -1;
@@ -21,12 +19,6 @@ Encoder::~Encoder() {}
 void Encoder::init() {
 
 	pcnt_config_t pcnt_config;
-
-    // Check if encoder pins configured
-    if (!_a_pin.defined() || !_b_pin.defined()) {
-        _is_active = false;
-        return;
-    }
 
     // Set up encoder A/B pins
     _a_pin.setAttr(Pin::Attr::PullUp);
@@ -69,18 +61,6 @@ void Encoder::init() {
 
     // Print configuration info message
     log_info("Encoder: A:" << _a_pin.name() << " B:" << _b_pin.name());
-
-    // Set flag
-    _is_active = true;
-}
-
-// Get the difference between current and previous value
-int16_t Encoder::get_difference() {
-
-    // Return zero if not active or not ready yet
-    if (!_is_active) return 0;
-
-    return _difference;
 }
 
 // Read the encoder value and calculate difference
@@ -95,14 +75,20 @@ void Encoder::read() {
     // Calculate the difference
     _difference = _current_value - _previous_value;
 
-    // Trigger event on change
-    if (_difference != 0) {
-        protocol_send_event(&encoderEvent);
+    // Trigger screen update on change if IDLE
+    if ((_difference != 0) && (sys.state == State::Idle)) {
+        config->_oled->process_encoder(_difference);
     }
 }
 
 // Configurable functions
-void Encoder::validate() {}
+void Encoder::validate() {
+
+    if (!_a_pin.undefined() || !_b_pin.undefined()) {
+        Assert(!_a_pin.undefined(), "Encoder A pin should be configured.");
+        Assert(!_b_pin.undefined(), "Encoder B pin should be configured.");
+    }
+}
 
 void Encoder::group(Configuration::HandlerBase& handler) {
 
