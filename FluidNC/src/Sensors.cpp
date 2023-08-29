@@ -19,7 +19,8 @@ void Sensors::read_task(void *pvParameters) {
     // Loop forever
     while(1) {
 
-        //TODO
+        // Read sensor inputs
+        instance->_encoder->read();
 
         // Check every 10ms
         vTaskDelay(SNS_READ_PERIODIC_MS/portTICK_PERIOD_MS);

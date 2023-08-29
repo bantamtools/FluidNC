@@ -191,10 +191,6 @@ void polling_loop(void* unused) {
             continue;
         }
 
-        // Read encoder and ultrasonic sensor
-        //protocol_read_encoder();
-        //protocol_read_ultrasonic();
-
         if (activeChannel) {
             // Poll for realtime characters when waiting for the primary loop
             // (in another thread) to pick up the line.
@@ -1148,42 +1144,35 @@ static void protocol_do_enter() {
     }
 }
 
-// Reads the encoder input and prints a report if available
-void protocol_read_encoder() {
+// Reads the encoder input and prints a report
+void protocol_do_encoder() {
 
-    int16_t enc_diff;
-
-    // Bail if encoder not configured
-    if (!config->_sensors->_encoder) return;
+    int16_t enc_diff = 0;
     
-    // Read and report the difference if encoder is active
-    if (config->_sensors->_encoder->is_active()) {
+    switch (sys.state) {
 
-        switch (sys.state) {
+        // Encoder does nothing in these states
+        case State::ConfigAlarm:
+        case State::CheckMode:
+        case State::Homing:
+        case State::Sleep:
+        case State::SafetyDoor:
+        case State::Alarm:
+        case State::Cycle:
+        case State::Hold:
+        case State::Jog:
+            break;
 
-            // Encoder does nothing in these states
-            case State::ConfigAlarm:
-            case State::CheckMode:
-            case State::Homing:
-            case State::Sleep:
-            case State::SafetyDoor:
-            case State::Alarm:
-            case State::Cycle:
-            case State::Hold:
-            case State::Jog:
-                break;
+        // Read the difference if idle
+        case State::Idle:
 
-            // Read the difference if idle
-            case State::Idle:
+            enc_diff = config->_sensors->_encoder->get_difference();
+            if (enc_diff != 0) {
+                log_info("Encoder difference -> " << enc_diff); // Used by display for updates
+            }
+            break;
 
-                enc_diff = config->_sensors->_encoder->get_difference();
-                if (enc_diff != 0) {
-                    log_info("Encoder difference -> " << enc_diff); // Used by display for updates
-                }
-                break;
-
-            default: break;
-        }
+        default: break;
     }
 }
 
@@ -1277,6 +1266,8 @@ NoArgEvent motionCancelEvent { protocol_do_motion_cancel };
 NoArgEvent sleepEvent { protocol_do_sleep };
 NoArgEvent debugEvent { report_realtime_debug };
 NoArgEvent enterEvent { protocol_do_enter };
+
+NoArgEvent encoderEvent { protocol_do_encoder };
 
 // Only mc_reset() is permitted to set rtReset.
 NoArgEvent resetEvent { mc_reset };

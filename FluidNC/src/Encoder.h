@@ -14,6 +14,7 @@
 #include "Logging.h"
 #include "Config.h"
 #include "Configuration/Configurable.h"
+#include "Encoder.h"
 #include <limits>
 
 // Class
@@ -21,14 +22,6 @@ class Encoder : public Configuration::Configurable {
 
     Pin _a_pin;
     Pin _b_pin;
-
-private:
-
-    static constexpr UBaseType_t    ENC_READ_PRIORITY       = (configMAX_PRIORITIES - 3);
-    static constexpr uint32_t       ENC_READ_STACK_SIZE     = 4096;
-    static constexpr uint32_t       ENC_READ_PERIODIC_MS    = 10;
-
-    static void read_task(void *pvParameters);
 
 protected:
 
@@ -47,6 +40,7 @@ public:
     void init();
     int16_t get_difference();
     bool is_active();
+    void read();
 
     // Configuration handlers.
     void validate() override;

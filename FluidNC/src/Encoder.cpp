@@ -18,36 +18,6 @@ Encoder::Encoder() {
 // Encoder destructor
 Encoder::~Encoder() {}
 
-// Encoder read task
-void Encoder::read_task(void *pvParameters) {
-
-    // Connect pointer
-    Encoder* instance = static_cast<Encoder*>(pvParameters);
-
-    // Loop forever
-    while(1) {
-
-        // Read new values when data has been read or not initialized
-        if (!instance->_ready_flag) {
-
-            // Save the previous value
-            instance->_previous_value = instance->_current_value;
-
-            // Read the current encoder value
-            pcnt_get_counter_value(instance->_pcnt_unit, &instance->_current_value);
-
-            // Calculate the difference
-            instance->_difference = instance->_current_value - instance->_previous_value;
-
-            // Set ready flag
-            instance->_ready_flag = true;
-        }
-
-        // Check every 10ms
-        vTaskDelay(ENC_READ_PERIODIC_MS/portTICK_PERIOD_MS);
-    }
-}
-
 // Initializes the encoder subsystem
 void Encoder::init() {
 
@@ -101,9 +71,6 @@ void Encoder::init() {
     // Print configuration info message
     log_info("Encoder: A:" << _a_pin.name() << " B:" << _b_pin.name());
 
-    // Start read task
-    xTaskCreate(read_task, "encoder_read_task", ENC_READ_STACK_SIZE, this, ENC_READ_PRIORITY, NULL);
-
     // Set flag
     _is_active = true;
 }
@@ -124,6 +91,28 @@ int16_t Encoder::get_difference() {
 // Returns active flag
 bool Encoder::is_active() {
     return _is_active;
+}
+
+// Read the encoder value and calculate difference
+void Encoder::read() {
+
+    if (!_ready_flag) {
+
+        // Save the previous value
+        _previous_value = _current_value;
+
+        // Read the current encoder value
+        pcnt_get_counter_value(_pcnt_unit, &_current_value);
+
+        // Calculate the difference
+        _difference = _current_value - _previous_value;
+
+        // Set ready flag
+        _ready_flag = true;
+
+        // Trigger event
+        protocol_send_event(&encoderEvent);
+    }
 }
 
 // Configurable functions
