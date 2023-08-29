@@ -121,6 +121,7 @@ class ADXL345 {
     DataFormatBits _dataFormatBits;
     BwRateBits _bwRateBits;
 
+    float convertToG(int16_t rawValue);
     float convertToMetersPerSec2(int16_t rawValue);
 
     bool write(uint8_t value);
@@ -136,9 +137,12 @@ class ADXL345 {
     bool stop();
     uint8_t readDeviceID();
     bool update();
-    float getX();
-    float getY();
-    float getZ();
+    float getXMeterPerSec2();
+    float getYMeterPerSec2();
+    float getZMeterPerSec2();
+    float getXGs();
+    float getYGs();
+    float getZGs();
     int16_t getRawX();
     int16_t getRawY();
     int16_t getRawZ();

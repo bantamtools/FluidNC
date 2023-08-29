@@ -55,15 +55,21 @@ void Accelerometer::read() {
     // Read new values when an update is available
     if (_adxl345->update()) {
 
-        _accel_data->x = _adxl345->getX();
-        _accel_data->y = _adxl345->getY();
-        _accel_data->z = _adxl345->getZ();
+        _accel_data->x = _adxl345->getXMeterPerSec2();
+        _accel_data->y = _adxl345->getYMeterPerSec2();
+        _accel_data->z = _adxl345->getZMeterPerSec2();
 
-        _accel_data->roll = atan2(_accel_data->y, sqrt((_accel_data->x * _accel_data->x) + (_accel_data->z * _accel_data->z))) * (180.0 / PI);
-        _accel_data->pitch = atan2(_accel_data->x, sqrt((_accel_data->y * _accel_data->y) + (_accel_data->z * _accel_data->z))) * (180.0 / PI);
+        float _x = _adxl345->getXGs();
+        float _y = _adxl345->getYGs();
+        float _z = _adxl345->getZGs();
+
+        _accel_data->roll = atan2(_y, sqrt((_x * _x) + (_z * _z))) * (180.0 / PI);
+        _accel_data->pitch = atan2(_x, sqrt((_y * _y) + (_z * _z))) * (180.0 / PI);
         
-        //log_info("X: " << _accel_data->x << ", Y: " << _accel_data->y << ", Z: " << _accel_data->z <<
-        //         ", Roll = " << _accel_data->roll << ", Pitch = " << _accel_data->pitch);
+        log_info("X: " << _accel_data->x << ", Y: " << _accel_data->y << ", Z: " << _accel_data->z <<
+                 ", Roll = " << _accel_data->roll << ", Pitch = " << _accel_data->pitch);
+
+        delay_ms(500);
     }
 }
 
