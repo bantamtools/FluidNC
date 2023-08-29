@@ -1150,70 +1150,63 @@ static bool pauseActive = false;
 // Reads the ultrasonic sensor and TODO
 void protocol_read_ultrasonic() {
 
-    // Bail if ultrasonic sensor not configured
-    if (!config->_sensors->_ultrasonic) return;
+    switch (sys.state) {
 
-    // Process states if sensor active
-    if (config->_sensors->_ultrasonic->is_active()) {
+        // Ultrasonic sensor does nothing in these states
+        case State::ConfigAlarm:
+        case State::CheckMode:
+        case State::Jog:
+        case State::Homing:
+        case State::Sleep:
+        case State::SafetyDoor:
+        case State::Alarm:
+        case State::Idle:
+            break;
 
-        switch (sys.state) {
+        // Feedhold during a cycle if we're within the pause distance and start timer
+        case State::Cycle:
 
-            // Ultrasonic sensor does nothing in these states
-            case State::ConfigAlarm:
-            case State::CheckMode:
-            case State::Jog:
-            case State::Homing:
-            case State::Sleep:
-            case State::SafetyDoor:
-            case State::Alarm:
-            case State::Idle:
-                break;
+            if (config->_sensors->_ultrasonic->within_pause_distance()) {
+                protocol_send_event(&feedHoldEvent);
+                pauseActive = true;
+            }
+            break;
 
-            // Feedhold during a cycle if we're within the pause distance and start timer
-            case State::Cycle:
+        // Resume from feedhold after a pause
+        case State::Hold:
 
-                if (config->_sensors->_ultrasonic->within_pause_distance()) {
-                    protocol_send_event(&feedHoldEvent);
-                    pauseActive = true;
+            // Once in HOLD, schedule pause for specified time unless already scheduled
+            if (pauseActive && pauseEndTime == 0) {
+                pauseEndTime = usToEndTicks(config->_sensors->_ultrasonic->get_pause_time_ms() * 1000);
+                // pauseEndTime 0 means that a resume is not scheduled. so if we happen to
+                // land on 0 as an end time, just push it back by one microsecond to get off 0.
+                if (pauseEndTime == 0) {
+                    pauseEndTime = 1;
                 }
-                break;
 
-            // Resume from feedhold after a pause
-            case State::Hold:
+            // Check to see if we should resume from feedhold
+            // If pauseEndTime is 0, no pause is pending.
+            } else if (pauseActive && pauseEndTime && (getCpuTicks() - pauseEndTime) > 0) {
+                pauseEndTime = 0;
 
-                // Once in HOLD, schedule pause for specified time unless already scheduled
-                if (pauseActive && pauseEndTime == 0) {
+                // Still have an object in the way, restart the timer
+                if (config->_sensors->_ultrasonic->within_pause_distance()) {
                     pauseEndTime = usToEndTicks(config->_sensors->_ultrasonic->get_pause_time_ms() * 1000);
                     // pauseEndTime 0 means that a resume is not scheduled. so if we happen to
                     // land on 0 as an end time, just push it back by one microsecond to get off 0.
                     if (pauseEndTime == 0) {
                         pauseEndTime = 1;
                     }
-
-                // Check to see if we should resume from feedhold
-                // If pauseEndTime is 0, no pause is pending.
-                } else if (pauseActive && pauseEndTime && (getCpuTicks() - pauseEndTime) > 0) {
-                    pauseEndTime = 0;
-
-                    // Still have an object in the way, restart the timer
-                    if (config->_sensors->_ultrasonic->within_pause_distance()) {
-                        pauseEndTime = usToEndTicks(config->_sensors->_ultrasonic->get_pause_time_ms() * 1000);
-                        // pauseEndTime 0 means that a resume is not scheduled. so if we happen to
-                        // land on 0 as an end time, just push it back by one microsecond to get off 0.
-                        if (pauseEndTime == 0) {
-                            pauseEndTime = 1;
-                        }
-                        
-                    // Otherwise, resume motion
-                    } else {
-                        pauseActive = false;
-                        protocol_send_event(&cycleStartEvent);
-                    }
+                    
+                // Otherwise, resume motion
+                } else {
+                    pauseActive = false;
+                    protocol_send_event(&cycleStartEvent);
                 }
-                break;
+            }
+            break;
 
-            default: break;
-        }
+        default: break;
     }
 }
 

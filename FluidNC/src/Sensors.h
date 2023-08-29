@@ -11,15 +11,6 @@
 #include "Config.h"
 #include "Configuration/Configurable.h"
 
-//#include "freertos/queue.h"
-//#include "driver/periph_ctrl.h"
-//#include "driver/gpio.h"
-//#include "driver/pcnt.h"
-//#include "esp_attr.h"
-//#include "esp_log.h"
-//#include "Logging.h"
-//#include <limits>
-
 // Class
 class Sensors : public Configuration::Configurable {
 

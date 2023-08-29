@@ -21,6 +21,8 @@ void Sensors::read_task(void *pvParameters) {
 
         // Read sensor inputs
         instance->_encoder->read();
+        instance->_ultrasonic->read();
+        instance->_accelerometer->read();
 
         // Check every 10ms
         vTaskDelay(SNS_READ_PERIODIC_MS/portTICK_PERIOD_MS);

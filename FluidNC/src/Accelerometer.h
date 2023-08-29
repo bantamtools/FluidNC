@@ -38,6 +38,7 @@ public:
 
     void init();
     bool is_active();
+    void read() {}; // TEMP
    
     // Configuration handlers
     void validate() override;

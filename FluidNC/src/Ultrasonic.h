@@ -67,15 +67,8 @@ private:
     static constexpr esp_err_t      ESP_ERR_ULTRASONIC_PING_TIMEOUT = 0x201;
     static constexpr esp_err_t      ESP_ERR_ULTRASONIC_ECHO_TIMEOUT = 0x202;
 
-    static constexpr UBaseType_t    ULT_READ_PRIORITY       = (configMAX_PRIORITIES - 3);
-    static constexpr uint32_t       ULT_READ_STACK_SIZE     = 4096;
-    static constexpr uint32_t       ULT_READ_PERIODIC_MS    = 100;
-
-    static void read_task(void *pvParameters);
-
 protected:
 
-    bool _is_active = false;
     uint32_t _dist_cm = ULT_MAX_DISTANCE;
 
     esp_err_t measure_raw(uint32_t max_time_us, uint32_t *time_us);
@@ -88,9 +81,9 @@ public:
     ~Ultrasonic();
 
     void init();
-    bool is_active();
     bool within_pause_distance();
     int32_t get_pause_time_ms();
+    void read() {}; //TEMP
 
     // Configuration handlers.
     void validate() override;

@@ -47,6 +47,7 @@ Ultrasonic::Ultrasonic() {}
 Ultrasonic::~Ultrasonic() {}
 
 // Ultrasonic read task
+/*
 void Ultrasonic::read_task(void *pvParameters) {
 
     uint32_t dist_cm;
@@ -66,38 +67,21 @@ void Ultrasonic::read_task(void *pvParameters) {
         // Check every 100ms
         vTaskDelay(ULT_READ_PERIODIC_MS/portTICK_PERIOD_MS);
     }
-}
+}*/
 
 // Initializes the ultrasonic subsystem
 void Ultrasonic::init() {
 
-    // Check if ultrasonic sensor configured
-    if (!_trig_pin.defined() || !_echo_pin.defined() || (_pause_time_ms < 0) || (_pause_distance_cm < 0)) {
-        _is_active = false;
-        return;
-    }
-
     // Set up ultrasonic trigger and echo pins
     _trig_pin.setAttr(Pin::Attr::Output);
     _echo_pin.setAttr(Pin::Attr::Input);
-
     _trig_pin.write(0);
-
-    // Start read task
-    xTaskCreate(read_task, "ultrasonic_read_task", ULT_READ_STACK_SIZE, this, ULT_READ_PRIORITY, NULL);
 
     // Print configuration info message
     log_info("Ultrasonic:" << " TRIG:" << _trig_pin.name() << " ECHO:" << _echo_pin.name() << 
         " pause_time:" << _pause_time_ms << "ms" <<
         " pause_distance:" << _pause_distance_cm << "cm");
 
-    // Set flag
-    _is_active = true;
-}
-
-// Returns active flag
-bool Ultrasonic::is_active() {
-    return _is_active;
 }
 
 // Measure time between ping and echo
@@ -196,7 +180,15 @@ int32_t Ultrasonic::get_pause_time_ms(void) {
 }
 
 // Configurable functions
-void Ultrasonic::validate() {}
+void Ultrasonic::validate() {
+
+    if (!_trig_pin.undefined() || !_echo_pin.undefined() || (_pause_time_ms < 0) || (_pause_distance_cm < 0)) {
+        Assert(!_trig_pin.undefined(), "Ultrasonic TRIG pin should be configured.");
+        Assert(!_echo_pin.undefined(), "Ultrasonic ECHO pin should be configured.");
+        Assert((_pause_time_ms >= 0), "Ultrasonic pause time should be positive.");
+        Assert((_pause_distance_cm >= 0), "Ultrasonic pause distance should be positive.");
+    }
+}
 
 void Ultrasonic::group(Configuration::HandlerBase& handler) {
 
