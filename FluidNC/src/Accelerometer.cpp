@@ -68,10 +68,8 @@ void Accelerometer::read() {
         _accel_data->roll = atan2(_y, sqrt((_x * _x) + (_z * _z))) * (180.0 / PI);
         _accel_data->pitch = atan2(_x, sqrt((_y * _y) + (_z * _z))) * (180.0 / PI);
         
-        log_info("X: " << _accel_data->x << ", Y: " << _accel_data->y << ", Z: " << _accel_data->z <<
-                 ", Roll = " << _accel_data->roll << ", Pitch = " << _accel_data->pitch);
-
-        delay_ms(500);
+        //log_info("X: " << _accel_data->x << ", Y: " << _accel_data->y << ", Z: " << _accel_data->z <<
+        //         ", Roll = " << _accel_data->roll << ", Pitch = " << _accel_data->pitch);
     }
 }
 
