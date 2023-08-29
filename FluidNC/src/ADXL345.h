@@ -68,6 +68,7 @@ using namespace Machine;
 #define ADXL345_RANGE_8G      0x02    // +-8 g
 #define ADXL345_RANGE_16G     0x03    // +-16 g
 
+#define ADXL345_GRAVITY_STD   (9.80665F) // Earth's gravity in m/s^2
 
 class ADXL345 {
   private:
@@ -120,7 +121,7 @@ class ADXL345 {
     DataFormatBits _dataFormatBits;
     BwRateBits _bwRateBits;
 
-    float convertToSI(int16_t rawValue);
+    float convertToMetersPerSec2(int16_t rawValue);
 
     bool write(uint8_t value);
     bool write(uint8_t *values, size_t size);

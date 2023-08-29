@@ -9,6 +9,15 @@
 #include "Channel.h"
 #include "ADXL345.h"
 
+typedef struct AccelDataType
+{
+    float x;
+    float y;
+    float z;
+    float roll;
+    float pitch;
+} AccelDataType;
+
 // Class
 class Accelerometer : public Configuration::Configurable {
 
@@ -18,15 +27,20 @@ class Accelerometer : public Configuration::Configurable {
     Pin _int1_pin;  
     Pin _int2_pin;
 
+private:
+
+    AccelDataType *_accel_data;
+
 public:
 
-    ADXL345* _accel;
+    ADXL345* _adxl345;
 
 	Accelerometer();
     ~Accelerometer();
 
     void init();
-    void read() {}; // TEMP
+    void read();
+    struct AccelDataType* get_data();
    
     // Configuration handlers
     void validate() override;

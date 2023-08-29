@@ -4,48 +4,42 @@
 #include "Machine/MachineConfig.h"
 
 // Accelerometer constructor
-Accelerometer::Accelerometer() {}
+Accelerometer::Accelerometer() {
+
+    // Allocate memory for accelerometer data
+    _accel_data = new struct AccelDataType;
+}
 
 // Accelerometer destructor
-Accelerometer::~Accelerometer() {}
+Accelerometer::~Accelerometer() {
 
-// Accelerometer read task
-/*
-void Accelerometer::read_task(void *pvParameters) {
-
-    // Connect pointer
-    Accelerometer* instance = static_cast<Accelerometer*>(pvParameters);
-
-    // Loop forever
-    while(1) {
-
-        // Read new values when an update is available
-        if (instance->_accel->update()) {
-
-            //log_info("X: " << instance->_accel->getRawX() << ", Y: " << instance->_accel->getRawY() << ", Z: " << instance->_accel->getRawZ());
-        }
-
-        // Check every 100ms
-        vTaskDelay(ACCEL_READ_PERIODIC_MS/portTICK_PERIOD_MS);
-    }
-}*/
+    // Deallocate memory for the accelerometer data
+    delete(_accel_data);
+}
 
 // Initializes the accelerometer subsystem
 void Accelerometer::init() {
 
+    // Initialize the data structure
+    _accel_data->x      = 0;
+    _accel_data->y      = 0;
+    _accel_data->z      = 0;
+    _accel_data->roll   = 0;
+    _accel_data->pitch  = 0;
+
     // Set up accelerometer
-    _accel = new ADXL345(_i2c_address, config->_i2c[_i2c_num]);
+    _adxl345 = new ADXL345(_i2c_address, config->_i2c[_i2c_num]);
 
     // Set the data rate and data range
-    if (!_accel->writeRate(ADXL345_RATE_200HZ)) {
+    if (!_adxl345->writeRate(ADXL345_RATE_200HZ)) {
         log_warn("Failed to set accelerometer rate");
     }
-    if (!_accel->writeRange(ADXL345_RANGE_2G)) {
+    if (!_adxl345->writeRange(ADXL345_RANGE_2G)) {
         log_warn("Failed to set accelerometer range");
     }
 
     // Start the accelerometer
-    if(!_accel->start()) {
+    if(!_adxl345->start()) {
         log_warn("Accelerometer failed to start");
     }
 
@@ -53,6 +47,29 @@ void Accelerometer::init() {
     log_info("Accelerometer: I2C Number:" << _i2c_num << " Address:" << to_hex(_i2c_address) << 
         " INT1:" << (_int1_pin.defined() ? _int1_pin.name() : "None") << 
         " INT2:" << (_int2_pin.defined() ? _int2_pin.name() : "None"));
+}
+
+// Reads the latest values from the accelerometer
+void Accelerometer::read() {
+
+    // Read new values when an update is available
+    if (_adxl345->update()) {
+
+        _accel_data->x = _adxl345->getX();
+        _accel_data->y = _adxl345->getY();
+        _accel_data->z = _adxl345->getZ();
+
+        _accel_data->roll = atan2(_accel_data->y, sqrt((_accel_data->x * _accel_data->x) + (_accel_data->z * _accel_data->z))) * (180.0 / PI);
+        _accel_data->pitch = atan2(_accel_data->x, sqrt((_accel_data->y * _accel_data->y) + (_accel_data->z * _accel_data->z))) * (180.0 / PI);
+        
+        //log_info("X: " << _accel_data->x << ", Y: " << _accel_data->y << ", Z: " << _accel_data->z <<
+        //         ", Roll = " << _accel_data->roll << ", Pitch = " << _accel_data->pitch);
+    }
+}
+
+// Returns the current accelerometer data
+struct AccelDataType* Accelerometer::get_data() {
+    return _accel_data;
 }
 
 // Configurable functions

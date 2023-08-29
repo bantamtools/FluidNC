@@ -49,15 +49,15 @@ bool ADXL345::update() {
 }
 
 float ADXL345::getX() {
-  return convertToSI(_xyz[0]);
+  return convertToMetersPerSec2(_xyz[0]);
 }
 
 float ADXL345::getY() {
-  return convertToSI(_xyz[1]);
+  return convertToMetersPerSec2(_xyz[1]);
 }
 
 float ADXL345::getZ() {
-  return convertToSI(_xyz[2]);
+  return convertToMetersPerSec2(_xyz[2]);
 }
 
 int16_t ADXL345::getRawX() {
@@ -89,19 +89,19 @@ bool ADXL345::writeRange(uint8_t range) {
   return writeRegister(REG_DATA_FORMAT, _dataFormatBits.toByte());
 }
 
-float ADXL345::convertToSI(int16_t rawValue) {
+float ADXL345::convertToMetersPerSec2(int16_t rawValue) {
   switch (_dataFormatBits.range) {
     case ADXL345_RANGE_2G:
-      return rawValue * kRatio2g;
+      return rawValue * kRatio2g * ADXL345_GRAVITY_STD;
 
     case ADXL345_RANGE_4G:
-      return rawValue * kRatio4g;
+      return rawValue * kRatio4g * ADXL345_GRAVITY_STD;
 
     case ADXL345_RANGE_8G:
-      return rawValue * kRatio8g;
+      return rawValue * kRatio8g * ADXL345_GRAVITY_STD;
 
     case ADXL345_RANGE_16G:
-      return rawValue * kRatio16g;
+      return rawValue * kRatio16g * ADXL345_GRAVITY_STD;
 
     default:
       return 0;
