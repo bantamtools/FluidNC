@@ -27,7 +27,6 @@ protected:
 
 	pcnt_unit_t _pcnt_unit;
     bool _is_active = false;
-    bool _ready_flag = false;  // Flag that read task asserts when value ready to read
     int16_t _current_value = -1;
 	int16_t _previous_value = -1;
 	int16_t _difference = -1;
@@ -39,7 +38,6 @@ public:
 
     void init();
     int16_t get_difference();
-    bool is_active();
     void read();
 
     // Configuration handlers.

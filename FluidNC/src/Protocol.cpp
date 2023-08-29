@@ -1148,7 +1148,7 @@ static void protocol_do_enter() {
 void protocol_do_encoder() {
 
     int16_t enc_diff = 0;
-    
+
     switch (sys.state) {
 
         // Encoder does nothing in these states
@@ -1167,8 +1167,9 @@ void protocol_do_encoder() {
         case State::Idle:
 
             enc_diff = config->_sensors->_encoder->get_difference();
+            log_info("Encoder difference -> " << enc_diff); // Used by display for updates
             if (enc_diff != 0) {
-                log_info("Encoder difference -> " << enc_diff); // Used by display for updates
+                
             }
             break;
 

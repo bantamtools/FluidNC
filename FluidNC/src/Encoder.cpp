@@ -8,7 +8,6 @@ static const char *TAG = "encoder";
 Encoder::Encoder() {
 
     _is_active = false;
-    _ready_flag = false;
 	_pcnt_unit = PCNT_UNIT_0;
     _current_value = -1;
     _previous_value = -1;
@@ -79,38 +78,25 @@ void Encoder::init() {
 int16_t Encoder::get_difference() {
 
     // Return zero if not active or not ready yet
-    if (!_is_active || !_ready_flag) return 0;
+    if (!_is_active) return 0;
 
-    // Return the difference and clear the flag
-    int16_t difference = _difference;
-    _ready_flag = false;
-
-    return difference;
-}
-
-// Returns active flag
-bool Encoder::is_active() {
-    return _is_active;
+    return _difference;
 }
 
 // Read the encoder value and calculate difference
 void Encoder::read() {
 
-    if (!_ready_flag) {
+    // Save the previous value
+    _previous_value = _current_value;
 
-        // Save the previous value
-        _previous_value = _current_value;
+    // Read the current encoder value
+    pcnt_get_counter_value(_pcnt_unit, &_current_value);
 
-        // Read the current encoder value
-        pcnt_get_counter_value(_pcnt_unit, &_current_value);
+    // Calculate the difference
+    _difference = _current_value - _previous_value;
 
-        // Calculate the difference
-        _difference = _current_value - _previous_value;
-
-        // Set ready flag
-        _ready_flag = true;
-
-        // Trigger event
+    // Trigger event on change
+    if (_difference != 0) {
         protocol_send_event(&encoderEvent);
     }
 }
