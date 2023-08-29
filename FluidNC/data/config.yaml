@@ -101,11 +101,6 @@ oled:
    height: 64
    radio_delay_ms: 1000
 
-# Encoder
-encoder:
-  a_pin: gpio.35
-  b_pin: gpio.48
-
 # Configure SD card in SPI mode
 spi:
   miso_pin: gpio.8
@@ -121,14 +116,25 @@ sdcard:
 user_outputs:
   digital0_pin: gpio.5
 
-# Accelerometer
+# Sensors
 i2c1:
   sda_pin: gpio.43
   scl_pin: gpio.44
   frequency: 400000
 
-accelerometer:
-  i2c_num: 1
-  i2c_address: 0x53
-  int1_pin: gpio.42
-  int2_pin: gpio.6
+sensors:
+  encoder:
+    a_pin: gpio.35
+    b_pin: gpio.48
+
+  ultrasonic: 
+    trig_pin: gpio.37
+    echo_pin: gpio.38
+    pause_time_ms: 6000
+    pause_distance_cm: 15
+    
+  accelerometer:
+    i2c_num: 1
+    i2c_address: 0x53
+    int1_pin: gpio.42
+    int2_pin: gpio.6

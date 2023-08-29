@@ -24,7 +24,7 @@ void Accelerometer::read_task(void *pvParameters) {
         // Read new values when an update is available
         if (instance->_accel->update()) {
 
-            log_info("X: " << instance->_accel->getRawX() << ", Y: " << instance->_accel->getRawY() << ", Z: " << instance->_accel->getRawZ());
+            //log_info("X: " << instance->_accel->getRawX() << ", Y: " << instance->_accel->getRawY() << ", Z: " << instance->_accel->getRawZ());
         }
 
         // Check every 100ms

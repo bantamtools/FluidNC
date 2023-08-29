@@ -192,8 +192,8 @@ void polling_loop(void* unused) {
         }
 
         // Read encoder and ultrasonic sensor
-        protocol_read_encoder();
-        protocol_read_ultrasonic();
+        //protocol_read_encoder();
+        //protocol_read_ultrasonic();
 
         if (activeChannel) {
             // Poll for realtime characters when waiting for the primary loop
@@ -1154,10 +1154,10 @@ void protocol_read_encoder() {
     int16_t enc_diff;
 
     // Bail if encoder not configured
-    if (!config->_encoder) return;
+    if (!config->_sensors->_encoder) return;
     
     // Read and report the difference if encoder is active
-    if (config->_encoder->is_active()) {
+    if (config->_sensors->_encoder->is_active()) {
 
         switch (sys.state) {
 
@@ -1176,7 +1176,7 @@ void protocol_read_encoder() {
             // Read the difference if idle
             case State::Idle:
 
-                enc_diff = config->_encoder->get_difference();
+                enc_diff = config->_sensors->_encoder->get_difference();
                 if (enc_diff != 0) {
                     log_info("Encoder difference -> " << enc_diff); // Used by display for updates
                 }
@@ -1194,10 +1194,10 @@ static bool pauseActive = false;
 void protocol_read_ultrasonic() {
 
     // Bail if ultrasonic sensor not configured
-    if (!config->_ultrasonic) return;
+    if (!config->_sensors->_ultrasonic) return;
 
     // Process states if sensor active
-    if (config->_ultrasonic->is_active()) {
+    if (config->_sensors->_ultrasonic->is_active()) {
 
         switch (sys.state) {
 
@@ -1215,7 +1215,7 @@ void protocol_read_ultrasonic() {
             // Feedhold during a cycle if we're within the pause distance and start timer
             case State::Cycle:
 
-                if (config->_ultrasonic->within_pause_distance()) {
+                if (config->_sensors->_ultrasonic->within_pause_distance()) {
                     protocol_send_event(&feedHoldEvent);
                     pauseActive = true;
                 }
@@ -1226,7 +1226,7 @@ void protocol_read_ultrasonic() {
 
                 // Once in HOLD, schedule pause for specified time unless already scheduled
                 if (pauseActive && pauseEndTime == 0) {
-                    pauseEndTime = usToEndTicks(config->_ultrasonic->get_pause_time_ms() * 1000);
+                    pauseEndTime = usToEndTicks(config->_sensors->_ultrasonic->get_pause_time_ms() * 1000);
                     // pauseEndTime 0 means that a resume is not scheduled. so if we happen to
                     // land on 0 as an end time, just push it back by one microsecond to get off 0.
                     if (pauseEndTime == 0) {
@@ -1239,8 +1239,8 @@ void protocol_read_ultrasonic() {
                     pauseEndTime = 0;
 
                     // Still have an object in the way, restart the timer
-                    if (config->_ultrasonic->within_pause_distance()) {
-                        pauseEndTime = usToEndTicks(config->_ultrasonic->get_pause_time_ms() * 1000);
+                    if (config->_sensors->_ultrasonic->within_pause_distance()) {
+                        pauseEndTime = usToEndTicks(config->_sensors->_ultrasonic->get_pause_time_ms() * 1000);
                         // pauseEndTime 0 means that a resume is not scheduled. so if we happen to
                         // land on 0 as an end time, just push it back by one microsecond to get off 0.
                         if (pauseEndTime == 0) {

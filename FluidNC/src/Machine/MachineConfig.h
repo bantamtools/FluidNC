@@ -20,9 +20,7 @@
 #include "../Stepper.h"
 #include "../Config.h"
 #include "../OLED.h"
-#include "../Encoder.h"
-#include "../Accelerometer.h"
-#include "../Ultrasonic.h"
+#include "../Sensors.h"
 #include "Axes.h"
 #include "SPIBus.h"
 #include "I2CBus.h"
@@ -77,9 +75,7 @@ namespace Machine {
         Start*                _start          = nullptr;
         Parking*              _parking        = nullptr;
         OLED*                 _oled           = nullptr;
-        Encoder*              _encoder        = nullptr;
-        Accelerometer*        _accelerometer  = nullptr;
-        Ultrasonic*           _ultrasonic     = nullptr;
+        Sensors*              _sensors        = nullptr;
         Spindles::SpindleList _spindles;
 
         UartChannel* _uart_channels[MAX_N_UARTS] = { nullptr };

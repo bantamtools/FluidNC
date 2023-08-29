@@ -70,11 +70,7 @@ namespace Machine {
 
         handler.section("oled", _oled);
 
-        handler.section("encoder", _encoder);
-
-        handler.section("accelerometer", _accelerometer);
-        
-        handler.section("ultrasonic", _ultrasonic);
+        handler.section("sensors", _sensors);
 
         Spindles::SpindleFactory::factory(handler, _spindles);
 

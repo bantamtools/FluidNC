@@ -32,8 +32,6 @@
 
 extern void make_user_commands();
 
-Encoder *encoder = new Encoder();
-
 void setup() {
     disableCore0WDT();
     try {
@@ -108,16 +106,8 @@ void setup() {
                 config->_oled->init();
             }
 
-            if (config->_encoder) {
-                config->_encoder->init();
-            }
-
-            if (config->_accelerometer) {
-                config->_accelerometer->init();
-            }
-
-            if (config->_ultrasonic) {
-                config->_ultrasonic->init();
+            if (config->_sensors) {
+                config->_sensors->init();
             }
 
             config->_stepping->init();  // Configure stepper interrupt timers

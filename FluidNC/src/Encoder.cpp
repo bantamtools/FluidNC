@@ -98,6 +98,9 @@ void Encoder::init() {
     // Load up the first current value, gives us an accurate difference on first read_task run
     pcnt_get_counter_value(_pcnt_unit, &_current_value);
 
+    // Print configuration info message
+    log_info("Encoder: A:" << _a_pin.name() << " B:" << _b_pin.name());
+
     // Start read task
     xTaskCreate(read_task, "encoder_read_task", ENC_READ_STACK_SIZE, this, ENC_READ_PRIORITY, NULL);
 

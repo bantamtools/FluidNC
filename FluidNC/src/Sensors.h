@@ -9,6 +9,7 @@
 #include "Ultrasonic.h"
 #include "Accelerometer.h"
 #include "Config.h"
+#include "Configuration/Configurable.h"
 
 //#include "freertos/queue.h"
 //#include "driver/periph_ctrl.h"
@@ -17,11 +18,10 @@
 //#include "esp_attr.h"
 //#include "esp_log.h"
 //#include "Logging.h"
-//#include "Configuration/Configurable.h"
 //#include <limits>
 
 // Class
-class Sensors {
+class Sensors : public Configuration::Configurable {
 
 private:
 
@@ -29,18 +29,23 @@ private:
     static constexpr uint32_t       SNS_READ_STACK_SIZE     = 4096;
     static constexpr uint32_t       SNS_READ_PERIODIC_MS    = 10;
 
-    Encoder         *_encoder;
-    Ultrasonic      *_ultrasonic;
-    Accelerometer   *_accelerometer;
-
     static void read_task(void *pvParameters);
 
 protected:
 
 public:
 
+    Encoder         *_encoder = nullptr;
+    Ultrasonic      *_ultrasonic = nullptr;
+    Accelerometer   *_accelerometer = nullptr;
+
 	Sensors();
     ~Sensors();
 
     void init();
+
+    // Configuration handlers.
+    void validate() override;
+    void group(Configuration::HandlerBase& handler) override;
+    void afterParse() override;
 };
