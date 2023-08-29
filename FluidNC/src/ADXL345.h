@@ -7,6 +7,13 @@
 
 using namespace Machine;
 
+// Axis types
+typedef enum {
+    ACCEL_X_AXIS = 0,
+    ACCEL_Y_AXIS,
+    ACCEL_Z_AXIS,
+} accel_axis_t;
+
 // Register Map
 // Order is "Type, Reset Value, Description".
 #define REG_DEVID          0x00    // R,     11100101,   Device ID
@@ -127,29 +134,23 @@ class ADXL345 {
     bool write(uint8_t value);
     bool write(uint8_t *values, size_t size);
     bool read(uint8_t *values, int size);
-    bool readRegister(uint8_t address, uint8_t *value);
-    bool readRegisters(uint8_t address, uint8_t *values, uint8_t size);
-    bool writeRegister(uint8_t address, uint8_t value);
+    bool read_register(uint8_t address, uint8_t *value);
+    bool read_registers(uint8_t address, uint8_t *values, uint8_t size);
+    bool write_register(uint8_t address, uint8_t value);
 
   public:
     ADXL345(uint8_t address, I2CBus* i2c);
     bool start();
     bool stop();
-    uint8_t readDeviceID();
+    uint8_t read_device_id();
     bool update();
-    float getXMeterPerSec2();
-    float getYMeterPerSec2();
-    float getZMeterPerSec2();
-    float getXGs();
-    float getYGs();
-    float getZGs();
-    int16_t getRawX();
-    int16_t getRawY();
-    int16_t getRawZ();
+    int16_t get_raw(accel_axis_t axis);
+    float get_m_per_sec2(accel_axis_t axis);
+    float get_gs(accel_axis_t axis);
 
-    bool writeRate(uint8_t rate);
-    bool writeRateWithLowPower(uint8_t rate);
-    bool writeRange(uint8_t range);
+    bool write_rate(uint8_t rate);
+    bool write_rate_with_low_power(uint8_t rate);
+    bool write_range(uint8_t range);
 };
 
 #endif

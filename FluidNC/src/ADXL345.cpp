@@ -4,9 +4,9 @@ ADXL345::ADXL345(uint8_t address, I2CBus* i2c) {
   _i2c = i2c;
   _address = address;
 
-  _xyz[0] = 0; // x
-  _xyz[1] = 0; // y
-  _xyz[2] = 0; // z
+  _xyz[ACCEL_X_AXIS] = 0;
+  _xyz[ACCEL_Y_AXIS] = 0;
+  _xyz[ACCEL_Z_AXIS] = 0;
 }
 
 const float ADXL345::kRatio2g  = (float) (2 * 2) / 1024.0f;
@@ -16,17 +16,17 @@ const float ADXL345::kRatio16g = (float) (16 * 2) / 1024.0f;
 
 bool ADXL345::start() {
   _powerCtlBits.measure = 1;
-  return writeRegister(REG_POWER_CTL, _powerCtlBits.toByte());
+  return write_register(REG_POWER_CTL, _powerCtlBits.toByte());
 }
 
 bool ADXL345::stop() {
   _powerCtlBits.measure = 0;
-  return writeRegister(REG_POWER_CTL, _powerCtlBits.toByte());
+  return write_register(REG_POWER_CTL, _powerCtlBits.toByte());
 }
 
-uint8_t ADXL345::readDeviceID() {
+uint8_t ADXL345::read_device_id() {
   uint8_t value = 0;
-  if (readRegister(REG_DEVID, &value)) {
+  if (read_register(REG_DEVID, &value)) {
     return value;
   } else {
     return 0;
@@ -37,68 +37,44 @@ bool ADXL345::update() {
   // Read all axis registers (DATAX0, DATAX1, DATAY0, DATAY1, DATAZ0, DATAZ1) in accordance with data sheet.
   // "It is recommended that a multiple-uint8_t read of all registers be performed to prevent a change in data between reads of sequential registers."
   uint8_t values[6];
-  if (readRegisters(REG_DATAX0, values, sizeof(values))) {
+  if (read_registers(REG_DATAX0, values, sizeof(values))) {
     // convert endian
-    _xyz[0] = (int16_t) word(values[1], values[0]);  // x
-    _xyz[1] = (int16_t) word(values[3], values[2]);  // y
-    _xyz[2] = (int16_t) word(values[5], values[4]);  // z
+    _xyz[ACCEL_X_AXIS] = (int16_t) word(values[1], values[0]);  // x
+    _xyz[ACCEL_Y_AXIS] = (int16_t) word(values[3], values[2]);  // y
+    _xyz[ACCEL_Z_AXIS] = (int16_t) word(values[5], values[4]);  // z
     return true;
   } else {
     return false;
   }
 }
 
-float ADXL345::getXMeterPerSec2() {
-  return convertToMetersPerSec2(_xyz[0]);
+int16_t ADXL345::get_raw(accel_axis_t axis) {
+  return _xyz[axis];
 }
 
-float ADXL345::getYMeterPerSec2() {
-  return convertToMetersPerSec2(_xyz[1]);
+float ADXL345::get_m_per_sec2(accel_axis_t axis) {
+  return convertToMetersPerSec2(_xyz[axis]);
 }
 
-float ADXL345::getZMeterPerSec2() {
-  return convertToMetersPerSec2(_xyz[2]);
+float ADXL345::get_gs(accel_axis_t axis) {
+  return convertToG(_xyz[axis]);
 }
 
-float ADXL345::getXGs() {
-  return convertToG(_xyz[0]);
-}
-
-float ADXL345::getYGs() {
-  return convertToG(_xyz[1]);
-}
-
-float ADXL345::getZGs() {
-  return convertToG(_xyz[2]);
-}
-
-int16_t ADXL345::getRawX() {
-  return _xyz[0];
-}
-
-int16_t ADXL345::getRawY() {
-  return _xyz[1];
-}
-
-int16_t ADXL345::getRawZ() {
-  return _xyz[2];
-}
-
-bool ADXL345::writeRate(uint8_t rate) {
+bool ADXL345::write_rate(uint8_t rate) {
   _bwRateBits.lowPower = 0;
   _bwRateBits.rate = rate & 0x0F;
-  return writeRegister(REG_BW_RATE, _bwRateBits.toByte());
+  return write_register(REG_BW_RATE, _bwRateBits.toByte());
 }
 
-bool ADXL345::writeRateWithLowPower(uint8_t rate) {
+bool ADXL345::write_rate_with_low_power(uint8_t rate) {
   _bwRateBits.lowPower = 1;
   _bwRateBits.rate = rate & 0x0F;
-  return writeRegister(REG_BW_RATE, _bwRateBits.toByte());
+  return write_register(REG_BW_RATE, _bwRateBits.toByte());
 }
 
-bool ADXL345::writeRange(uint8_t range) {
+bool ADXL345::write_range(uint8_t range) {
   _dataFormatBits.range = range & 0x03;
-  return writeRegister(REG_DATA_FORMAT, _dataFormatBits.toByte());
+  return write_register(REG_DATA_FORMAT, _dataFormatBits.toByte());
 }
 
 float ADXL345::convertToG(int16_t rawValue) {
@@ -160,11 +136,11 @@ bool ADXL345::read(uint8_t *values, int size) {
     return true;
 }
 
-bool ADXL345::readRegister(uint8_t address, uint8_t *value) {
-  return readRegisters(address, value, 1);
+bool ADXL345::read_register(uint8_t address, uint8_t *value) {
+  return read_registers(address, value, 1);
 }
 
-bool ADXL345::readRegisters(uint8_t address, uint8_t *values, uint8_t size) {
+bool ADXL345::read_registers(uint8_t address, uint8_t *values, uint8_t size) {
   if (!write(address)) {
     return false;
   }
@@ -172,7 +148,7 @@ bool ADXL345::readRegisters(uint8_t address, uint8_t *values, uint8_t size) {
   return read(values, size);
 }
 
-bool ADXL345::writeRegister(uint8_t address, uint8_t value) {
+bool ADXL345::write_register(uint8_t address, uint8_t value) {
   uint8_t values[2] = {address, value};
   return write(values, sizeof(values));
 }

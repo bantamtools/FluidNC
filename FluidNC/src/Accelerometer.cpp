@@ -31,10 +31,10 @@ void Accelerometer::init() {
     _adxl345 = new ADXL345(_i2c_address, config->_i2c[_i2c_num]);
 
     // Set the data rate and data range
-    if (!_adxl345->writeRate(ADXL345_RATE_200HZ)) {
+    if (!_adxl345->write_rate(ADXL345_RATE_200HZ)) {
         log_warn("Failed to set accelerometer rate");
     }
-    if (!_adxl345->writeRange(ADXL345_RANGE_2G)) {
+    if (!_adxl345->write_range(ADXL345_RANGE_2G)) {
         log_warn("Failed to set accelerometer range");
     }
 
@@ -55,13 +55,15 @@ void Accelerometer::read() {
     // Read new values when an update is available
     if (_adxl345->update()) {
 
-        _accel_data->x = _adxl345->getXMeterPerSec2();
-        _accel_data->y = _adxl345->getYMeterPerSec2();
-        _accel_data->z = _adxl345->getZMeterPerSec2();
+        // Get the acceleration values converted to m/s^2
+        _accel_data->x = _adxl345->get_m_per_sec2(ACCEL_X_AXIS);
+        _accel_data->y = _adxl345->get_m_per_sec2(ACCEL_Y_AXIS);
+        _accel_data->z = _adxl345->get_m_per_sec2(ACCEL_Z_AXIS);
 
-        float _x = _adxl345->getXGs();
-        float _y = _adxl345->getYGs();
-        float _z = _adxl345->getZGs();
+        // Calculate roll and pitch (in degrees) starting with the G values
+        float _x = _adxl345->get_gs(ACCEL_X_AXIS);
+        float _y = _adxl345->get_gs(ACCEL_Y_AXIS);
+        float _z = _adxl345->get_gs(ACCEL_Z_AXIS);
 
         _accel_data->roll = atan2(_y, sqrt((_x * _x) + (_z * _z))) * (180.0 / PI);
         _accel_data->pitch = atan2(_x, sqrt((_y * _y) + (_z * _z))) * (180.0 / PI);
