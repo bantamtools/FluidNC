@@ -12,7 +12,9 @@ namespace Kinematics {
         //handler.item("wheel_radius", _wheel_radius);  // this is folded into the motor config's steps/mm
         handler.item("distance_between_wheels", _distance_between_wheels);
         handler.item("use_z_delay", _use_z_delay);
+        handler.item("z_up_min_angle", _z_up_min_angle);
         log_info("DD wheel distance: " << _distance_between_wheels);
+        log_info("Turtle Z handling on: " << _use_z_delay);
     }
 
     void DifferentialDrive::init() {
@@ -79,6 +81,10 @@ namespace Kinematics {
                 m_have_captured_z = true;
             } else {
                 motors[Z_AXIS] = target[Z_AXIS];
+                if (target[Z_AXIS] > position[Z_AXIS]) {
+                    // this is a Z up move; clear Z capture state until next Z down move
+                    m_have_captured_z = false;
+                }
             }
             for (size_t axis = Z_AXIS+1; axis < n_axis; axis++) { // pass through any remaining axis moves
                 motors[axis] = target[axis];
@@ -104,7 +110,24 @@ namespace Kinematics {
         if (turn_angle > PI) { turn_angle -= 2.0*PI; }
         if (turn_angle < -PI) { turn_angle += 2.0*PI; }
         // Now it should be within +- 180
-        // TODO?: Further optimization: if angle beyond +/-90, could turn the supplementary and move backward - but some media may not draw well backward
+        // NotTodo: Possible optimization: if angle beyond +/-90, could turn the supplementary and move backward - but some media may not draw well backward
+
+        bool leaving_z_down = false;
+        if (m_have_captured_z && (abs(turn_angle) >= _z_up_min_angle*PI/180.0)) {
+            // if we're turning farther than the cutoff, return Z to previous Up position first
+            motors[X_AXIS] = m_motor_left; // don't move XY from current position
+            motors[Y_AXIS] = m_motor_right;
+            motors[Z_AXIS] = m_captured_z_prev; // "prev" is recent up Z from before last Z down move
+            for (size_t axis = Z_AXIS+1; axis < n_axis; axis++) {
+                motors[axis] = position[axis]; // keep anything else at current values for this extra move
+            }
+            if (!mc_move_motors(motors, m_captured_z_pldata)) { // execute Z up move
+                return false;
+            }
+        } else {
+            leaving_z_down = true; // note that we're leaving Z down during a short turn
+        }
+
         // To turn in place we move each wheel in opposite directions.
         // The distance covered by each wheel is given by the formula
         //      Dist = (angle_radians/2pi)*(wheelbase*pi) = angle*wheelbase/2
@@ -117,7 +140,7 @@ namespace Kinematics {
         float right_target = m_motor_right - wheel_turn_dist;
         motors[X_AXIS] = left_target;
         motors[Y_AXIS] = right_target;
-        if (m_have_captured_z) { // if we're holding Z until after turn, keep it at previous value here
+        if (m_have_captured_z && !leaving_z_down) { // if we're holding Z until after turn, keep it at previous value here
             motors[Z_AXIS] = m_captured_z_prev;
         } else {
             motors[Z_AXIS] = target[Z_AXIS];
@@ -139,13 +162,14 @@ namespace Kinematics {
             motors[X_AXIS] = m_motor_left; // no move
             motors[Y_AXIS] = m_motor_right; // no move
             motors[Z_AXIS] = m_captured_z_target;
-            m_have_captured_z = false; // clear flag preemptively so we don't try to do this again
+            //m_have_captured_z = false; // clear flag preemptively so we don't try to do this again
+            // note - now keeping captured Z to raise for following large turns, until next explicit Z up
             if (!mc_move_motors(motors, m_captured_z_pldata)) { // execute Z down move
                 return false;
             }
         }
 
-        // set starting motor positions for straight move (testing)
+        // set starting motor positions for straight move reporting
         m_prev_left = m_motor_left;
         m_prev_right = m_motor_right;
         m_left_last_report = m_motor_left;

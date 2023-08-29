@@ -16,16 +16,17 @@ stepping:
 
 kinematics:
   DifferentialDrive:
-    distance_between_wheels: 189
+    distance_between_wheels: 208
     use_z_delay: true
+    z_up_min_angle: 45
 
 axes:
   shared_stepper_disable_pin: NO_PIN
   shared_stepper_reset_pin: NO_PIN
   
   x:
-    steps_per_mm: 6.904
-    max_rate_mm_per_min: 2000
+    steps_per_mm: 7.24
+    max_rate_mm_per_min: 3000
     acceleration_mm_per_sec2: 1000
     max_travel_mm: 1000
     soft_limits: false
@@ -47,8 +48,8 @@ axes:
       null_motor:
 
   y:
-    steps_per_mm: 6.904
-    max_rate_mm_per_min: 2000
+    steps_per_mm: 7.24
+    max_rate_mm_per_min: 3000
     acceleration_mm_per_sec2: 1000
     max_travel_mm: 1000
     soft_limits: false
