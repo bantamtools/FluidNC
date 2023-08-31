@@ -39,7 +39,7 @@
  */
 
 #include "Ultrasonic.h"
-#include "Machine/MachineConfig.h"
+#include "../Machine/MachineConfig.h"
 
 // Ultraonic constructor
 Ultrasonic::Ultrasonic() {}

@@ -4,8 +4,8 @@
 
 #include <stdint.h>
 #include "driver/pcnt.h"
-#include "Config.h"
-#include "Configuration/Configurable.h"
+#include "../Config.h"
+#include "../Configuration/Configurable.h"
 
 // Class
 class Encoder : public Configuration::Configurable {

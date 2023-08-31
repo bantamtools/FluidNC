@@ -1,7 +1,7 @@
 // Copyright (c) 2023 Matt Staniszewski, Bantam Tools
 
 #include "Sensors.h"
-#include "Machine/MachineConfig.h"
+#include "../Machine/MachineConfig.h"
 
 // Sensors constructor
 Sensors::Sensors() {

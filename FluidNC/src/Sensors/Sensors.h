@@ -8,8 +8,8 @@
 #include "Encoder.h"
 #include "Ultrasonic.h"
 #include "IMU.h"
-#include "Config.h"
-#include "Configuration/Configurable.h"
+#include "../Config.h"
+#include "../Configuration/Configurable.h"
 
 // Class
 class Sensors : public Configuration::Configurable {

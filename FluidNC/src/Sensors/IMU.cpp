@@ -1,10 +1,14 @@
 // Copyright (c) 2023 Matt Staniszewski, Bantam Tools
 
 #include "IMU.h"
-#include "Machine/MachineConfig.h"
+#include "../Machine/MachineConfig.h"
+
+TwoWire _i2c_port = TwoWire(1);
 
 // IMU constructor
 IMU::IMU() {
+
+    _icm20948 = new ICM_20948_I2C();
 
     // Allocate memory for IMU data
     _imu_data = new struct IMUDataType;
@@ -13,7 +17,9 @@ IMU::IMU() {
 // IMU destructor
 IMU::~IMU() {
 
-    // Deallocate memory for the IMU data
+    delete (_icm20948);
+
+    // Deallocate memory for the I2C and IMU data
     delete(_imu_data);
 }
 
@@ -27,10 +33,23 @@ void IMU::init() {
     _imu_data->roll   = 0;
     _imu_data->pitch  = 0;
 
+    auto sdaPin = 43;//config->_i2c[_i2c_num]->_sda.getNative(Pin::Capabilities::Native | Pin::Capabilities::Input | Pin::Capabilities::Output);
+    auto sclPin = 44;//config->_i2c[_i2c_num]->_scl.getNative(Pin::Capabilities::Native | Pin::Capabilities::Input | Pin::Capabilities::Output);
+    
+    _icm20948->enableDebugging();
+/*
     // Set up IMU
+    log_info("ICM BEGIN > " << _icm20948->begin(true));
 
+    _icm20948->statusString();
+    if (_icm20948->status == ICM_20948_Stat_Ok) {
+        log_info("IMU OK!");
+    } else {
+        log_info("IMU ERROR!");
+    }
+  */ 
     // Setup
-
+    
     // Start the IMU
     
     // Print configuration info message
@@ -52,9 +71,9 @@ struct IMUDataType* IMU::get_data() {
 // Configurable functions
 void IMU::validate() {
 
-    if (!config->_i2c[_i2c_num]) {
-        Assert((config->_i2c[_i2c_num]), "IMU I2C section [i2c%d] not defined.", _i2c_num);
-    }
+   // if (!config->_i2c[_i2c_num]) {
+   //     Assert((config->_i2c[_i2c_num]), "IMU I2C section [i2c%d] not defined.", _i2c_num);
+   // }
 
     if (!_int_pin.undefined()) {
         Assert(!_int_pin.undefined(), "IMU INT pin should be configured.");

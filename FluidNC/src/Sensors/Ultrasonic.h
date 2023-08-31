@@ -43,8 +43,8 @@
 #pragma once
 
 #include <stdint.h>
-#include "Configuration/Configurable.h"
-#include "Config.h"
+#include "../Configuration/Configurable.h"
+#include "../Config.h"
 
 // Class
 class Ultrasonic : public Configuration::Configurable {

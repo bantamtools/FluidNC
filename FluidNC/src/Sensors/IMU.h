@@ -5,8 +5,8 @@
 #include <stdint.h>
 #include <sstream>
 #include <iomanip>
-#include "Configuration/Configurable.h"
-#include "Channel.h"
+#include "../Configuration/Configurable.h"
+#include "../Channel.h"
 #include "ICM_20948.h"
 
 typedef struct IMUDataType

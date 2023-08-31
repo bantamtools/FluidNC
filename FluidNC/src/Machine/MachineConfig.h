@@ -20,7 +20,7 @@
 #include "../Stepper.h"
 #include "../Config.h"
 #include "../OLED.h"
-#include "../Sensors.h"
+#include "../Sensors/Sensors.h"
 #include "Axes.h"
 #include "SPIBus.h"
 #include "I2CBus.h"

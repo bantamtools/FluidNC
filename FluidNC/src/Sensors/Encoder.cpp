@@ -1,7 +1,7 @@
 // Copyright (c) 2023 Matt Staniszewski, Bantam Tools
 
 #include "Encoder.h"
-#include "Machine/MachineConfig.h"
+#include "../Machine/MachineConfig.h"
 
 // Encoder constructor
 Encoder::Encoder() {
