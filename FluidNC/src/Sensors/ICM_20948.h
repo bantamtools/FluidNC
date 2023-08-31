@@ -14,6 +14,10 @@ A C++ interface to the ICM-20948
 #include "Wire.h"
 #include "SPI.h"
 
+#include "../Machine/I2CBus.h"
+
+using namespace Machine;
+
 #define ICM_20948_ARD_UNUSED_PIN 0xFF
 
 // Base
@@ -249,7 +253,7 @@ class ICM_20948_I2C : public ICM_20948
 private:
 protected:
 public:
-  TwoWire *_i2c;
+  I2CBus *_i2c;
   uint8_t _addr;
   uint8_t _ad0;
   bool _ad0val;
@@ -257,7 +261,7 @@ public:
 
   ICM_20948_I2C(); // Constructor
 
-  virtual ICM_20948_Status_e begin(TwoWire &wirePort = Wire, bool ad0val = true, uint8_t ad0pin = ICM_20948_ARD_UNUSED_PIN);
+  virtual ICM_20948_Status_e begin(I2CBus *i2c, bool ad0val = true, uint8_t ad0pin = ICM_20948_ARD_UNUSED_PIN);
 };
 
 // SPI

@@ -116,7 +116,7 @@ sdcard:
 i2c1:
   sda_pin: gpio.43
   scl_pin: gpio.44
-  frequency: 400000
+  frequency: 100000
 
 sensors:
   encoder:
@@ -131,6 +131,6 @@ sensors:
     
   imu:
     i2c_num: 1
-    i2c_address: 0x68
+    i2c_address: 0x69
     int_pin: gpio.42
 

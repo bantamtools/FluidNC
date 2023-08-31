@@ -1708,11 +1708,11 @@ ICM_20948_I2C::ICM_20948_I2C()
 {
 }
 
-ICM_20948_Status_e ICM_20948_I2C::begin(TwoWire &wirePort, bool ad0val, uint8_t ad0pin)
+ICM_20948_Status_e ICM_20948_I2C::begin(I2CBus *i2c, bool ad0val, uint8_t ad0pin)
 {
   // Associate
   _ad0 = ad0pin;
-  _i2c = &wirePort;
+  _i2c = i2c;
   _ad0val = ad0val;
 
   _addr = ICM_20948_I2C_ADDR_AD0;
@@ -1976,27 +1976,20 @@ ICM_20948_Status_e ICM_20948_write_I2C(uint8_t reg, uint8_t *data, uint32_t len,
   {
     return ICM_20948_Stat_ParamErr;
   }
-  TwoWire *_i2c = ((ICM_20948_I2C *)user)->_i2c; // Cast user field to ICM_20948_I2C type and extract the I2C interface pointer
+  I2CBus *_i2c = ((ICM_20948_I2C *)user)->_i2c; // Cast user field to ICM_20948_I2C type and extract the I2C interface pointer
   uint8_t addr = ((ICM_20948_I2C *)user)->_addr;
   if (_i2c == NULL)
   {
     return ICM_20948_Stat_ParamErr;
   }
 
-  _i2c->beginTransmission(addr);
-  _i2c->write(reg);
-  _i2c->write(data, (uint8_t)len);
-  _i2c->endTransmission();
+  _i2c->write(addr, &reg, 1);
+  _i2c->write(addr, data, len);
 
-  // for( uint32_t indi = 0; indi < len; indi++ ){
-  //     _i2c->beginTransmission(addr);
-  //     _i2c->write(reg + indi);
-  //     _i2c->write(*(data + indi) );
-  //     _i2c->endTransmission();
-  //     delay(10);
-  // }
-
-  // delay(10);
+  //_i2c->beginTransmission(addr);
+  //_i2c->write(reg);
+  //_i2c->write(data, (uint8_t)len);
+  //_i2c->endTransmission();
 
   return ICM_20948_Stat_Ok;
 }
@@ -2007,36 +2000,40 @@ ICM_20948_Status_e ICM_20948_read_I2C(uint8_t reg, uint8_t *buff, uint32_t len, 
   {
     return ICM_20948_Stat_ParamErr;
   }
-  TwoWire *_i2c = ((ICM_20948_I2C *)user)->_i2c;
+  I2CBus *_i2c = ((ICM_20948_I2C *)user)->_i2c;
   uint8_t addr = ((ICM_20948_I2C *)user)->_addr;
   if (_i2c == NULL)
   {
     return ICM_20948_Stat_ParamErr;
   }
 
-  _i2c->beginTransmission(addr);
-  _i2c->write(reg);
-  _i2c->endTransmission(false); // Send repeated start
+  _i2c->write(addr, &reg, 1);
+  _i2c->read(addr, buff, len);
 
-  uint32_t num_received = _i2c->requestFrom(addr, len);
+  //_i2c->beginTransmission(addr);
+  //_i2c->write(reg);
+  //_i2c->endTransmission(false); // Send repeated start
 
-  if (num_received == len)
-  {
-    for (uint8_t i = 0; i < len; i++)
-    {
-      buff[i] = _i2c->read();
-    }
-    return ICM_20948_Stat_Ok;
-  }
-  else
-  {
-    return ICM_20948_Stat_NoData;
-  }
+  //uint32_t num_received = _i2c->requestFrom(addr, len);
 
-  if (len != 0)
-  {
-    return ICM_20948_Stat_NoData;
-  }
+  //if (num_received == len)
+  //{
+  //  for (uint8_t i = 0; i < len; i++)
+  //  {
+  //    buff[i] = _i2c->read();
+  //  }
+  //  return ICM_20948_Stat_Ok;
+  //}
+  //else
+  //{
+  //  return ICM_20948_Stat_NoData;
+  //}
+
+  //if (len != 0)
+  //{
+  //  return ICM_20948_Stat_NoData;
+  //}
+
   return ICM_20948_Stat_Ok;
 }
 

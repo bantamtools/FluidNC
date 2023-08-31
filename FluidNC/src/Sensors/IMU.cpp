@@ -37,17 +37,16 @@ void IMU::init() {
     auto sclPin = 44;//config->_i2c[_i2c_num]->_scl.getNative(Pin::Capabilities::Native | Pin::Capabilities::Input | Pin::Capabilities::Output);
     
     _icm20948->enableDebugging();
-/*
-    // Set up IMU
-    log_info("ICM BEGIN > " << _icm20948->begin(true));
 
+    // Set up IMU
+    log_info("ICM BEGIN > " << _icm20948->begin(config->_i2c[_i2c_num], 1));
     _icm20948->statusString();
     if (_icm20948->status == ICM_20948_Stat_Ok) {
         log_info("IMU OK!");
     } else {
         log_info("IMU ERROR!");
     }
-  */ 
+  
     // Setup
     
     // Start the IMU
