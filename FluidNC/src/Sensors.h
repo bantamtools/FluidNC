@@ -7,7 +7,7 @@
 #include "freertos/task.h"
 #include "Encoder.h"
 #include "Ultrasonic.h"
-#include "Accelerometer.h"
+#include "IMU.h"
 #include "Config.h"
 #include "Configuration/Configurable.h"
 
@@ -28,7 +28,7 @@ public:
 
     Encoder         *_encoder = nullptr;
     Ultrasonic      *_ultrasonic = nullptr;
-    Accelerometer   *_accelerometer = nullptr;
+    IMU             *_imu = nullptr;
 
 	Sensors();
     ~Sensors();

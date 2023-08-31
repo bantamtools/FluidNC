@@ -7,40 +7,39 @@
 #include <iomanip>
 #include "Configuration/Configurable.h"
 #include "Channel.h"
-#include "ADXL345.h"
+#include "ICM_20948.h"
 
-typedef struct AccelDataType
+typedef struct IMUDataType
 {
     float x;
     float y;
     float z;
     float roll;
     float pitch;
-} AccelDataType;
+} IMUDataType;
 
 // Class
-class Accelerometer : public Configuration::Configurable {
+class IMU : public Configuration::Configurable {
 
     uint8_t _i2c_address = 0x53;
     uint8_t _i2c_num = 1;
 
-    Pin _int1_pin;  
-    Pin _int2_pin;
+    Pin _int_pin;
 
 private:
 
-    AccelDataType *_accel_data;
+    IMUDataType *_imu_data;
 
 public:
 
-    ADXL345* _adxl345;
+    ICM_20948_I2C* _icm20948;
 
-	Accelerometer();
-    ~Accelerometer();
+	IMU();
+    ~IMU();
 
     void init();
     void read();
-    struct AccelDataType* get_data();
+    struct IMUDataType* get_data();
    
     // Configuration handlers
     void validate() override;

@@ -26,10 +26,6 @@
 #    include "WebUI/WifiConfig.h"
 #    include "Driver/localfs.h"
 
-#    include "Encoder.h"
-#    include "Accelerometer.h"
-#    include "Ultrasonic.h"
-
 extern void make_user_commands();
 
 void setup() {

@@ -26,8 +26,8 @@ void Sensors::read_task(void *pvParameters) {
         if (instance->_ultrasonic) {
             instance->_ultrasonic->read();
         }
-        if (instance->_accelerometer) {
-            instance->_accelerometer->read();
+        if (instance->_imu) {
+            instance->_imu->read();
         }
 
         // Check every 10ms
@@ -45,8 +45,8 @@ void Sensors::init() {
     if (_ultrasonic) {
         _ultrasonic->init();
     }
-    if (_accelerometer) {
-        _accelerometer->init();
+    if (_imu) {
+        _imu->init();
     }
 
     // Start read task
@@ -60,5 +60,5 @@ void Sensors::group(Configuration::HandlerBase& handler) {
 
     handler.section("encoder", _encoder);
     handler.section("ultrasonic", _ultrasonic);
-    handler.section("accelerometer", _accelerometer);
+    handler.section("imu", _imu);
 }

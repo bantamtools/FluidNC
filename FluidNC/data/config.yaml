@@ -112,10 +112,6 @@ sdcard:
   card_detect_pin: gpio.14
   frequency_hz: 8000000
 
-# LED (0) and expansion IOs (1-4)
-user_outputs:
-  digital0_pin: gpio.5
-
 # Sensors
 i2c1:
   sda_pin: gpio.43
@@ -133,8 +129,8 @@ sensors:
     pause_time_ms: 6000
     pause_distance_cm: 15
     
-  accelerometer:
+  imu:
     i2c_num: 1
-    i2c_address: 0x53
-    int1_pin: gpio.42
-    int2_pin: gpio.6
+    i2c_address: 0x68
+    int_pin: gpio.42
+
