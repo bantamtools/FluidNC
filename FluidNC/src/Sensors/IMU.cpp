@@ -121,9 +121,9 @@ struct IMUDataType* IMU::get_data() {
 // Configurable functions
 void IMU::validate() {
 
-   // if (!config->_i2c[_i2c_num]) {
-   //     Assert((config->_i2c[_i2c_num]), "IMU I2C section [i2c%d] not defined.", _i2c_num);
-   // }
+    if (!config->_i2c[_i2c_num]) {
+        Assert((config->_i2c[_i2c_num]), "IMU I2C section [i2c%d] not defined.", _i2c_num);
+    }
 
     if (!_int_pin.undefined()) {
         Assert(!_int_pin.undefined(), "IMU INT pin should be configured.");
