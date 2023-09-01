@@ -1972,6 +1972,9 @@ ICM_20948_Status_e ICM_20948_SPI::begin(uint8_t csPin, SPIClass &spiPort, uint32
 // serif functions for the I2C and SPI classes
 ICM_20948_Status_e ICM_20948_write_I2C(uint8_t reg, uint8_t *data, uint32_t len, void *user)
 {
+  // Create buffer with reg address + data for write
+  uint8_t *buff = (uint8_t*)malloc((len+1)*sizeof(uint8_t));
+
   if (user == NULL)
   {
     return ICM_20948_Stat_ParamErr;
@@ -1983,19 +1986,22 @@ ICM_20948_Status_e ICM_20948_write_I2C(uint8_t reg, uint8_t *data, uint32_t len,
     return ICM_20948_Stat_ParamErr;
   }
 
-  _i2c->write(addr, &reg, 1);
-  _i2c->write(addr, data, len);
+  // Store reg address + data into write buffer
+  memcpy(buff, &reg, 1);
+  memcpy(buff + 1, data, len);
+  
+  _i2c->write(addr, buff, (len + 1));
 
-  //_i2c->beginTransmission(addr);
-  //_i2c->write(reg);
-  //_i2c->write(data, (uint8_t)len);
-  //_i2c->endTransmission();
+  // Free up memory
+  free(buff);
 
   return ICM_20948_Stat_Ok;
 }
 
 ICM_20948_Status_e ICM_20948_read_I2C(uint8_t reg, uint8_t *buff, uint32_t len, void *user)
 {
+  esp_err_t ret;
+
   if (user == NULL)
   {
     return ICM_20948_Stat_ParamErr;
@@ -2007,32 +2013,18 @@ ICM_20948_Status_e ICM_20948_read_I2C(uint8_t reg, uint8_t *buff, uint32_t len, 
     return ICM_20948_Stat_ParamErr;
   }
 
+  // Write then read (no restart)
   _i2c->write(addr, &reg, 1);
-  _i2c->read(addr, buff, len);
+  ret = _i2c->read(addr, buff, len);
 
-  //_i2c->beginTransmission(addr);
-  //_i2c->write(reg);
-  //_i2c->endTransmission(false); // Send repeated start
-
-  //uint32_t num_received = _i2c->requestFrom(addr, len);
-
-  //if (num_received == len)
-  //{
-  //  for (uint8_t i = 0; i < len; i++)
-  //  {
-  //    buff[i] = _i2c->read();
-  //  }
-  //  return ICM_20948_Stat_Ok;
-  //}
-  //else
-  //{
-  //  return ICM_20948_Stat_NoData;
-  //}
-
-  //if (len != 0)
-  //{
-  //  return ICM_20948_Stat_NoData;
-  //}
+  // Check for errors
+  switch (ret) {
+    case ESP_ERR_INVALID_ARG: return ICM_20948_Stat_ParamErr;
+    case ESP_FAIL:
+    case ESP_ERR_INVALID_STATE:
+    case ESP_ERR_TIMEOUT: return ICM_20948_Stat_Err;
+    default: break;
+  }
 
   return ICM_20948_Stat_Ok;
 }
