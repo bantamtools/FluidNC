@@ -9,15 +9,6 @@
 #include "../Channel.h"
 #include "ICM_20948.h"
 
-typedef struct IMUDataType
-{
-    float x;
-    float y;
-    float z;
-    float roll;
-    float pitch;
-} IMUDataType;
-
 // Class
 class IMU : public Configuration::Configurable {
 
@@ -28,7 +19,7 @@ class IMU : public Configuration::Configurable {
 
 private:
 
-    IMUDataType *_imu_data;
+    void print_scaled_agmt();
 
 public:
 
@@ -39,7 +30,6 @@ public:
 
     void init();
     void read();
-    struct IMUDataType* get_data();
    
     // Configuration handlers
     void validate() override;

@@ -8,16 +8,14 @@ TwoWire _i2c_port = TwoWire(1);
 // IMU constructor
 IMU::IMU() {
 
-    // Allocate memory for IMU and its data
+    // Allocate memory for IMU
     _icm_20948 = new ICM_20948_I2C();
-    _imu_data = new struct IMUDataType;
 }
 
 // IMU destructor
 IMU::~IMU() {
 
-    // Deallocate memory for the IMU and its data
-    delete(_imu_data);
+    // Deallocate memory for the IMU
     delete(_icm_20948);
 }
 
@@ -25,13 +23,6 @@ IMU::~IMU() {
 void IMU::init() {
 
     esp_err_t status = ESP_OK;
-
-    // Initialize the data structure
-    _imu_data->x      = 0;
-    _imu_data->y      = 0;
-    _imu_data->z      = 0;
-    _imu_data->roll   = 0;
-    _imu_data->pitch  = 0;
 
     // Start the IMU
     _icm_20948->begin(config->_i2c[_i2c_num], ((_i2c_address & 0x1) ? true : false));
@@ -111,11 +102,24 @@ void IMU::init() {
 void IMU::read() {
 
     // Read new values when an update is available
+    if (_icm_20948->dataReady()) {
+
+        // Load in the new values
+        _icm_20948->getAGMT();
+
+        print_scaled_agmt();
+        delay_ms(100);
+
+    }
 }
 
-// Returns the current IMU data
-struct IMUDataType* IMU::get_data() {
-    return _imu_data;
+// Prints IMU values with scale settings taken into account
+void IMU::print_scaled_agmt()
+{
+    log_info("Scaled. Acc (mg) [" << _icm_20948->accX() << ", " << _icm_20948->accY() << ", " << _icm_20948->accX() <<
+             " ], Gyr (DPS) [ "   << _icm_20948->gyrX() << ", " << _icm_20948->gyrY() << ", " << _icm_20948->gyrZ() <<
+             " ], Mag (uT) [ "    << _icm_20948->magX() << ", " << _icm_20948->magY() << ", " << _icm_20948->magZ() <<
+             " ], Tmp (C) [ "     << _icm_20948->temp() << " ]");
 }
 
 // Configurable functions
