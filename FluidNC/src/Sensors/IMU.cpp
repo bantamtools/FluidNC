@@ -8,19 +8,17 @@ TwoWire _i2c_port = TwoWire(1);
 // IMU constructor
 IMU::IMU() {
 
-    _icm20948 = new ICM_20948_I2C();
-
-    // Allocate memory for IMU data
+    // Allocate memory for IMU and its data
+    _icm_20948 = new ICM_20948_I2C();
     _imu_data = new struct IMUDataType;
 }
 
 // IMU destructor
 IMU::~IMU() {
 
-    delete (_icm20948);
-
-    // Deallocate memory for the I2C and IMU data
+    // Deallocate memory for the IMU and its data
     delete(_imu_data);
+    delete(_icm_20948);
 }
 
 // Initializes the IMU subsystem
@@ -33,23 +31,8 @@ void IMU::init() {
     _imu_data->roll   = 0;
     _imu_data->pitch  = 0;
 
-    auto sdaPin = 43;//config->_i2c[_i2c_num]->_sda.getNative(Pin::Capabilities::Native | Pin::Capabilities::Input | Pin::Capabilities::Output);
-    auto sclPin = 44;//config->_i2c[_i2c_num]->_scl.getNative(Pin::Capabilities::Native | Pin::Capabilities::Input | Pin::Capabilities::Output);
-    
-    _icm20948->enableDebugging();
-
-    // Set up IMU
-    log_info("ICM BEGIN > " << _icm20948->begin(config->_i2c[_i2c_num], 1));
-    _icm20948->statusString();
-    if (_icm20948->status == ICM_20948_Stat_Ok) {
-        log_info("IMU OK!");
-    } else {
-        log_info("IMU ERROR!");
-    }
-  
-    // Setup
-    
     // Start the IMU
+    _icm_20948->begin(config->_i2c[_i2c_num], ((_i2c_address & 0x1) ? true : false));
     
     // Print configuration info message
     log_info("IMU: I2C Number:" << _i2c_num << " Address:" << to_hex(_i2c_address) << 

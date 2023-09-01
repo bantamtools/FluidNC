@@ -32,7 +32,7 @@ private:
 
 public:
 
-    ICM_20948_I2C* _icm20948;
+    ICM_20948_I2C* _icm_20948;
 
 	IMU();
     ~IMU();
