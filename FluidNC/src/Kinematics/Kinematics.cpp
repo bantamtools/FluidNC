@@ -38,6 +38,11 @@ namespace Kinematics {
         return _system->transform_cartesian_to_motors(motors, cartesian);
     }
 
+    void Kinematics::imu_update() {
+        Assert(_system != nullptr, "No kinematics system.");
+        return _system->imu_update();
+    }
+
     void Kinematics::group(Configuration::HandlerBase& handler) { ::Kinematics::KinematicsFactory::factory(handler, _system); }
 
     void Kinematics::afterParse() {

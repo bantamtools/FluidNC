@@ -107,8 +107,8 @@ void IMU::read() {
         // Load in the new values
         _icm_20948->getAGMT();
 
-        print_scaled_agmt();
-        delay_ms(100);
+        //print_scaled_agmt();
+        //delay_ms(100);
 
     }
 }

@@ -30,6 +30,7 @@ namespace Kinematics {
         virtual void init() override;
         bool         cartesian_to_motors(float* target, plan_line_data_t* pl_data, float* position) override;
         void         motors_to_cartesian(float* cartesian, float* motors, int n_axis) override;
+        void         imu_update() override {};
 
         bool canHome(AxisMask axisMask) override;
         void releaseMotors(AxisMask axisMask, MotorMask motors) override;

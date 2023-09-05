@@ -252,6 +252,10 @@ namespace Kinematics {
         // Some kinematics use this as a sub-function of cartesian_to_motors but as ours isn't one-to-one we may not use it.
     }
 
+    void DifferentialDrive::imu_update() {
+        log_info("Update IMU");
+    }
+
     bool DifferentialDrive::canHome(AxisMask axisMask) {
         // There is no homing for DiffDrive wheels...
         log_error("Differential Drive kinematic system cannot home");

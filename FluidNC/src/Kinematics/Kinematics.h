@@ -47,6 +47,7 @@ namespace Kinematics {
         bool cartesian_to_motors(float* target, plan_line_data_t* pl_data, float* position);
         void motors_to_cartesian(float* cartesian, float* motors, int n_axis);
         void transform_cartesian_to_motors(float* motors, float* cartesian);
+        void imu_update();
 
         bool canHome(AxisMask axisMask);
         void releaseMotors(AxisMask axisMask, MotorMask motors);
@@ -70,6 +71,7 @@ namespace Kinematics {
         virtual void init()                                                                         = 0;
         virtual void init_position()                                                  = 0;  // used to set the machine position at init
         virtual void motors_to_cartesian(float* cartesian, float* motors, int n_axis) = 0;
+        virtual void imu_update() = 0;
 
         virtual void transform_cartesian_to_motors(float* motors, float* cartesian) = 0;
 

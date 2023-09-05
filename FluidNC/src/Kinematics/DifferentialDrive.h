@@ -16,7 +16,8 @@ namespace Kinematics {
         virtual void init() override;
         virtual void init_position() override;
         virtual void motors_to_cartesian(float* cartesian, float* motors, int n_axis) override;
-
+        virtual void imu_update() override;
+        
         virtual void transform_cartesian_to_motors(float* motors, float* cartesian) override;
 
         bool canHome(AxisMask axisMask) override;
