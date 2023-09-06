@@ -131,6 +131,6 @@ sensors:
     
   imu:
     i2c_num: 1
-    i2c_address: 0x69
+    i2c_address: 0x68
     int_pin: gpio.42
 
