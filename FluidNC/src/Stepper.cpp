@@ -778,6 +778,8 @@ void Stepper::prep_buffer() {
                 pl_block = NULL;  // Set pointer to indicate check and load next planner block.
                 plan_discard_current_block();
             }
+            // Update the IMU data for kinematics
+            config->_kinematics->imu_update();
         }
     }
 }

@@ -90,9 +90,6 @@ bool mc_move_motors(float* target, plan_line_data_t* pl_data) {
     }
     mc_pl_data_inflight = NULL;
 
-    // Update the IMU data for kinematics
-    config->_kinematics->imu_update();
-
     return submitted_result;
 }
 
