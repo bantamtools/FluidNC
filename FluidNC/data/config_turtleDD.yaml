@@ -6,7 +6,8 @@ start:
 
 control:
   enter_pin: gpio.36:low
-
+  long_press_ms: 1000
+  
 stepping:
   engine: TIMED
   idle_ms: 255
@@ -28,6 +29,7 @@ axes:
     steps_per_mm: 7.24
     max_rate_mm_per_min: 3000
     acceleration_mm_per_sec2: 1000
+    rapid_acceleration_mm_per_sec2: 1000
     max_travel_mm: 1000
     soft_limits: false
     homing:
@@ -51,6 +53,7 @@ axes:
     steps_per_mm: 7.24
     max_rate_mm_per_min: 3000
     acceleration_mm_per_sec2: 1000
+    rapid_acceleration_mm_per_sec2: 1000
     max_travel_mm: 1000
     soft_limits: false
     homing:
@@ -69,6 +72,7 @@ axes:
     steps_per_mm: 100.000
     max_rate_mm_per_min: 5000.000
     acceleration_mm_per_sec2: 100.000
+    rapid_acceleration_mm_per_sec2: 100
     max_travel_mm: 10.000
     soft_limits: false
     homing:
