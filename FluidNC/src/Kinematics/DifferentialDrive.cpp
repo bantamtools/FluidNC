@@ -260,8 +260,8 @@ namespace Kinematics {
         // TODO: Do something with the data (for now we just print it, we could have our own struct)
         log_info("Q0: " << config->_sensors->_imu->q[0] << 
                ", Q1: " << config->_sensors->_imu->q[1] <<
-               ", Q1: " << config->_sensors->_imu->q[2] <<
-               ", Q1: " << config->_sensors->_imu->q[1] <<
+               ", Q2: " << config->_sensors->_imu->q[2] <<
+               ", Q3: " << config->_sensors->_imu->q[3] <<
                ", Acc: " << config->_sensors->_imu->accuracy);
     }
 
