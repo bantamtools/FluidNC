@@ -779,7 +779,9 @@ void Stepper::prep_buffer() {
                 plan_discard_current_block();
             }
             // Update the IMU data for kinematics
-            config->_kinematics->imu_update();
+            if ((config->_sensors) && (config->_sensors->_imu)) {
+                config->_kinematics->imu_update();
+            }
         }
     }
 }
