@@ -258,10 +258,11 @@ namespace Kinematics {
         config->_sensors->_imu->read();
 
         // TODO: Do something with the data (for now we just print it, we could have our own struct)
-        log_info("Scaled. Acc (mg) [" << config->_sensors->_imu->_icm_20948->accX() << ", " << config->_sensors->_imu->_icm_20948->accY() << ", " << config->_sensors->_imu->_icm_20948->accX() <<
-                 " ], Gyr (DPS) [ "   << config->_sensors->_imu->_icm_20948->gyrX() << ", " << config->_sensors->_imu->_icm_20948->gyrY() << ", " << config->_sensors->_imu->_icm_20948->gyrZ() <<
-                 " ], Mag (uT) [ "    << config->_sensors->_imu->_icm_20948->magX() << ", " << config->_sensors->_imu->_icm_20948->magY() << ", " << config->_sensors->_imu->_icm_20948->magZ() <<
-                 " ], Tmp (C) [ "     << config->_sensors->_imu->_icm_20948->temp() << " ]");
+        log_info("Q0: " << config->_sensors->_imu->q[0] << 
+               ", Q1: " << config->_sensors->_imu->q[1] <<
+               ", Q1: " << config->_sensors->_imu->q[2] <<
+               ", Q1: " << config->_sensors->_imu->q[1] <<
+               ", Acc: " << config->_sensors->_imu->accuracy);
     }
 
     bool DifferentialDrive::canHome(AxisMask axisMask) {

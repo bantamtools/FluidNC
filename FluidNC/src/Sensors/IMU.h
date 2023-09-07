@@ -19,11 +19,12 @@ class IMU : public Configuration::Configurable {
 
 private:
 
-    void print_scaled_agmt();
+    ICM_20948_I2C* _icm_20948;
 
 public:
 
-    ICM_20948_I2C* _icm_20948;
+    double q[4] = {0.0, 0.0, 0.0, 0.0};
+    int16_t accuracy = 0;
 
 	IMU();
     ~IMU();
