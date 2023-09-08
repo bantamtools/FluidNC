@@ -254,8 +254,8 @@ namespace Kinematics {
 
     void DifferentialDrive::imu_update() {
         
-        // Read the latest IMU data into struct
-        config->_sensors->_imu->read();
+        // Obtain the IMU lock (prevents read updating values during calculations)
+        config->_sensors->_imu->_mutex.lock();
 
         // TODO: Do something with the data (for now we just print it, we could have our own struct)
 //        log_info("Q0: " << config->_sensors->_imu->_imu_data.q[0] << 
@@ -265,34 +265,33 @@ namespace Kinematics {
 //               ", Acc: " << config->_sensors->_imu->_imu_data.accuracy);
         
         // convert quaternion to Euler angles (only really interested in yaw but let's do all of 'em for now)
-        if (!config->_sensors->_imu->_imu_data.valid) {
-            log_warn("IMU data not valid!");
-        } else {
-            double w = config->_sensors->_imu->_imu_data.q[0];
-            double x = config->_sensors->_imu->_imu_data.q[1];
-            double y = config->_sensors->_imu->_imu_data.q[2];
-            double z = config->_sensors->_imu->_imu_data.q[3];
-            // roll (x-axis rotation)
-            double sinr_cosp = 2 * (w * x + y * z);
-            double cosr_cosp = 1 - 2 * (x * x + y * y);
-            double roll = atan2f(sinr_cosp, cosr_cosp);
+        double w = config->_sensors->_imu->_imu_data.q[0];
+        double x = config->_sensors->_imu->_imu_data.q[1];
+        double y = config->_sensors->_imu->_imu_data.q[2];
+        double z = config->_sensors->_imu->_imu_data.q[3];
+        // roll (x-axis rotation)
+        double sinr_cosp = 2 * (w * x + y * z);
+        double cosr_cosp = 1 - 2 * (x * x + y * y);
+        double roll = atan2f(sinr_cosp, cosr_cosp);
 
-            // pitch (y-axis rotation)
-            double sinp = sqrt(1 + 2 * (w * y - x * z));
-            double cosp = sqrt(1 - 2 * (w * y - x * z));
-            double pitch = 2 * atan2f(sinp, cosp) - PI / 2;
+        // pitch (y-axis rotation)
+        double sinp = sqrt(1 + 2 * (w * y - x * z));
+        double cosp = sqrt(1 - 2 * (w * y - x * z));
+        double pitch = 2 * atan2f(sinp, cosp) - PI / 2;
 
-            // yaw (z-axis rotation)
-            double siny_cosp = 2 * (w * z + x * y);
-            double cosy_cosp = 1 - 2 * (y * y + z * z);
-            double yaw = atan2f(siny_cosp, cosy_cosp);
-            
-            // log results
-            log_info("yaw: " << yaw*180.0/PI << 
-                ", pitch: " << pitch*180.0/PI <<
-                ", roll: " << roll*180.0/PI <<
-                ", Acc: " << config->_sensors->_imu->_imu_data.accuracy);
-        }
+        // yaw (z-axis rotation)
+        double siny_cosp = 2 * (w * z + x * y);
+        double cosy_cosp = 1 - 2 * (y * y + z * z);
+        double yaw = atan2f(siny_cosp, cosy_cosp);
+        
+        // log results
+        log_info("yaw: " << yaw*180.0/PI << 
+            ", pitch: " << pitch*180.0/PI <<
+            ", roll: " << roll*180.0/PI <<
+            ", Acc: " << config->_sensors->_imu->_imu_data.accuracy);
+
+        // Return the IMU lock
+        config->_sensors->_imu->_mutex.unlock();
     }
 
     bool DifferentialDrive::canHome(AxisMask axisMask) {

@@ -12,7 +12,6 @@
 // Type definitions
 typedef struct imuDataType
 {
-    bool valid;
     double q[4];
     int16_t accuracy;
 
@@ -28,16 +27,12 @@ class IMU : public Configuration::Configurable {
 
 private:
 
-    static constexpr int    IMU_ACCURACY_MIN    = 200;
-    static constexpr int    IMU_ACCURACY_MAX    = 600;
-    static constexpr int    IMU_MAX_RETRIES     = 10;
-    static constexpr int    IMU_READ_DELAY_MS   = 10;
-
     ICM_20948_I2C *_icm_20948;
 
 public:
 
     imuDataType _imu_data;
+    std::mutex _mutex;
 
 	IMU();
     ~IMU();

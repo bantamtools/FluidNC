@@ -25,7 +25,6 @@ void IMU::init() {
     bool success = true; // Use success to show if the DMP configuration was successful
 
     // Initialize the IMU data structure
-    _imu_data.valid = false;
     _imu_data.q[0] = 0.0;
     _imu_data.q[1] = 0.0;
     _imu_data.q[2] = 0.0;
@@ -75,11 +74,11 @@ void IMU::read() {
     icm_20948_DMP_data_t data;
     int i;
 
-    // Reset data valid flag
-    _imu_data.valid = false;
+    // Obtain the lock
+    _mutex.lock();
 
     // Continue reading until get a valid result or max retries
-    for (i = 0; !_imu_data.valid && (i < IMU_MAX_RETRIES);) {
+    for (;;) {
 
         // Read the DMP FIFO
         _icm_20948->readDMPdataFromFIFO(&data);
@@ -106,21 +105,19 @@ void IMU::read() {
                 _imu_data.q[3] = ((double)data.Quat9.Data.Q3) / 1073741824.0; // Convert to double. Divide by 2^30
                 _imu_data.q[0] = sqrt(1.0 - ((_imu_data.q[1] * _imu_data.q[1]) + (_imu_data.q[2] * _imu_data.q[2]) + (_imu_data.q[3] * _imu_data.q[3])));
 
-                // Save off accuracy
+                // Save off accuracy and exit loop
                 _imu_data.accuracy = data.Quat9.Data.Accuracy;
-
-                // If this is accurate enough, exit loop
-                if ((_imu_data.accuracy > IMU_ACCURACY_MIN) && (_imu_data.accuracy < IMU_ACCURACY_MAX)) {
-                    _imu_data.valid = true;
-                }
+                break;
             }
 
-        // Invalid data, increment retry count and wait before reading again
+        // Invalid data, exit and try reading again later
         } else {
-            i++;
-            delay_ms(10);
+            break;
         }
     }
+
+    // Return the lock
+    _mutex.unlock();
 }
 
 // Configurable functions

@@ -27,8 +27,7 @@ void Sensors::read_task(void *pvParameters) {
             instance->_ultrasonic->read();
         }
         if (instance->_imu) {
-            // Disable periodic IMU read, will read when requested
-            //instance->_imu->read();
+            instance->_imu->read();
         }
 
         // Check every 10ms
