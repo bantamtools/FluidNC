@@ -9,11 +9,18 @@
 #include "../Channel.h"
 #include "ICM_20948.h"
 
-// Type definitions
-typedef struct imuDataType
+typedef struct imuDataSubType
 {
     double q[4];
     int16_t accuracy;
+
+} imuDataSubType;
+
+// Type definitions
+typedef struct imuDataType
+{
+    imuDataSubType quat9;
+    imuDataSubType geomag;
 
 } imuDataType;
 

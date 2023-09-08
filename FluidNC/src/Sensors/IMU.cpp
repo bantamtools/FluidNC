@@ -25,11 +25,17 @@ void IMU::init() {
     bool success = true; // Use success to show if the DMP configuration was successful
 
     // Initialize the IMU data structure
-    _imu_data.q[0] = 0.0;
-    _imu_data.q[1] = 0.0;
-    _imu_data.q[2] = 0.0;
-    _imu_data.q[3] = 0.0;
-    _imu_data.accuracy = 0;
+    _imu_data.quat9.q[0] = 0.0;
+    _imu_data.quat9.q[1] = 0.0;
+    _imu_data.quat9.q[2] = 0.0;
+    _imu_data.quat9.q[3] = 0.0;
+    _imu_data.quat9.accuracy = 0;
+
+    _imu_data.geomag.q[0] = 0.0;
+    _imu_data.geomag.q[1] = 0.0;
+    _imu_data.geomag.q[2] = 0.0;
+    _imu_data.geomag.q[3] = 0.0;
+    _imu_data.geomag.accuracy = 0;
 
     // Start the IMU
     success &= (_icm_20948->begin(config->_i2c[_i2c_num], ((_i2c_address & 0x1) ? true : false)) == ICM_20948_Stat_Ok);
@@ -37,7 +43,9 @@ void IMU::init() {
     // Initialize the DMP
     success &= (_icm_20948->initializeDMP() == ICM_20948_Stat_Ok);
 
-    // Enable the DMP orientation sensor
+    // Enable the DMP functions we'd like
+    //success &= (_icm_20948->enableDMPSensor(INV_ICM20948_SENSOR_ROTATION_VECTOR) == ICM_20948_Stat_Ok);
+    success &= (_icm_20948->enableDMPSensor(INV_ICM20948_SENSOR_GEOMAGNETIC_ROTATION_VECTOR) == ICM_20948_Stat_Ok);
     success &= (_icm_20948->enableDMPSensor(INV_ICM20948_SENSOR_ORIENTATION) == ICM_20948_Stat_Ok);
 
     // Configuring DMP to output data at given ODR:
@@ -46,6 +54,7 @@ void IMU::init() {
     // Value = (DMP running rate / ODR ) - 1
     // E.g. For a 11Hz ODR rate when DMP is running at 55Hz, value = (55/11) - 1 = 4.
     success &= (_icm_20948->setDMPODRrate(DMP_ODR_Reg_Quat9, 0) == ICM_20948_Stat_Ok);  // Max ODR
+    success &= (_icm_20948->setDMPODRrate(DMP_ODR_Reg_Geomag, 0) == ICM_20948_Stat_Ok);  // Max ODR
 
     // Enable the FIFO
     success &= (_icm_20948->enableFIFO() == ICM_20948_Stat_Ok);
@@ -83,15 +92,10 @@ void IMU::read() {
         // Read the DMP FIFO
         _icm_20948->readDMPdataFromFIFO(&data);
 
-        // Still more FIFO data, continue reading...
-        if (_icm_20948->status == ICM_20948_Stat_FIFOMoreDataAvail) {
-
-            // Do nothing...
-
         // Valid data available, process it
-        } else if (_icm_20948->status == ICM_20948_Stat_Ok) {
+        if ((_icm_20948->status == ICM_20948_Stat_Ok) || (_icm_20948->status == ICM_20948_Stat_FIFOMoreDataAvail)) {
 
-            // It should be orientation data, but let's check...
+            // Orientation data
             if ((data.header & DMP_header_bitmap_Quat9) > 0) {
 
                 // Q0 value is computed from this equation: Q0^2 + Q1^2 + Q2^2 + Q3^2 = 1.
@@ -100,13 +104,35 @@ void IMU::read() {
                 // scaled by 2^30.
                 
                 // Save off quaternion data, scaled to +/- 1
-                _imu_data.q[1] = ((double)data.Quat9.Data.Q1) / 1073741824.0; // Convert to double. Divide by 2^30
-                _imu_data.q[2] = ((double)data.Quat9.Data.Q2) / 1073741824.0; // Convert to double. Divide by 2^30
-                _imu_data.q[3] = ((double)data.Quat9.Data.Q3) / 1073741824.0; // Convert to double. Divide by 2^30
-                _imu_data.q[0] = sqrt(1.0 - ((_imu_data.q[1] * _imu_data.q[1]) + (_imu_data.q[2] * _imu_data.q[2]) + (_imu_data.q[3] * _imu_data.q[3])));
+                _imu_data.quat9.q[1] = ((double)data.Quat9.Data.Q1) / 1073741824.0; // Convert to double. Divide by 2^30
+                _imu_data.quat9.q[2] = ((double)data.Quat9.Data.Q2) / 1073741824.0; // Convert to double. Divide by 2^30
+                _imu_data.quat9.q[3] = ((double)data.Quat9.Data.Q3) / 1073741824.0; // Convert to double. Divide by 2^30
+                _imu_data.quat9.q[0] = sqrt(1.0 - ((_imu_data.quat9.q[1] * _imu_data.quat9.q[1]) + (_imu_data.quat9.q[2] * _imu_data.quat9.q[2]) + (_imu_data.quat9.q[3] * _imu_data.quat9.q[3])));
 
                 // Save off accuracy and exit loop
-                _imu_data.accuracy = data.Quat9.Data.Accuracy;
+                _imu_data.quat9.accuracy = data.Quat9.Data.Accuracy;
+            }
+
+            // Geomagnetic data
+            if ((data.header & DMP_header_bitmap_Geomag) > 0) {
+
+                // Q0 value is computed from this equation: Q0^2 + Q1^2 + Q2^2 + Q3^2 = 1.
+                // In case of drift, the sum will not add to 1, therefore, quaternion data 
+                // needs to be corrected with right bias values. The quaternion data is 
+                // scaled by 2^30.
+                
+                // Save off quaternion data, scaled to +/- 1
+                _imu_data.geomag.q[1] = ((double)data.Geomag.Data.Q1) / 1073741824.0; // Convert to double. Divide by 2^30
+                _imu_data.geomag.q[2] = ((double)data.Geomag.Data.Q2) / 1073741824.0; // Convert to double. Divide by 2^30
+                _imu_data.geomag.q[3] = ((double)data.Geomag.Data.Q3) / 1073741824.0; // Convert to double. Divide by 2^30
+                _imu_data.geomag.q[0] = sqrt(1.0 - ((_imu_data.geomag.q[1] * _imu_data.geomag.q[1]) + (_imu_data.geomag.q[2] * _imu_data.geomag.q[2]) + (_imu_data.geomag.q[3] * _imu_data.geomag.q[3])));
+
+                // Save off accuracy and exit loop
+                _imu_data.geomag.accuracy = data.Geomag.Data.Accuracy;
+            }
+
+            // No more FIFO data, exit
+            if (_icm_20948->status == ICM_20948_Stat_Ok) {
                 break;
             }
 

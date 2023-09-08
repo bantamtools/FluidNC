@@ -268,10 +268,10 @@ namespace Kinematics {
 //               ", Acc: " << config->_sensors->_imu->_imu_data.accuracy);
         
         // convert quaternion to Euler angles (only really interested in yaw but let's do all of 'em for now)
-        double w = config->_sensors->_imu->_imu_data.q[0];
-        double x = config->_sensors->_imu->_imu_data.q[1];
-        double y = config->_sensors->_imu->_imu_data.q[2];
-        double z = config->_sensors->_imu->_imu_data.q[3];
+        double w = config->_sensors->_imu->_imu_data.quat9.q[0];
+        double x = config->_sensors->_imu->_imu_data.quat9.q[1];
+        double y = config->_sensors->_imu->_imu_data.quat9.q[2];
+        double z = config->_sensors->_imu->_imu_data.quat9.q[3];
         // roll (x-axis rotation)
         double sinr_cosp = 2 * (w * x + y * z);
         double cosr_cosp = 1 - 2 * (x * x + y * y);
@@ -288,10 +288,37 @@ namespace Kinematics {
         double yaw = atan2f(siny_cosp, cosy_cosp);
         
         // log results
-        log_info("yaw: " << yaw*180.0/PI << 
+        log_info("QUAT9: yaw: " << yaw*180.0/PI << 
             ", pitch: " << pitch*180.0/PI <<
             ", roll: " << roll*180.0/PI <<
-            ", Acc: " << config->_sensors->_imu->_imu_data.accuracy);
+            ", Acc: " << config->_sensors->_imu->_imu_data.quat9.accuracy);
+
+        //TEMP
+        w = config->_sensors->_imu->_imu_data.geomag.q[0];
+        x = config->_sensors->_imu->_imu_data.geomag.q[1];
+        y = config->_sensors->_imu->_imu_data.geomag.q[2];
+        z = config->_sensors->_imu->_imu_data.geomag.q[3];
+        // roll (x-axis rotation)
+        sinr_cosp = 2 * (w * x + y * z);
+        cosr_cosp = 1 - 2 * (x * x + y * y);
+        roll = atan2f(sinr_cosp, cosr_cosp);
+
+        // pitch (y-axis rotation)
+        sinp = sqrt(1 + 2 * (w * y - x * z));
+        cosp = sqrt(1 - 2 * (w * y - x * z));
+        pitch = 2 * atan2f(sinp, cosp) - PI / 2;
+
+        // yaw (z-axis rotation)
+        siny_cosp = 2 * (w * z + x * y);
+        cosy_cosp = 1 - 2 * (y * y + z * z);
+        yaw = atan2f(siny_cosp, cosy_cosp);
+        
+        // log results
+        log_info("GEOMAG: yaw: " << yaw*180.0/PI << 
+            ", pitch: " << pitch*180.0/PI <<
+            ", roll: " << roll*180.0/PI <<
+            ", Acc: " << config->_sensors->_imu->_imu_data.geomag.accuracy);
+        //TEMP
 
         // Return the IMU lock
         config->_sensors->_imu->_mutex.unlock();
