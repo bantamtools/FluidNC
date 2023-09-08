@@ -84,9 +84,13 @@ void IMU::read() {
         // Read the DMP FIFO
         _icm_20948->readDMPdataFromFIFO(&data);
 
+        // Still more FIFO data, continue reading...
+        if (_icm_20948->status == ICM_20948_Stat_FIFOMoreDataAvail) {
+
+            // Do nothing...
+
         // Valid data available, process it
-        if ((_icm_20948->status == ICM_20948_Stat_Ok) || 
-            (_icm_20948->status == ICM_20948_Stat_FIFOMoreDataAvail)) {
+        } else if (_icm_20948->status == ICM_20948_Stat_Ok) {
 
             // It should be orientation data, but let's check...
             if ((data.header & DMP_header_bitmap_Quat9) > 0) {
@@ -111,9 +115,10 @@ void IMU::read() {
                 }
             }
 
-        // Invalid data, increment retry count
+        // Invalid data, increment retry count and wait before reading again
         } else {
             i++;
+            delay_ms(10);
         }
     }
 }
