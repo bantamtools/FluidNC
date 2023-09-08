@@ -46,14 +46,14 @@ void IMU::init() {
     // Enable the DMP functions we'd like
     //success &= (_icm_20948->enableDMPSensor(INV_ICM20948_SENSOR_ROTATION_VECTOR) == ICM_20948_Stat_Ok);
     success &= (_icm_20948->enableDMPSensor(INV_ICM20948_SENSOR_GEOMAGNETIC_ROTATION_VECTOR) == ICM_20948_Stat_Ok);
-    success &= (_icm_20948->enableDMPSensor(INV_ICM20948_SENSOR_ORIENTATION) == ICM_20948_Stat_Ok);
+    //success &= (_icm_20948->enableDMPSensor(INV_ICM20948_SENSOR_ORIENTATION) == ICM_20948_Stat_Ok);
 
     // Configuring DMP to output data at given ODR:
     // DMP is capable of outputting multiple sensor data at different rates to FIFO.
     // Setting value can be calculated as follows:
     // Value = (DMP running rate / ODR ) - 1
     // E.g. For a 11Hz ODR rate when DMP is running at 55Hz, value = (55/11) - 1 = 4.
-    success &= (_icm_20948->setDMPODRrate(DMP_ODR_Reg_Quat9, 0) == ICM_20948_Stat_Ok);  // Max ODR
+    //success &= (_icm_20948->setDMPODRrate(DMP_ODR_Reg_Quat9, 0) == ICM_20948_Stat_Ok);  // Max ODR
     success &= (_icm_20948->setDMPODRrate(DMP_ODR_Reg_Geomag, 0) == ICM_20948_Stat_Ok);  // Max ODR
 
     // Enable the FIFO

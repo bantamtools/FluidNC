@@ -288,10 +288,10 @@ namespace Kinematics {
         double yaw = atan2f(siny_cosp, cosy_cosp);
         
         // log results
-        log_info("QUAT9: yaw: " << yaw*180.0/PI << 
-            ", pitch: " << pitch*180.0/PI <<
-            ", roll: " << roll*180.0/PI <<
-            ", Acc: " << config->_sensors->_imu->_imu_data.quat9.accuracy);
+    //    log_info("QUAT9: yaw: " << yaw*180.0/PI << 
+    //        ", pitch: " << pitch*180.0/PI <<
+    //        ", roll: " << roll*180.0/PI <<
+    //        ", Acc: " << config->_sensors->_imu->_imu_data.quat9.accuracy);
 
         //TEMP
         w = config->_sensors->_imu->_imu_data.geomag.q[0];
