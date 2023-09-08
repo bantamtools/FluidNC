@@ -258,10 +258,36 @@ namespace Kinematics {
         config->_sensors->_imu->read();
 
         // TODO: Do something with the data (for now we just print it, we could have our own struct)
-        log_info("Q0: " << config->_sensors->_imu->q[0] << 
-               ", Q1: " << config->_sensors->_imu->q[1] <<
-               ", Q2: " << config->_sensors->_imu->q[2] <<
-               ", Q3: " << config->_sensors->_imu->q[3] <<
+//        log_info("Q0: " << config->_sensors->_imu->q[0] << 
+//               ", Q1: " << config->_sensors->_imu->q[1] <<
+//               ", Q2: " << config->_sensors->_imu->q[2] <<
+//               ", Q3: " << config->_sensors->_imu->q[3] <<
+//               ", Acc: " << config->_sensors->_imu->accuracy);
+        
+        // convert quaternion to Euler angles (only really interested in yaw but let's do all of 'em for now)
+        double w = config->_sensors->_imu->q[0];
+        double x = config->_sensors->_imu->q[1];
+        double y = config->_sensors->_imu->q[2];
+        double z = config->_sensors->_imu->q[3];
+        // roll (x-axis rotation)
+        double sinr_cosp = 2 * (w * x + y * z);
+        double cosr_cosp = 1 - 2 * (x * x + y * y);
+        double roll = atan2f(sinr_cosp, cosr_cosp);
+
+        // pitch (y-axis rotation)
+        double sinp = sqrt(1 + 2 * (w * y - x * z));
+        double cosp = sqrt(1 - 2 * (w * y - x * z));
+        double pitch = 2 * atan2f(sinp, cosp) - PI / 2;
+
+        // yaw (z-axis rotation)
+        double siny_cosp = 2 * (w * z + x * y);
+        double cosy_cosp = 1 - 2 * (y * y + z * z);
+        double yaw = atan2f(siny_cosp, cosy_cosp);
+        
+        // log results
+        log_info("yaw: " << yaw*180.0/PI << 
+               ", pitch: " << pitch*180.0/PI <<
+               ", roll: " << roll*180.0/PI <<
                ", Acc: " << config->_sensors->_imu->accuracy);
     }
 
