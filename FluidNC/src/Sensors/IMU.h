@@ -9,6 +9,15 @@
 #include "../Channel.h"
 #include "ICM_20948.h"
 
+// Type definitions
+typedef struct imuDataType
+{
+    bool valid;
+    double q[4];
+    int16_t accuracy;
+
+} imuDataType;
+
 // Class
 class IMU : public Configuration::Configurable {
 
@@ -19,12 +28,16 @@ class IMU : public Configuration::Configurable {
 
 private:
 
-    ICM_20948_I2C* _icm_20948;
+    static constexpr int    IMU_ACCURACY_MIN    = 200;
+    static constexpr int    IMU_ACCURACY_MAX    = 600;
+    static constexpr int    IMU_MAX_RETRIES     = 10;
+    static constexpr int    IMU_READ_DELAY_MS   = 10;
+
+    ICM_20948_I2C *_icm_20948;
 
 public:
 
-    double q[4] = {0.0, 0.0, 0.0, 0.0};
-    int16_t accuracy = 0;
+    imuDataType _imu_data;
 
 	IMU();
     ~IMU();

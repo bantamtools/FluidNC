@@ -24,6 +24,14 @@ void IMU::init() {
 
     bool success = true; // Use success to show if the DMP configuration was successful
 
+    // Initialize the IMU data structure
+    _imu_data.valid = false;
+    _imu_data.q[0] = 0.0;
+    _imu_data.q[1] = 0.0;
+    _imu_data.q[2] = 0.0;
+    _imu_data.q[3] = 0.0;
+    _imu_data.accuracy = 0;
+
     // Start the IMU
     success &= (_icm_20948->begin(config->_i2c[_i2c_num], ((_i2c_address & 0x1) ? true : false)) == ICM_20948_Stat_Ok);
 
@@ -33,8 +41,12 @@ void IMU::init() {
     // Enable the DMP orientation sensor
     success &= (_icm_20948->enableDMPSensor(INV_ICM20948_SENSOR_ORIENTATION) == ICM_20948_Stat_Ok);
 
-    // Configure DMP to output data at maximum ODR
-    success &= (_icm_20948->setDMPODRrate(DMP_ODR_Reg_Quat9, 0) == ICM_20948_Stat_Ok);
+    // Configuring DMP to output data at given ODR:
+    // DMP is capable of outputting multiple sensor data at different rates to FIFO.
+    // Setting value can be calculated as follows:
+    // Value = (DMP running rate / ODR ) - 1
+    // E.g. For a 11Hz ODR rate when DMP is running at 55Hz, value = (55/11) - 1 = 4.
+    success &= (_icm_20948->setDMPODRrate(DMP_ODR_Reg_Quat9, 4) == ICM_20948_Stat_Ok);
 
     // Enable the FIFO
     success &= (_icm_20948->enableFIFO() == ICM_20948_Stat_Ok);
@@ -61,30 +73,47 @@ void IMU::init() {
 void IMU::read() {
     
     icm_20948_DMP_data_t data;
-    
-    // Read the DMP FIFO for data
-    _icm_20948->readDMPdataFromFIFO(&data);
+    int i;
 
-    // Valid data available, process it
-    if ((_icm_20948->status == ICM_20948_Stat_Ok) || 
-        (_icm_20948->status == ICM_20948_Stat_FIFOMoreDataAvail)) {
-        
-        // It should be orientation data, but let's check...
-        if ((data.header & DMP_header_bitmap_Quat9) > 0) {
+    // Reset data valid flag
+    _imu_data.valid = false;
 
-            // Q0 value is computed from this equation: Q0^2 + Q1^2 + Q2^2 + Q3^2 = 1.
-            // In case of drift, the sum will not add to 1, therefore, quaternion data 
-            // needs to be corrected with right bias values. The quaternion data is 
-            // scaled by 2^30.
-            
-            // Save off quaternion data, scaled to +/- 1
-            q[1] = ((double)data.Quat9.Data.Q1) / 1073741824.0; // Convert to double. Divide by 2^30
-            q[2] = ((double)data.Quat9.Data.Q2) / 1073741824.0; // Convert to double. Divide by 2^30
-            q[3] = ((double)data.Quat9.Data.Q3) / 1073741824.0; // Convert to double. Divide by 2^30
-            q[0] = sqrt(1.0 - ((q[1] * q[1]) + (q[2] * q[2]) + (q[3] * q[3])));
+    // Continue reading until get a valid result or max retries
+    for (i = 0; !_imu_data.valid && (i < IMU_MAX_RETRIES);) {
 
-            // Save off accuracy
-            accuracy = data.Quat9.Data.Accuracy;
+        // Read the DMP FIFO
+        _icm_20948->readDMPdataFromFIFO(&data);
+
+        // Valid data available, process it
+        if ((_icm_20948->status == ICM_20948_Stat_Ok) || 
+            (_icm_20948->status == ICM_20948_Stat_FIFOMoreDataAvail)) {
+
+            // It should be orientation data, but let's check...
+            if ((data.header & DMP_header_bitmap_Quat9) > 0) {
+
+                // Q0 value is computed from this equation: Q0^2 + Q1^2 + Q2^2 + Q3^2 = 1.
+                // In case of drift, the sum will not add to 1, therefore, quaternion data 
+                // needs to be corrected with right bias values. The quaternion data is 
+                // scaled by 2^30.
+                
+                // Save off quaternion data, scaled to +/- 1
+                _imu_data.q[1] = ((double)data.Quat9.Data.Q1) / 1073741824.0; // Convert to double. Divide by 2^30
+                _imu_data.q[2] = ((double)data.Quat9.Data.Q2) / 1073741824.0; // Convert to double. Divide by 2^30
+                _imu_data.q[3] = ((double)data.Quat9.Data.Q3) / 1073741824.0; // Convert to double. Divide by 2^30
+                _imu_data.q[0] = sqrt(1.0 - ((_imu_data.q[1] * _imu_data.q[1]) + (_imu_data.q[2] * _imu_data.q[2]) + (_imu_data.q[3] * _imu_data.q[3])));
+
+                // Save off accuracy
+                _imu_data.accuracy = data.Quat9.Data.Accuracy;
+
+                // If this is accurate enough, exit loop
+                if ((_imu_data.accuracy > IMU_ACCURACY_MIN) && (_imu_data.accuracy < IMU_ACCURACY_MAX)) {
+                    _imu_data.valid = true;
+                }
+            }
+
+        // Invalid data, increment retry count
+        } else {
+            i++;
         }
     }
 }
