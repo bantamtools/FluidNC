@@ -253,6 +253,9 @@ namespace Kinematics {
     }
 
     void DifferentialDrive::imu_update() {
+
+        // Trigger an IMU read
+        config->_sensors->_imu->read();
         
         // Obtain the IMU lock (prevents read updating values during calculations)
         config->_sensors->_imu->_mutex.lock();

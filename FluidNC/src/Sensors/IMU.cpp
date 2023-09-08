@@ -45,7 +45,7 @@ void IMU::init() {
     // Setting value can be calculated as follows:
     // Value = (DMP running rate / ODR ) - 1
     // E.g. For a 11Hz ODR rate when DMP is running at 55Hz, value = (55/11) - 1 = 4.
-    success &= (_icm_20948->setDMPODRrate(DMP_ODR_Reg_Quat9, 4) == ICM_20948_Stat_Ok);
+    success &= (_icm_20948->setDMPODRrate(DMP_ODR_Reg_Quat9, 0) == ICM_20948_Stat_Ok);  // Max ODR
 
     // Enable the FIFO
     success &= (_icm_20948->enableFIFO() == ICM_20948_Stat_Ok);
@@ -77,7 +77,7 @@ void IMU::read() {
     // Obtain the lock
     _mutex.lock();
 
-    // Continue reading until get a valid result or max retries
+    // Continue reading until get read out the entire FIFO
     for (;;) {
 
         // Read the DMP FIFO
