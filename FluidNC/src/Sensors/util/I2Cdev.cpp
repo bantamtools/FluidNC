@@ -168,6 +168,10 @@ int8_t I2Cdev::readWord(I2CBus *i2c, uint8_t devAddr, uint8_t regAddr, uint16_t 
  * @return Number of bytes read (-1 indicates failure)
  */
 int8_t I2Cdev::readBytes(I2CBus *i2c, uint8_t devAddr, uint8_t regAddr, uint8_t length, uint8_t *data, uint16_t timeout) {
+
+    esp_err_t ret;
+    int8_t count = 0;
+
     #ifdef I2CDEV_SERIAL_DEBUG
         Serial.print("I2C (0x");
         Serial.print(devAddr, HEX);
@@ -178,37 +182,15 @@ int8_t I2Cdev::readBytes(I2CBus *i2c, uint8_t devAddr, uint8_t regAddr, uint8_t 
         Serial.print("...");
     #endif
 
-    int8_t count = 0;
-    uint32_t t1 = millis();
+    i2c->write(devAddr, &regAddr, 1);
+    ret = i2c->read(devAddr, data, length);
 
-    // Arduino v1.0.1+, Wire library
-    // Adds official support for repeated start condition, yay!
-
-    // I2C/TWI subsystem uses internal buffer that breaks with large data requests
-    // so if user requests more than BUFFER_LENGTH bytes, we have to do it in
-    // smaller chunks instead of all at once
-    for (uint8_t k = 0; k < length; k += min((int)length, BUFFER_LENGTH)) {
-        Wire.beginTransmission(devAddr);
-        Wire.write(regAddr);
-        #ifdef ARDUINO_ARCH_ESP32
-            Wire.endTransmission(false);
-        #else
-            Wire.endTransmission();
-        #endif
-
-        Wire.requestFrom(devAddr, (uint8_t)min(length - k, BUFFER_LENGTH));
-
-        for (; Wire.available() && (timeout == 0 || millis() - t1 < timeout); count++) {
-            data[count] = Wire.read();
-            #ifdef I2CDEV_SERIAL_DEBUG
-                Serial.print(data[count], HEX);
-                if (count + 1 < length) Serial.print(" ");
-            #endif
-        }
+    // Check for errors (timeout, command failure, etc.)
+    if (ret != ESP_OK) {
+        count = -1;
+    } else {
+        count = length;
     }
-
-    // check for timeout
-    if (timeout > 0 && millis() - t1 >= timeout && count < length) count = -1; // timeout
 
     #ifdef I2CDEV_SERIAL_DEBUG
         Serial.print(". Done (");
@@ -238,49 +220,47 @@ int8_t I2Cdev::readWords(I2CBus *i2c, uint8_t devAddr, uint8_t regAddr, uint8_t 
         Serial.print("...");
     #endif
 
+    esp_err_t ret;
     int8_t count = 0;
-    uint32_t t1 = millis();
 
-    // Arduino v1.0.1+, Wire library
-    // Adds official support for repeated start condition, yay!
+    // Allocate a buffer for 2 bytes for each word
+    uint8_t *data_bytes = (uint8_t*)malloc((length * 2)*sizeof(uint8_t));
 
-    // I2C/TWI subsystem uses internal buffer that breaks with large data requests
-    // so if user requests more than BUFFER_LENGTH bytes, we have to do it in
-    // smaller chunks instead of all at once
-    for (uint8_t k = 0; k < length * 2; k += min(length * 2, BUFFER_LENGTH)) {
-        Wire.beginTransmission(devAddr);
-        Wire.write(regAddr);
-        Wire.endTransmission();
-        
-        Wire.requestFrom(devAddr, (uint8_t)(length * 2)); // length=words, this wants bytes
+    i2c->write(devAddr, &regAddr, 1);
+    ret = i2c->read(devAddr, data_bytes, (length * 2));  // Length = words, this wants bytes
 
+    // Check for errors (timeout, command failure, etc.)
+    if (ret != ESP_OK) {
+        count = -1;
+    } else {
+
+        // Shuffle all the individual bytes into the word buffer
         bool msb = true; // starts with MSB, then LSB
-        for (; Wire.available() && count < length && (timeout == 0 || millis() - t1 < timeout);) {
+        for (int i = 0; i < length;) {
             if (msb) {
                 // first byte is bits 15-8 (MSb=15)
-                data[count] = Wire.read() << 8;
+                data[i] = data_bytes[2 * i] << 8;
             } else {
                 // second byte is bits 7-0 (LSb=0)
-                data[count] |= Wire.read();
+                data[i] |= data_bytes[2 * i + 1];
+                i++;
                 #ifdef I2CDEV_SERIAL_DEBUG
                     Serial.print(data[count], HEX);
                     if (count + 1 < length) Serial.print(" ");
                 #endif
-                count++;
             }
             msb = !msb;
         }
-
-        Wire.endTransmission();
+        count = length;
     }
-
-    if (timeout > 0 && millis() - t1 >= timeout && count < length) count = -1; // timeout
 
     #ifdef I2CDEV_SERIAL_DEBUG
         Serial.print(". Done (");
         Serial.print(count, DEC);
         Serial.println(" read).");
     #endif
+
+    free(data_bytes);
     
     return count;
 }
@@ -409,19 +389,22 @@ bool I2Cdev::writeBytes(I2CBus *i2c, uint8_t devAddr, uint8_t regAddr, uint8_t l
         Serial.print("...");
     #endif
     uint8_t status = 0;
-    Wire.beginTransmission(devAddr);
-    Wire.write((uint8_t) regAddr); // send address
-    for (uint8_t i = 0; i < length; i++) {
-        #ifdef I2CDEV_SERIAL_DEBUG
-            Serial.print(data[i], HEX);
-            if (i + 1 < length) Serial.print(" ");
-        #endif
-        Wire.write((uint8_t) data[i]);
-    }
-    status = Wire.endTransmission();
+
+    // Create buffer with reg address + data for write
+    uint8_t *buff = (uint8_t*)malloc((length+1)*sizeof(uint8_t));
+
+    // Store reg address + data into write buffer
+    memcpy(buff, &regAddr, 1);
+    memcpy(buff + 1, data, length);
+
+    i2c->write(devAddr, buff, (length + 1));
     #ifdef I2CDEV_SERIAL_DEBUG
         Serial.println(". Done.");
     #endif
+
+    // Free up memory
+    free(buff);
+
     return status == 0;
 }
 
@@ -443,20 +426,29 @@ bool I2Cdev::writeWords(I2CBus *i2c, uint8_t devAddr, uint8_t regAddr, uint8_t l
         Serial.print("...");
     #endif
     uint8_t status = 0;
-    Wire.beginTransmission(devAddr);
-    Wire.write(regAddr); // send address
-    for (uint8_t i = 0; i < length; i++) { 
-        #ifdef I2CDEV_SERIAL_DEBUG
-            Serial.print(data[i], HEX);
-            if (i + 1 < length) Serial.print(" ");
-        #endif
-        Wire.write((uint8_t)(data[i] >> 8));    // send MSB
-        Wire.write((uint8_t)data[i]);         // send LSB
+    uint8_t bytes[2];
+
+    // Create buffer with reg address + (2 * data) for write (split up words into bytes)
+    uint8_t *buff = (uint8_t*)malloc((2 * length + 1)*sizeof(uint8_t));
+
+    // Store reg address + data into write buffer
+    memcpy(buff, &regAddr, 1);
+
+    for (int i = 0; i < length; i++) {
+
+        bytes[0] = (data[i] >> 8);
+        bytes[1] = (data[i] & 0xFF);        
+        memcpy(((buff + 1) + (2 * i)), bytes, 2);
     }
-    status = Wire.endTransmission();
+
+    i2c->write(devAddr, buff, (2 * length + 1));
     #ifdef I2CDEV_SERIAL_DEBUG
         Serial.println(". Done.");
     #endif
+
+    // Free up memory
+    free(buff);
+
     return status == 0;
 }
 

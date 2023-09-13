@@ -58,7 +58,6 @@ using namespace Machine;
 //#define I2CDEV_SERIAL_DEBUG
 
 #include "Arduino.h"
-#include <Wire.h>
 
 // 1000ms default read timeout (modify with "I2Cdev::readTimeout = [ms];")
 #define I2CDEV_DEFAULT_READ_TIMEOUT     1000
