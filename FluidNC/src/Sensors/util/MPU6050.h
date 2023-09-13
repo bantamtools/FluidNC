@@ -38,6 +38,9 @@ THE SOFTWARE.
 #define _MPU6050_H_
 
 #include "I2Cdev.h"
+#include "../../Machine/I2CBus.h"
+
+using namespace Machine;
 
 // supporting link:  http://forum.arduino.cc/index.php?&topic=143444.msg1079517#msg1079517
 // also: http://forum.arduino.cc/index.php?&topic=141571.msg1062899#msg1062899s
@@ -575,7 +578,7 @@ namespace MPU6050_IMU{
 
 class MPU6050 {
     public:
-        MPU6050(uint8_t address=(MPU6050_IMU::MPU6050_DEFAULT_ADDRESS));
+        MPU6050(I2CBus *i2c, uint8_t address=(MPU6050_IMU::MPU6050_DEFAULT_ADDRESS));
 
         void initialize();
         bool testConnection();
@@ -1170,6 +1173,7 @@ class MPU6050 {
         #endif
 
     private:
+        I2CBus *_i2c;
         uint8_t devAddr;
         uint8_t buffer[14];
     #if defined(MPU6050_INCLUDE_DMP_MOTIONAPPS20) or defined(MPU6050_INCLUDE_DMP_MOTIONAPPS41)

@@ -7,34 +7,28 @@
 #include <iomanip>
 #include "../Configuration/Configurable.h"
 #include "../Channel.h"
-#include "ICM_20948.h"
-
-typedef struct imuDataSubType
-{
-    double q[4];
-    int16_t accuracy;
-
-} imuDataSubType;
+#include "util/MPU6050.h"
 
 // Type definitions
 typedef struct imuDataType
 {
-    imuDataSubType quat9;
-    imuDataSubType geomag;
+    float yaw;
+    float pitch;
+    float roll;
 
 } imuDataType;
 
 // Class
 class IMU : public Configuration::Configurable {
 
-    uint8_t _i2c_address = 0x53;
+    uint8_t _i2c_address = 0x68;
     uint8_t _i2c_num = 1;
 
     Pin _int_pin;
 
 private:
 
-    ICM_20948_I2C *_icm_20948;
+    MPU6050 *_mpu_6050;
 
 public:
 
