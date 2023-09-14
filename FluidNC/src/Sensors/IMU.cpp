@@ -8,6 +8,9 @@ IMU::IMU() {
 
     // Allocate memory for IMU
     _mpu_6050 = new MPU6050(config->_i2c[_i2c_num], _i2c_address);
+
+    // Mark DMP uninitialized
+    _dmp_ready = false;
 }
 
 // IMU destructor
@@ -15,12 +18,16 @@ IMU::~IMU() {
 
     // Deallocate memory for the IMU
     delete(_mpu_6050);
+
+    // Mark DMP uninitialized
+    _dmp_ready = false;
 }
 
 // Initializes the IMU subsystem
 void IMU::init() {
 
     bool success = false; // Use success to show if IMU connection was successful
+    uint8_t dmp_status = 1;
 
     // Initialize the IMU data structure
     _imu_data.yaw = 0.0;
@@ -37,24 +44,48 @@ void IMU::init() {
     if (!success) {
         log_warn("IMU: Connection failed");
     } else {
-        log_info("IMU (DMP Enabled): I2C Number:" << _i2c_num << " Address:" << to_hex(_i2c_address) << 
+        log_info("IMU: I2C Number:" << _i2c_num << " Address:" << to_hex(_i2c_address) << 
             " INT:" << (_int_pin.defined() ? _int_pin.name() : "None"));
+    }
+
+    // Load and configure the DMP
+    dmp_status = _mpu_6050->dmpInitialize();
+
+    // Initialized, now calibrate and enable DMP...
+    if (dmp_status == 0) {
+
+        // Calibration time, generate offsets and calibrate
+        _mpu_6050->CalibrateAccel(10);
+        _mpu_6050->CalibrateGyro(10);
+        _mpu_6050->PrintActiveOffsets();
+
+        // Turn on the DMP now that it's ready
+        _mpu_6050->setDMPEnabled(true);
+
+        // Set ready flag and print success message
+        _dmp_ready = true;
+        log_info("IMU: DMP initialized!")
+
+    // Error, print message
+    } else {
+
+        // 1 = initial memory load failed
+        // 2 = DMP configuration updates failed
+        log_warn("IMU: DMP initialization failed, error code = " << dmp_status)
     }
 }
 
 // Reads the latest values from the IMU
 void IMU::read() {
 
-    int16_t ax, ay, az;
-    int16_t gx, gy, gz;
-
     // Obtain the lock
     _mutex.lock();
 
     // DEBUG: Read and display raw accel/gyro measurements from IMU
-    _mpu_6050->getMotion6(&ax, &ay, &az, &gx, &gy, &gz);
-    log_info("a/g: [" << ax << " " << ay << " " << az << "]  [" << gx << " " << gy << " " << gz << "]");
-    delay_ms(100);
+    //int16_t ax, ay, az, gx, gy, gz;
+    //_mpu_6050->getMotion6(&ax, &ay, &az, &gx, &gy, &gz);
+    //log_info("a/g: [" << ax << " " << ay << " " << az << "]  [" << gx << " " << gy << " " << gz << "]");
+    //delay_ms(100);
 
     // Return the lock
     _mutex.unlock();

@@ -7,7 +7,8 @@
 #include <iomanip>
 #include "../Configuration/Configurable.h"
 #include "../Channel.h"
-#include "util/MPU6050.h"
+#include "util/I2Cdev.h"
+#include "util/MPU6050_6Axis_MotionApps20.h"
 
 // Type definitions
 typedef struct imuDataType
@@ -29,6 +30,8 @@ class IMU : public Configuration::Configurable {
 private:
 
     MPU6050 *_mpu_6050;
+    bool _dmp_ready;
+    uint8_t _dmp_fifo_buffer[64];
 
 public:
 
