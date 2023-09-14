@@ -20,18 +20,22 @@ IMU::~IMU() {
 // Initializes the IMU subsystem
 void IMU::init() {
 
-    bool success = true; // Use success to show if the DMP configuration was successful
+    bool success = false; // Use success to show if IMU connection was successful
 
     // Initialize the IMU data structure
     _imu_data.yaw = 0.0;
     _imu_data.pitch = 0.0;
     _imu_data.roll = 0.0;
 
-    // TODO: Init IMU
+    // Initialize the IMU
+    _mpu_6050->initialize();
+
+    // Verify connection
+    success = _mpu_6050->testConnection();
 
     // Print configuration info message if successful
     if (!success) {
-        log_warn("IMU: Configuration failed");
+        log_warn("IMU: Connection failed");
     } else {
         log_info("IMU (DMP Enabled): I2C Number:" << _i2c_num << " Address:" << to_hex(_i2c_address) << 
             " INT:" << (_int_pin.defined() ? _int_pin.name() : "None"));
