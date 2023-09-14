@@ -83,6 +83,9 @@ void IMU::read() {
     VectorFloat gravity;        // [x, y, z]            gravity vector
     float ypr[3];               // [yaw, pitch, roll]   yaw/pitch/roll container and gravity vector
 
+    // Packet structure for InvenSense teapot demo
+    uint8_t teapot_packet[14] = { '$', 0x02, 0,0, 0,0, 0,0, 0,0, 0x00, 0x00, '\r', '\n' };
+
     // DMP not ready, exit
     if (!_dmp_ready) return;
 
@@ -109,8 +112,21 @@ void IMU::read() {
         _imu_data.roll  = ypr[2] * 180/M_PI;
 
         // DEBUG: Display yaw/pitch/roll angles in degrees
-        log_info("ypr: [" << _imu_data.yaw << " " << _imu_data.pitch << " " << _imu_data.roll << "]");
-        delay_ms(100);
+        //log_info("ypr: [" << _imu_data.yaw << " " << _imu_data.pitch << " " << _imu_data.roll << "]");
+        //delay_ms(100);
+
+        // DEBUG: Output for InvenSense Teapot (plane) demo Processing animation
+        // Ref: https://github.com/ElectronicCats/mpu6050/tree/master/examples/MPU6050_DMP6/Processing/MPUTeapot
+        //teapot_packet[2] = fifo_buffer[0];
+        //teapot_packet[3] = fifo_buffer[1];
+        //teapot_packet[4] = fifo_buffer[4];
+        //teapot_packet[5] = fifo_buffer[5];
+        //teapot_packet[6] = fifo_buffer[8];
+        //teapot_packet[7] = fifo_buffer[9];
+        //teapot_packet[8] = fifo_buffer[12];
+        //teapot_packet[9] = fifo_buffer[13];
+        //Serial.write(teapot_packet, 14);
+        //teapot_packet[11]++;    // Packet count, loops at 0xFF on purpose
     }
 
     // Return the lock
