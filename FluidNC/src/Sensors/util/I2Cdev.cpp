@@ -169,7 +169,6 @@ int8_t I2Cdev::readWord(I2CBus *i2c, uint8_t devAddr, uint8_t regAddr, uint16_t 
  */
 int8_t I2Cdev::readBytes(I2CBus *i2c, uint8_t devAddr, uint8_t regAddr, uint8_t length, uint8_t *data, uint16_t timeout) {
 
-    esp_err_t ret;
     int8_t count = 0;
 
     #ifdef I2CDEV_SERIAL_DEBUG
@@ -183,14 +182,7 @@ int8_t I2Cdev::readBytes(I2CBus *i2c, uint8_t devAddr, uint8_t regAddr, uint8_t 
     #endif
 
     i2c->write(devAddr, &regAddr, 1);
-    ret = i2c->read(devAddr, data, length);
-
-    // Check for errors (timeout, command failure, etc.)
-    if (ret != ESP_OK) {
-        count = -1;
-    } else {
-        count = length;
-    }
+    count = i2c->read(devAddr, data, length);
 
     #ifdef I2CDEV_SERIAL_DEBUG
         Serial.print(". Done (");
@@ -220,38 +212,36 @@ int8_t I2Cdev::readWords(I2CBus *i2c, uint8_t devAddr, uint8_t regAddr, uint8_t 
         Serial.print("...");
     #endif
 
-    esp_err_t ret;
     int8_t count = 0;
 
     // Allocate a buffer for 2 bytes for each word
     uint8_t *data_bytes = (uint8_t*)malloc((length * 2)*sizeof(uint8_t));
 
     i2c->write(devAddr, &regAddr, 1);
-    ret = i2c->read(devAddr, data_bytes, (length * 2));  // Length = words, this wants bytes
+    count = i2c->read(devAddr, data_bytes, (length * 2));  // Length = words, this wants bytes
 
-    // Check for errors (timeout, command failure, etc.)
-    if (ret != ESP_OK) {
-        count = -1;
-    } else {
+    // Read data valid
+    if (count > 0) {
 
         // Shuffle all the individual bytes into the word buffer
         bool msb = true; // starts with MSB, then LSB
-        for (int i = 0; i < length;) {
+        for (int i = 0; i < count;) {
             if (msb) {
                 // first byte is bits 15-8 (MSb=15)
                 data[i] = data_bytes[2 * i] << 8;
             } else {
                 // second byte is bits 7-0 (LSb=0)
                 data[i] |= data_bytes[2 * i + 1];
-                i++;
                 #ifdef I2CDEV_SERIAL_DEBUG
-                    Serial.print(data[count], HEX);
-                    if (count + 1 < length) Serial.print(" ");
+                    Serial.println(data[i], HEX);
                 #endif
+                i++;
             }
             msb = !msb;
         }
-        count = length;
+
+        // Convert count from bytes to words now
+        count /= 2;
     }
 
     #ifdef I2CDEV_SERIAL_DEBUG
