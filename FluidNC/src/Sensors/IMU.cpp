@@ -78,6 +78,14 @@ void IMU::init() {
 // Reads the latest values from the IMU
 void IMU::read() {
 
+    uint8_t fifo_buffer[64];    // FIFO storage buffer
+    Quaternion q;               // [w, x, y, z]         quaternion container
+    VectorFloat gravity;        // [x, y, z]            gravity vector
+    float ypr[3];               // [yaw, pitch, roll]   yaw/pitch/roll container and gravity vector
+
+    // DMP not ready, exit
+    if (!_dmp_ready) return;
+
     // Obtain the lock
     _mutex.lock();
 
@@ -86,6 +94,24 @@ void IMU::read() {
     //_mpu_6050->getMotion6(&ax, &ay, &az, &gx, &gy, &gz);
     //log_info("a/g: [" << ax << " " << ay << " " << az << "]  [" << gx << " " << gy << " " << gz << "]");
     //delay_ms(100);
+
+    // Read a DMP packet from FIFO
+    if (_mpu_6050->dmpGetCurrentFIFOPacket(fifo_buffer)) { // Get the Latest packet 
+
+        // Get yaw/pitch/roll data
+        _mpu_6050->dmpGetQuaternion(&q, fifo_buffer);
+        _mpu_6050->dmpGetGravity(&gravity, &q);
+        _mpu_6050->dmpGetYawPitchRoll(ypr, &q, &gravity);
+
+        // Store yaw/pitch/roll angles locally in degrees
+        _imu_data.yaw   = ypr[0] * 180/M_PI;
+        _imu_data.pitch = ypr[1] * 180/M_PI;
+        _imu_data.roll  = ypr[2] * 180/M_PI;
+
+        // DEBUG: Display yaw/pitch/roll angles in degrees
+        log_info("ypr: [" << _imu_data.yaw << " " << _imu_data.pitch << " " << _imu_data.roll << "]");
+        delay_ms(100);
+    }
 
     // Return the lock
     _mutex.unlock();

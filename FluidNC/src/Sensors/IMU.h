@@ -31,7 +31,6 @@ private:
 
     MPU6050 *_mpu_6050;
     bool _dmp_ready;
-    uint8_t _dmp_fifo_buffer[64];
 
 public:
 
