@@ -45,10 +45,16 @@ void IMU::init() {
 // Reads the latest values from the IMU
 void IMU::read() {
 
+    int16_t ax, ay, az;
+    int16_t gx, gy, gz;
+
     // Obtain the lock
     _mutex.lock();
 
-    // TODO: Read IMU
+    // DEBUG: Read and display raw accel/gyro measurements from IMU
+    _mpu_6050->getMotion6(&ax, &ay, &az, &gx, &gy, &gz);
+    log_info("a/g: [" << ax << " " << ay << " " << az << "]  [" << gx << " " << gy << " " << gz << "]");
+    delay_ms(100);
 
     // Return the lock
     _mutex.unlock();
