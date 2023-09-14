@@ -260,7 +260,10 @@ namespace Kinematics {
         // Obtain the IMU lock (prevents read updating values during calculations)
         config->_sensors->_imu->_mutex.lock();
 
-        // TODO: Do something with the data...
+        // TODO: Do something with the data...for now we just print it out
+        log_info("ypr: [" << config->_sensors->_imu->_imu_data.yaw << " " 
+                          << config->_sensors->_imu->_imu_data.pitch << " " 
+                          << config->_sensors->_imu->_imu_data.roll << "]");
 
         // Return the IMU lock
         config->_sensors->_imu->_mutex.unlock();
