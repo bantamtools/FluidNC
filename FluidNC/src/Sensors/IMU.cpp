@@ -117,6 +117,8 @@ void IMU::read() {
 
         // DEBUG: Output for InvenSense Teapot (plane) demo Processing animation
         // Ref: https://github.com/ElectronicCats/mpu6050/tree/master/examples/MPU6050_DMP6/Processing/MPUTeapot
+        // Requires Processing app: https://processing.org/download AND
+        // Requires ToxicLibs: https://github.com/postspectacular/toxiclibs/releases (download to [userdir]/Processing/libraries)
         //teapot_packet[2] = fifo_buffer[0];
         //teapot_packet[3] = fifo_buffer[1];
         //teapot_packet[4] = fifo_buffer[4];
