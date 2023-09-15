@@ -55,8 +55,8 @@ void IMU::init() {
     if (dmp_status == 0) {
 
         // Calibration time, generate offsets and calibrate
-        _mpu_6050->CalibrateAccel(10);
-        _mpu_6050->CalibrateGyro(10);
+        _mpu_6050->CalibrateAccel(20);
+        _mpu_6050->CalibrateGyro(20);
         _mpu_6050->PrintActiveOffsets();
 
         // Turn on the DMP now that it's ready

@@ -8,7 +8,7 @@
 #include "../Configuration/Configurable.h"
 #include "../Channel.h"
 #include "util/I2Cdev.h"
-#include "util/MPU6050_6Axis_MotionApps20.h"
+#include "util/MPU6050_6Axis_MotionApps_V6_12.h"
 
 // Type definitions
 typedef struct imuDataType
