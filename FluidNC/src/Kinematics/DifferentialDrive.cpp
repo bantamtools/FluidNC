@@ -13,8 +13,10 @@ namespace Kinematics {
         handler.item("distance_between_wheels", _distance_between_wheels);
         handler.item("use_z_delay", _use_z_delay);
         handler.item("z_up_min_angle", _z_up_min_angle);
+        handler.item("use_turn_balancing", _use_turn_balancing);
         log_info("DD wheel distance: " << _distance_between_wheels);
         log_info("Turtle Z handling on: " << _use_z_delay);
+        log_info("Turtle turn balancing on: " << _use_turn_balancing);
     }
 
     void DifferentialDrive::init() {
@@ -36,6 +38,7 @@ namespace Kinematics {
         m_captured_z_target = 0.0;
         m_captured_z_prev = 0.0;
         m_captured_z_pldata = NULL;
+        m_total_turn_angle = 0.0;
         init_position();
     }
 
@@ -112,6 +115,17 @@ namespace Kinematics {
         // Now it should be within +- 180
         // NotTodo: Possible optimization: if angle beyond +/-90, could turn the supplementary and move backward - but some media may not draw well backward
 
+        if(_use_turn_balancing && !(turn_angle==0.0)) {
+            // avoid continuously turning CW or CCW to reduce anular error accumulation
+            if ((m_total_turn_angle + turn_angle) > 2.0*PI) {
+                turn_angle = turn_angle - 2.0*PI;
+                log_info("Turn balancing changed turn from " << (turn_angle + 2.0*PI)*180.0/PI << " to " << turn_angle*180.0/PI);
+            } else if ((m_total_turn_angle + turn_angle) < -2.0*PI) {
+                turn_angle = turn_angle + 2.0*PI;
+                log_info("Turn balancing changed turn from " << (turn_angle - 2.0*PI)*180.0/PI << " to " << turn_angle*180.0/PI);
+            }
+        }
+
         bool leaving_z_down = false;
         if (m_have_captured_z && (abs(turn_angle) >= _z_up_min_angle*PI/180.0)) {
             // if we're turning farther than the cutoff, return Z to previous Up position first
@@ -154,6 +168,7 @@ namespace Kinematics {
         }
         // if we're still here, turn move was accepted so update accepted state
         m_heading = new_heading;
+        m_total_turn_angle += turn_angle;
         m_motor_left = left_target;
         m_motor_right = right_target;
 
