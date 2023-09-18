@@ -56,6 +56,8 @@ namespace Kinematics {
         float m_captured_z_target;
         float m_captured_z_prev;
         plan_line_data_t* m_captured_z_pldata;
+        // state for turn-balancing
+        float m_total_turn_angle;
 
 
         // Parameters
@@ -65,6 +67,7 @@ namespace Kinematics {
         float _distance_between_wheels = 50.0;
         bool _use_z_delay = false; // attempt to delay Z down moves (engage pen/media) until after in-place turns
         float _z_up_min_angle = 30; // raise Z to prev height during turns, for angles greater than this
+        bool _use_turn_balancing = false; // keep total turn angle from accumulating, to reduce angular error buildup
 
     };
 }
