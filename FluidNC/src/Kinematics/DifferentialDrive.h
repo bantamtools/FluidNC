@@ -58,6 +58,9 @@ namespace Kinematics {
         plan_line_data_t* m_captured_z_pldata;
         // state for turn-balancing
         float m_total_turn_angle;
+        // IMU angle correction
+        float m_last_IMU_heading;
+        float m_IMU_heading_offset;
 
 
         // Parameters
@@ -68,6 +71,7 @@ namespace Kinematics {
         bool _use_z_delay = false; // attempt to delay Z down moves (engage pen/media) until after in-place turns
         float _z_up_min_angle = 30; // raise Z to prev height during turns, for angles greater than this
         bool _use_turn_balancing = false; // keep total turn angle from accumulating, to reduce angular error buildup
+        bool _use_IMU_angle_correction = true; // attempt to use data from IMU to correct angle
 
     };
 }

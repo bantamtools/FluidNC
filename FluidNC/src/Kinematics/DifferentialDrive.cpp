@@ -14,9 +14,11 @@ namespace Kinematics {
         handler.item("use_z_delay", _use_z_delay);
         handler.item("z_up_min_angle", _z_up_min_angle);
         handler.item("use_turn_balancing", _use_turn_balancing);
+        handler.item("use_IMU_angle_correction", _use_IMU_angle_correction);
         log_info("DD wheel distance: " << _distance_between_wheels);
         log_info("Turtle Z handling on: " << _use_z_delay);
         log_info("Turtle turn balancing on: " << _use_turn_balancing);
+        log_info("IMU angle correction on: " << _use_IMU_angle_correction);
     }
 
     void DifferentialDrive::init() {
@@ -39,6 +41,8 @@ namespace Kinematics {
         m_captured_z_prev = 0.0;
         m_captured_z_pldata = NULL;
         m_total_turn_angle = 0.0;
+        m_last_IMU_heading = 999;
+        m_IMU_heading_offset = 999;
         init_position();
     }
 
@@ -114,6 +118,30 @@ namespace Kinematics {
         if (turn_angle < -PI) { turn_angle += 2.0*PI; }
         // Now it should be within +- 180
         // NotTodo: Possible optimization: if angle beyond +/-90, could turn the supplementary and move backward - but some media may not draw well backward
+
+        if (_use_IMU_angle_correction) {
+            // let's try refreshing IMU data right here...
+            config->_sensors->_imu->read();
+            config->_sensors->_imu->_mutex.lock();
+            m_last_IMU_heading = config->_sensors->_imu->_imu_data.yaw * PI/180.0 * -1; // radians, invert sign to match our heading sense
+            config->_sensors->_imu->_mutex.unlock();
+            
+            if (m_IMU_heading_offset > 900 && m_last_IMU_heading < 900) {
+                // haven't set our global offset yet, but we have sensor data; set the offset
+                m_IMU_heading_offset = m_heading - m_last_IMU_heading;
+                log_info("Set initial heading offset to " << m_IMU_heading_offset*RAD_TO_DEG << "(" << m_heading*RAD_TO_DEG << " - " << m_last_IMU_heading*RAD_TO_DEG << ")");
+            } else if (m_IMU_heading_offset < 900 && m_last_IMU_heading < 900) {
+                // Check current heading vs last sensor reading.
+                float reported_angle = m_last_IMU_heading + m_IMU_heading_offset;
+                float angle_correction = reported_angle - m_heading;
+                log_info("reported angle: " << reported_angle*RAD_TO_DEG << ", nom heading: " << m_heading*RAD_TO_DEG);
+                // fix cases near +- 180
+                if (angle_correction > PI) { angle_correction -= 2.0*PI; }
+                if (angle_correction < -PI) { angle_correction += 2.0*PI; }
+                turn_angle -= angle_correction;
+                log_info("ANGLE CORR changed turn angle from " << (turn_angle+angle_correction)*RAD_TO_DEG << " to " << turn_angle*RAD_TO_DEG);
+            }
+        }
 
         if(_use_turn_balancing && !(turn_angle==0.0)) {
             // avoid continuously turning CW or CCW to reduce anular error accumulation
@@ -279,6 +307,9 @@ namespace Kinematics {
         log_info("ypr: [" << config->_sensors->_imu->_imu_data.yaw << " " 
                           << config->_sensors->_imu->_imu_data.pitch << " " 
                           << config->_sensors->_imu->_imu_data.roll << "]");
+
+        // record the data we'll use
+        m_last_IMU_heading = config->_sensors->_imu->_imu_data.yaw * PI/180.0 * -1; // radians, invert sign to match our heading sense
 
         // Return the IMU lock
         config->_sensors->_imu->_mutex.unlock();

@@ -21,6 +21,7 @@ kinematics:
     use_z_delay: true
     z_up_min_angle: 45
     use_turn_balancing: true
+    use_IMU_angle_correction: true
 
 axes:
   shared_stepper_disable_pin: NO_PIN
