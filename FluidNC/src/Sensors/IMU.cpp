@@ -101,6 +101,13 @@ void IMU::read() {
     // Read a DMP packet from FIFO
     if (_mpu_6050->dmpGetCurrentFIFOPacket(fifo_buffer)) { // Get the Latest packet 
 
+        //float last_yaw, last_pitch, last_roll;
+
+        // Store previous values
+        //last_yaw = _imu_data.yaw;
+        //last_pitch = _imu_data.pitch;
+        //last_roll = _imu_data.roll;
+
         // Get yaw/pitch/roll data
         _mpu_6050->dmpGetQuaternion(&q, fifo_buffer);
         _mpu_6050->dmpGetGravity(&gravity, &q);
@@ -110,6 +117,12 @@ void IMU::read() {
         _imu_data.yaw   = ypr[0] * 180/M_PI;
         _imu_data.pitch = ypr[1] * 180/M_PI;
         _imu_data.roll  = ypr[2] * 180/M_PI;
+
+        // Recalibrate every 180 degrees of yaw
+        //if (std::signbit(last_yaw) != std::signbit(_imu_data.yaw)) {  // Sign bit flips every 180 degrees
+        //    _mpu_6050->CalibrateAccel(3);  // 3 seems to be the min for both
+        //    _mpu_6050->CalibrateGyro(3);
+        //}
 
         // DEBUG: Display yaw/pitch/roll angles in degrees
         //log_info("ypr: [" << _imu_data.yaw << " " << _imu_data.pitch << " " << _imu_data.roll << "]");
