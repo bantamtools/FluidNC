@@ -103,13 +103,23 @@ BNO085::~BNO085(void) {
  */
 bool BNO085::init(int32_t sensor_id) {
 
+  bool status;
+
   _HAL.open = i2chal_open;
   _HAL.close = i2chal_close;
   _HAL.read = i2chal_read;
   _HAL.write = i2chal_write;
   _HAL.getTimeUs = hal_getTimeUs;
 
-  return _init_sensor(sensor_id);
+  status = _init_sensor(sensor_id);
+
+  // Enable reporting
+  if (status) {
+    status = enableReport(_report_type, _report_interval_us);
+    delay_ms(100);
+  }
+
+  return status;
 }
 
 /*!  @brief Initializer for post i2c/spi init
@@ -145,7 +155,44 @@ bool BNO085::_init_sensor(int32_t sensor_id) {
  *
  */
 void BNO085::get_data(float *yaw, float *pitch, float *roll) {
-    log_warn("IMPLEMENT GET DATA!");
+
+  sh2_SensorValue_t sensor_value;
+
+  // Set reporting if reset
+  if (wasReset()) {
+    enableReport(_report_type, _report_interval_us);
+    delay_ms(100);
+  }
+
+  // Translate quaternion into yaw, pitch and roll
+  if (getSensorEvent(&sensor_value) && sensor_value.sensorId == _report_type) {
+
+    // Calculate Euler angles in degrees
+    float qr = sensor_value.un.arvrStabilizedRV.real;
+    float qi = sensor_value.un.arvrStabilizedRV.i;
+    float qj = sensor_value.un.arvrStabilizedRV.j;
+    float qk = sensor_value.un.arvrStabilizedRV.k;
+    
+    float sqr = sq(qr);
+    float sqi = sq(qi);
+    float sqj = sq(qj);
+    float sqk = sq(qk);
+
+    *yaw = atan2(2.0 * (qi * qj + qk * qr), (sqi - sqj - sqk + sqr));
+    *pitch = asin(-2.0 * (qi * qk - qj * qr) / (sqi + sqj + sqk + sqr));
+    *roll = atan2(2.0 * (qj * qk + qi * qr), (-sqi - sqj + sqk + sqr));
+
+    *yaw *= RAD_TO_DEG;
+    *pitch *= RAD_TO_DEG;
+    *roll *= RAD_TO_DEG;
+
+    // TODO: Do something with accuracy info (0-3, 3 is best)
+
+    // DEBUG: Display yaw/pitch/roll angles in degrees and sensor accuracy (0-3)
+    log_info("ypr: [" << *yaw << " " << *pitch << " " << *roll << "] acc: " << sensor_value.status);
+    delay_ms(100);
+
+  }
 }
 
 /**

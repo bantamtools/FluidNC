@@ -77,6 +77,11 @@ public:
 
   sh2_ProductIds_t prodIds; ///< The product IDs returned by the sensor
 
+private:
+  
+  sh2_SensorId_t _report_type   = SH2_ARVR_STABILIZED_RV;   // More accurate report
+  long _report_interval_us      = 5000;                     // 250Hz
+
 protected:
   virtual bool _init_sensor(int32_t sensor_id);
 
