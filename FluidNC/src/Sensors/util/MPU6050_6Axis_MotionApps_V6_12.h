@@ -349,6 +349,99 @@ const unsigned char dmpMemory[MPU6050_DMP_CODE_SIZE] PROGMEM = {
 #define MPU6050_DMP_FIFO_RATE_DIVISOR 0x01 // The New instance of the Firmware has this as the default 
 #endif
 
+// Initializes the IMU and prepares DMP
+inline bool MPU6050::init() {
+
+    bool status = false; // Use status to show if IMU and DMP init was successful
+    uint8_t dmp_status = 1;
+
+    // Initialize the IMU and verify connection
+    power_on_and_prep();
+    status = testConnection();
+
+    // Exit if not successful
+    if (!status) return status;
+
+    // Otherwise, load and configure the DMP
+    dmp_status = dmpInitialize();
+
+    // Initialized, now calibrate and enable DMP...
+    if (dmp_status == 0) {
+
+        // Calibration time, generate offsets and calibrate
+        CalibrateAccel(20);
+        CalibrateGyro(20);
+        PrintActiveOffsets();
+
+        // Turn on the DMP now that it's ready
+        setDMPEnabled(true);
+
+        // Set ready flag and print success message
+        _dmp_ready = true;
+        log_info("IMU: DMP initialized!")
+        status = true;
+
+    // Error, print message
+    } else {
+
+        // 1 = initial memory load failed
+        // 2 = DMP configuration updates failed
+        log_warn("IMU: DMP initialization failed, error code = " << dmp_status)
+        status = false;
+    }
+
+    return status;
+}
+
+// Returns the yaw/pitch/roll data from the IMU
+inline void MPU6050::get_data(float *yaw, float *pitch, float *roll) {
+
+    uint8_t fifo_buffer[64];    // FIFO storage buffer
+    Quaternion q;               // [w, x, y, z]         quaternion container
+    VectorFloat gravity;        // [x, y, z]            gravity vector
+    float ypr[3];               // [yaw, pitch, roll]   yaw/pitch/roll container and gravity vector
+
+    // DMP not ready, exit
+    if (!_dmp_ready) return;
+
+    // DEBUG: Read and display raw accel/gyro measurements from IMU
+    //int16_t ax, ay, az, gx, gy, gz;
+    //getMotion6(&ax, &ay, &az, &gx, &gy, &gz);
+    //log_info("a/g: [" << ax << " " << ay << " " << az << "]  [" << gx << " " << gy << " " << gz << "]");
+    //delay_ms(100);
+
+    // Read a DMP packet from FIFO
+    if (dmpGetCurrentFIFOPacket(fifo_buffer)) { // Get the Latest packet 
+
+        //float last_yaw, last_pitch, last_roll;
+
+        // Store previous values
+        //last_yaw = *yaw;
+        //last_pitch = *pitch;
+        //last_roll = *roll;
+
+        // Get yaw/pitch/roll data
+        dmpGetQuaternion(&q, fifo_buffer);
+        dmpGetGravity(&gravity, &q);
+        dmpGetYawPitchRoll(ypr, &q, &gravity);
+
+        // Store yaw/pitch/roll angles locally in degrees
+        *yaw   = ypr[0] * 180/M_PI;
+        *pitch = ypr[1] * 180/M_PI;
+        *roll  = ypr[2] * 180/M_PI;
+
+        // Recalibrate every 180 degrees of yaw
+        //if (std::signbit(last_yaw) != std::signbit(*yaw)) {  // Sign bit flips every 180 degrees
+        //    CalibrateAccel(3);  // 3 seems to be the min for both
+        //    CalibrateGyro(3);
+        //}
+
+        // DEBUG: Display yaw/pitch/roll angles in degrees
+        //log_info("ypr: [" << *yaw << " " << *pitch << " " << *roll << "]");
+        //delay_ms(100);
+    }
+}
+
 // this is the most basic initialization I can create. with the intent that we access the register bytes as few times as needed to get the job done.
 // for detailed descriptins of all registers and there purpose google "MPU-6000/MPU-6050 Register Map and Descriptions"
 inline uint8_t MPU6050::dmpInitialize() { // Lets get it over with fast Write everything once and set it up necely

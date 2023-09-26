@@ -52,6 +52,9 @@ THE SOFTWARE.
  * @see MPU6050_ADDRESS_AD0_HIGH
  */
 MPU6050::MPU6050(I2CBus *i2c, uint8_t address): _i2c(i2c), devAddr(address) {
+
+    // Mark DMP uninitialized
+    _dmp_ready = false;
 }
 
 /** Power on and prepare for general usage.
@@ -61,7 +64,7 @@ MPU6050::MPU6050(I2CBus *i2c, uint8_t address): _i2c(i2c), devAddr(address) {
  * the clock source to use the X Gyro for reference, which is slightly better than
  * the default internal clock source.
  */
-void MPU6050::initialize() {
+void MPU6050::power_on_and_prep() {
     setClockSource( (MPU6050_IMU::MPU6050_CLOCK_PLL_XGYRO));
     setFullScaleGyroRange( (MPU6050_IMU::MPU6050_GYRO_FS_250));
     setFullScaleAccelRange( (MPU6050_IMU::MPU6050_ACCEL_FS_2));

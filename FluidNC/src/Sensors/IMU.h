@@ -29,8 +29,7 @@ class IMU : public Configuration::Configurable {
 
 private:
 
-    MPU6050 *_mpu_6050;
-    bool _dmp_ready;
+    MPU6050 *_imu_sensor;
 
 public:
 

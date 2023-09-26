@@ -580,7 +580,7 @@ class MPU6050 {
     public:
         MPU6050(I2CBus *i2c, uint8_t address=(MPU6050_IMU::MPU6050_DEFAULT_ADDRESS));
 
-        void initialize();
+        void power_on_and_prep();
         bool testConnection();
 
         // AUX_VDDIO register
@@ -975,6 +975,9 @@ class MPU6050 {
         // special methods for MotionApps 2.0 implementation
         #ifdef MPU6050_INCLUDE_DMP_MOTIONAPPS20
 
+            bool init();
+            void get_data(float *yaw, float *pitch, float *roll);
+
             uint8_t dmpInitialize();
             bool dmpPacketAvailable();
 
@@ -1174,6 +1177,7 @@ class MPU6050 {
 
     private:
         I2CBus *_i2c;
+        bool _dmp_ready;
         uint8_t devAddr;
         uint8_t buffer[14];
     #if defined(MPU6050_INCLUDE_DMP_MOTIONAPPS20) or defined(MPU6050_INCLUDE_DMP_MOTIONAPPS41)
