@@ -7,8 +7,14 @@
 #include <iomanip>
 #include "../Configuration/Configurable.h"
 #include "../Channel.h"
+#ifdef USE_BNO085
+#else
 #include "util/I2Cdev.h"
 #include "util/MPU6050_6Axis_MotionApps_V6_12.h"
+#endif
+
+// Definitions
+//#define USE_BNO085
 
 // Type definitions
 typedef struct imuDataType
@@ -29,7 +35,10 @@ class IMU : public Configuration::Configurable {
 
 private:
 
+#ifdef USE_BNO085
+#else
     MPU6050 *_imu_sensor;
+#endif
 
 public:
 
