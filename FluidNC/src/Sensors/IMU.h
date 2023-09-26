@@ -2,19 +2,20 @@
 
 #pragma once
 
+// Definitions
+#define USE_BNO085
+
 #include <stdint.h>
 #include <sstream>
 #include <iomanip>
 #include "../Configuration/Configurable.h"
 #include "../Channel.h"
 #ifdef USE_BNO085
+#include "util/BNO085.h"
 #else
 #include "util/I2Cdev.h"
 #include "util/MPU6050_6Axis_MotionApps_V6_12.h"
 #endif
-
-// Definitions
-//#define USE_BNO085
 
 // Type definitions
 typedef struct imuDataType
@@ -36,6 +37,7 @@ class IMU : public Configuration::Configurable {
 private:
 
 #ifdef USE_BNO085
+    BNO085 *_imu_sensor;
 #else
     MPU6050 *_imu_sensor;
 #endif

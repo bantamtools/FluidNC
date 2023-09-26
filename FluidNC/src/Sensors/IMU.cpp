@@ -8,6 +8,7 @@ IMU::IMU() {
 
     // Allocate memory for IMU
 #ifdef USE_BNO085
+    _imu_sensor = new BNO085(config->_i2c[_i2c_num], _i2c_address);
 #else
     _imu_sensor = new MPU6050(config->_i2c[_i2c_num], _i2c_address);
 #endif
