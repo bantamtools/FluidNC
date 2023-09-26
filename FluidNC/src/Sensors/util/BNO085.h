@@ -48,6 +48,7 @@
 
 using namespace Machine;
 
+#define I2C_BUFFER_LENGTH 128 // Based on ESP32 reading
 #define BNO08x_I2CADDR_DEFAULT 0x4A ///< The default I2C address
 
 /* Additional Activities not listed in SH-2 lib */
@@ -73,11 +74,8 @@ public:
   bool enableReport(sh2_SensorId_t sensor, uint32_t interval_us = 10000);
   bool getSensorEvent(sh2_SensorValue_t *value);
 
-  sh2_ProductIds_t prodIds; ///< The product IDs returned by the sensor
 
-private:
-    I2CBus *_i2c;
-    uint8_t _address;
+  sh2_ProductIds_t prodIds; ///< The product IDs returned by the sensor
 
 protected:
   virtual bool _init_sensor(int32_t sensor_id);
