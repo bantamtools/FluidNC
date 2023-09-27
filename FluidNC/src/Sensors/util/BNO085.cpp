@@ -167,6 +167,12 @@ bool BNO085::_init_sensor(int32_t sensor_id) {
   // Register sensor listener
   sh2_setSensorCallback(sensorHandler, NULL);
 
+  // Enable automatic saving of dynamic calibration data
+  status = sh2_setDcdAutoSave(true);
+  if (status != SH2_OK) {
+    return false;
+  }
+
   return true;
 }
 
