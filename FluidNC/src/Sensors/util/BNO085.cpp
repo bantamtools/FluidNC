@@ -61,7 +61,8 @@
 #include "BNO085.h"
 
 #ifdef BNO085_DEBUG
-static uint32_t start_time = 0;
+static uint32_t quat_start_time = 0;
+static uint32_t mag_start_time = 0;
 #endif
 
 static I2CBus *_i2c;
@@ -118,24 +119,24 @@ bool BNO085::init(int32_t sensor_id) {
 
   status = _init_sensor(sensor_id);
 
+  // Enable calibration - use defaults for now
+  //sh2_getCalConfig(&cal_config);
+  //cal_config |= (SH2_CAL_MAG | SH2_CAL_ACCEL); // SH2_CAL_GYRO, SH2_CAL_PLANAR
+  //sh2_setCalConfig(cal_config);
+
   // Enable reporting
   if (status) {
     status = enableReport(_report_type, _report_interval_us);
     delay_ms(100);
+    //status = enableReport(SH2_MAGNETIC_FIELD_CALIBRATED);  // Needed for mag cal
+    //delay_ms(100);
   }
 
-  // Enable calibration
-  sh2_getCalConfig(&cal_config);
-  cal_config |= (SH2_CAL_MAG | SH2_CAL_ACCEL); // SH2_CAL_GYRO, SH2_CAL_PLANAR
-  sh2_setCalConfig(cal_config);
 
 #ifdef BNO085_DEBUG
-  // Print cal config
-  sh2_getCalConfig(&cal_config);
-  log_info("BMO085 Calibration -> " << to_hex(cal_config));
-    
   // DEBUG: Start print timer
-  start_time = millis();
+  quat_start_time = millis();
+  mag_start_time = millis();
 #endif
 
   return status;
@@ -181,6 +182,8 @@ void BNO085::get_data(float *yaw, float *pitch, float *roll) {
   if (wasReset()) {
     enableReport(_report_type, _report_interval_us);
     delay_ms(100);
+    //enableReport(SH2_MAGNETIC_FIELD_CALIBRATED);  // Needed for mag cal
+    //delay_ms(100);
   }
 
   // Translate quaternion into yaw, pitch and roll
@@ -234,13 +237,22 @@ void BNO085::get_data(float *yaw, float *pitch, float *roll) {
 
     // DEBUG: Display yaw/pitch/roll angles in degrees and sensor accuracy (0-3)
 #ifdef BNO085_DEBUG
-    if ((millis() - start_time) >= BNO085_DEBUG_PRINT_MS) {
-        start_time = millis();
+    if ((millis() - quat_start_time) >= BNO085_DEBUG_PRINT_MS) {
+        quat_start_time = millis();
         log_info("ypr: [" << *yaw << " " << *pitch << " " << *roll << "] acc: " << sensor_value.status);
     }
 #endif
 
   }
+
+  // DEBUG: Print out mag accuracy (0-3) for calibration purposes
+//#ifdef BNO085_DEBUG
+//  if ((getSensorEvent(&sensor_value) && sensor_value.sensorId == SH2_MAGNETIC_FIELD_CALIBRATED) &&
+//      ((millis() - mag_start_time) >= BNO085_DEBUG_PRINT_MS)) {
+//    mag_start_time = millis();
+//    log_info("mag xyz: [" << sensor_value.un.magneticField.x << " " << sensor_value.un.magneticField.y << " " << sensor_value.un.magneticField.z << "] acc: " << sensor_value.status);
+//  }
+//#endif
 }
 
 /**
