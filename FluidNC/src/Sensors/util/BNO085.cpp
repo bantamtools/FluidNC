@@ -60,6 +60,10 @@
 
 #include "BNO085.h"
 
+#ifdef BNO085_DEBUG
+static uint32_t start_time = 0;
+#endif
+
 static I2CBus *_i2c;
 static uint8_t _address;
 
@@ -103,6 +107,7 @@ BNO085::~BNO085(void) {
  */
 bool BNO085::init(int32_t sensor_id) {
 
+  uint8_t cal_config;
   bool status;
 
   _HAL.open = i2chal_open;
@@ -118,6 +123,20 @@ bool BNO085::init(int32_t sensor_id) {
     status = enableReport(_report_type, _report_interval_us);
     delay_ms(100);
   }
+
+  // Enable calibration
+  sh2_getCalConfig(&cal_config);
+  cal_config |= (SH2_CAL_MAG | SH2_CAL_ACCEL); // SH2_CAL_GYRO, SH2_CAL_PLANAR
+  sh2_setCalConfig(cal_config);
+
+#ifdef BNO085_DEBUG
+  // Print cal config
+  sh2_getCalConfig(&cal_config);
+  log_info("BMO085 Calibration -> " << to_hex(cal_config));
+    
+  // DEBUG: Start print timer
+  start_time = millis();
+#endif
 
   return status;
 }
@@ -186,11 +205,18 @@ void BNO085::get_data(float *yaw, float *pitch, float *roll) {
     *pitch *= RAD_TO_DEG;
     *roll *= RAD_TO_DEG;
 
+    // Negate the yaw to match other IMU results
+    *yaw *= -1.0;
+
     // TODO: Do something with accuracy info (0-3, 3 is best)
 
     // DEBUG: Display yaw/pitch/roll angles in degrees and sensor accuracy (0-3)
-    //log_info("ypr: [" << *yaw << " " << *pitch << " " << *roll << "] acc: " << sensor_value.status);
-    //delay_ms(100);
+#ifdef BNO085_DEBUG
+    if ((millis() - start_time) >= BNO085_DEBUG_PRINT_MS) {
+        start_time = millis();
+        log_info("ypr: [" << *yaw << " " << *pitch << " " << *roll << "] acc: " << sensor_value.status);
+    }
+#endif
 
   }
 }

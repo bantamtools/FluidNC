@@ -48,8 +48,11 @@
 
 using namespace Machine;
 
-#define I2C_BUFFER_LENGTH 128 // Based on ESP32 reading
-#define BNO08x_I2CADDR_DEFAULT 0x4A ///< The default I2C address
+#define I2C_BUFFER_LENGTH       128   // Based on ESP32 reading
+#define BNO085_I2CADDR_DEFAULT  0x4A  // The default I2C address
+
+#define BNO085_DEBUG
+#define BNO085_DEBUG_PRINT_MS   1000
 
 /* Additional Activities not listed in SH-2 lib */
 #define PAC_ON_STAIRS 8 ///< Activity code for being on stairs
@@ -62,7 +65,7 @@ using namespace Machine;
  */
 class BNO085 {
 public:
-  BNO085(I2CBus *i2c, uint8_t address = BNO08x_I2CADDR_DEFAULT);
+  BNO085(I2CBus *i2c, uint8_t address = BNO085_I2CADDR_DEFAULT);
   ~BNO085();
 
   bool init(int32_t sensor_id = 0);
