@@ -186,16 +186,38 @@ void BNO085::get_data(float *yaw, float *pitch, float *roll) {
   // Translate quaternion into yaw, pitch and roll
   if (getSensorEvent(&sensor_value) && sensor_value.sensorId == _report_type) {
 
+    float qr, qi, qj, qk;
+    float sqr, sqi, sqj, sqk;
+
     // Calculate Euler angles in degrees
-    float qr = sensor_value.un.arvrStabilizedRV.real;
-    float qi = sensor_value.un.arvrStabilizedRV.i;
-    float qj = sensor_value.un.arvrStabilizedRV.j;
-    float qk = sensor_value.un.arvrStabilizedRV.k;
+    if (_report_type == SH2_ROTATION_VECTOR) {
+      qr = sensor_value.un.rotationVector.real;
+      qi = sensor_value.un.rotationVector.i;
+      qj = sensor_value.un.rotationVector.j;
+      qk = sensor_value.un.rotationVector.k;
+    } else if (_report_type == SH2_GAME_ROTATION_VECTOR) {
+      qr = sensor_value.un.gameRotationVector.real;
+      qi = sensor_value.un.gameRotationVector.i;
+      qj = sensor_value.un.gameRotationVector.j;
+      qk = sensor_value.un.gameRotationVector.k;
+    } else if (_report_type == SH2_ARVR_STABILIZED_RV) {
+      qr = sensor_value.un.arvrStabilizedRV.real;
+      qi = sensor_value.un.arvrStabilizedRV.i;
+      qj = sensor_value.un.arvrStabilizedRV.j;
+      qk = sensor_value.un.arvrStabilizedRV.k;
+    } else if (_report_type == SH2_ARVR_STABILIZED_GRV) {
+      qr = sensor_value.un.arvrStabilizedGRV.real;
+      qi = sensor_value.un.arvrStabilizedGRV.i;
+      qj = sensor_value.un.arvrStabilizedGRV.j;
+      qk = sensor_value.un.arvrStabilizedGRV.k;
+    } else {
+        qr = qi = qj = qk = 0.0;
+    }
     
-    float sqr = sq(qr);
-    float sqi = sq(qi);
-    float sqj = sq(qj);
-    float sqk = sq(qk);
+    sqr = sq(qr);
+    sqi = sq(qi);
+    sqj = sq(qj);
+    sqk = sq(qk);
 
     *yaw = atan2(2.0 * (qi * qj + qk * qr), (sqi - sqj - sqk + sqr));
     *pitch = asin(-2.0 * (qi * qk - qj * qr) / (sqi + sqj + sqk + sqr));
