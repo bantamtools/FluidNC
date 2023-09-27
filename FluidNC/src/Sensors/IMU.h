@@ -29,7 +29,11 @@ typedef struct imuDataType
 // Class
 class IMU : public Configuration::Configurable {
 
+#ifdef USE_BNO085
+    uint8_t _i2c_address = 0x4A;
+#else
     uint8_t _i2c_address = 0x68;
+#endif
     uint8_t _i2c_num = 1;
 
     Pin _int_pin;

@@ -189,8 +189,8 @@ void BNO085::get_data(float *yaw, float *pitch, float *roll) {
     // TODO: Do something with accuracy info (0-3, 3 is best)
 
     // DEBUG: Display yaw/pitch/roll angles in degrees and sensor accuracy (0-3)
-    log_info("ypr: [" << *yaw << " " << *pitch << " " << *roll << "] acc: " << sensor_value.status);
-    delay_ms(100);
+    //log_info("ypr: [" << *yaw << " " << *pitch << " " << *roll << "] acc: " << sensor_value.status);
+    //delay_ms(100);
 
   }
 }
