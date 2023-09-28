@@ -122,6 +122,19 @@ bool BNO085::init(int32_t sensor_id) {
 
   status = _init_sensor(sensor_id);
 
+  // DEBUG: Clear DCD memory with GPIO42 - disabled for now
+  //if (digitalRead(42) == HIGH) {
+  //  status = sh2_clearDcdAndReset();
+  //  if (status == SH2_OK) {
+  //      log_info("*** CAL DCD CLEAR OK ***");
+  //      delay_ms(5000);
+  //      ESP.restart();
+  //      while(1);
+  //  } else {
+  //      log_warn("*** CAL DCD CLEAR FAILED! ***");
+  //  }
+  //}
+
   // Tare all axes now with the specified basis from the header - disabled for now, not much better
   //switch (_report_type) {
   //  case SH2_ARVR_STABILIZED_GRV:   basis = SH2_TARE_BASIS_ARVR_STABILIZED_GRV;     break;
