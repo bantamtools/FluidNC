@@ -85,9 +85,11 @@ private:
 
   //sh2_SensorId_t _report_type   = SH2_ROTATION_VECTOR;
   //sh2_SensorId_t _report_type   = SH2_GAME_ROTATION_VECTOR;
-  sh2_SensorId_t _report_type   = SH2_ARVR_STABILIZED_RV;
-  //sh2_SensorId_t _report_type   = SH2_ARVR_STABILIZED_GRV;
+  //sh2_SensorId_t _report_type   = SH2_ARVR_STABILIZED_RV;
+  sh2_SensorId_t _report_type   = SH2_ARVR_STABILIZED_GRV;
+  //sh2_SensorId_t _report_type   = SH2_GYRO_INTEGRATED_RV;
   long _report_interval_us      = 5000;  // // 200Hz
+  //long _report_interval_us      = 2000;  // // 500Hz
 
 protected:
   virtual bool _init_sensor(int32_t sensor_id);

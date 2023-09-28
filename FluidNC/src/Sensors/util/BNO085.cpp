@@ -255,6 +255,11 @@ void BNO085::get_data(float *yaw, float *pitch, float *roll) {
       qi = sensor_value.un.arvrStabilizedGRV.i;
       qj = sensor_value.un.arvrStabilizedGRV.j;
       qk = sensor_value.un.arvrStabilizedGRV.k;
+    } else if (_report_type == SH2_GYRO_INTEGRATED_RV) {
+      qr = sensor_value.un.gyroIntegratedRV.real;
+      qi = sensor_value.un.gyroIntegratedRV.i;
+      qj = sensor_value.un.gyroIntegratedRV.j;
+      qk = sensor_value.un.gyroIntegratedRV.k;
     } else {
         qr = qi = qj = qk = 0.0;
     }
