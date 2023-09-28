@@ -222,6 +222,9 @@ typedef enum sh2_TareBasis {
     SH2_TARE_BASIS_ROTATION_VECTOR = 0,             /**< @brief Use Rotation Vector */
     SH2_TARE_BASIS_GAMING_ROTATION_VECTOR = 1,      /**< @brief Use Game Rotation Vector */
     SH2_TARE_BASIS_GEOMAGNETIC_ROTATION_VECTOR = 2, /**< @brief Use Geomagnetic R.V. */
+    SH2_TARE_BASIS_GYRO_INTEGRATED_RV = 3,          /**< @brief Use Gyro-Integrated R.V. */
+    SH2_TARE_BASIS_ARVR_STABILIZED_RV = 4,          /**< @brief Use ARVR Stabilized R.V. */
+    SH2_TARE_BASIS_ARVR_STABILIZED_GRV = 5,         /**< @brief Use ARVR Stabilized Geomagnetic R.V. */
 } sh2_TareBasis_t;
 
 /**

@@ -108,6 +108,7 @@ BNO085::~BNO085(void) {
  */
 bool BNO085::init(int32_t sensor_id) {
 
+  sh2_TareBasis_t basis;
   uint8_t cal_config;
   bool status;
 
@@ -118,6 +119,15 @@ bool BNO085::init(int32_t sensor_id) {
   _HAL.getTimeUs = hal_getTimeUs;
 
   status = _init_sensor(sensor_id);
+
+  // Tare all axes now with the specified basis from the header - disabled for now, not much better
+  //switch (_report_type) {
+  //  case SH2_ARVR_STABILIZED_GRV:   basis = SH2_TARE_BASIS_ARVR_STABILIZED_GRV;     break;
+  //  case SH2_ARVR_STABILIZED_RV:    basis = SH2_TARE_BASIS_ARVR_STABILIZED_RV;      break;
+  //  case SH2_GAME_ROTATION_VECTOR:  basis = SH2_TARE_BASIS_GAMING_ROTATION_VECTOR;  break;
+  //  default:                        basis = SH2_TARE_BASIS_ROTATION_VECTOR;         break;
+  //}
+  //sh2_setTareNow(SH2_TARE_X | SH2_TARE_Y | SH2_TARE_Z, basis);
 
   // Enable calibration - use defaults for now
   //sh2_getCalConfig(&cal_config);
