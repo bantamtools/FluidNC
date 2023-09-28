@@ -183,8 +183,8 @@ bool BNO085::_init_sensor(int32_t sensor_id) {
   // Register sensor listener
   sh2_setSensorCallback(sensorHandler, NULL);
 
-  // Enable automatic saving of dynamic calibration data
-  status = sh2_setDcdAutoSave(true);
+  // Disable automatic saving of dynamic calibration data
+  status = sh2_setDcdAutoSave(false);
   if (status != SH2_OK) {
     return false;
   }
@@ -204,12 +204,19 @@ void BNO085::get_data(float *yaw, float *pitch, float *roll) {
   if (wasReset()) {
     enableReport(_report_type, _report_interval_us);
     delay_ms(100);
-    //enableReport(SH2_MAGNETIC_FIELD_CALIBRATED);  // Needed for mag cal
-    //delay_ms(100);
+#ifdef BNO085_DEBUG_TRY_MAG_CAL
+    enableReport(SH2_MAGNETIC_FIELD_CALIBRATED);  // Needed for mag cal
+    delay_ms(100);
+#endif
+  }
+
+  // Wait for data to become available
+  while (!getSensorEvent(&sensor_value)) {
+    delay_ms(10);
   }
 
   // Translate quaternion into yaw, pitch and roll
-  if (getSensorEvent(&sensor_value) && sensor_value.sensorId == _report_type) {
+  if (sensor_value.sensorId == _report_type) {
 
     float qr, qi, qj, qk;
     float sqr, sqi, sqj, sqk;
@@ -269,7 +276,7 @@ void BNO085::get_data(float *yaw, float *pitch, float *roll) {
 
   // DEBUG: Print out mag accuracy (0-3) for calibration purposes
 #ifdef BNO085_DEBUG_TRY_MAG_CAL
-  if ((getSensorEvent(&sensor_value) && sensor_value.sensorId == SH2_MAGNETIC_FIELD_CALIBRATED) &&
+  if (sensor_value.sensorId == SH2_MAGNETIC_FIELD_CALIBRATED) &&
       ((millis() - mag_start_time) >= BNO085_DEBUG_PRINT_MS)) {
     mag_start_time = millis();
     log_info("mag xyz: [" << sensor_value.un.magneticField.x << " " << sensor_value.un.magneticField.y << " " << sensor_value.un.magneticField.z << "] acc: " << sensor_value.status);

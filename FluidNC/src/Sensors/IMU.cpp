@@ -49,8 +49,20 @@ void IMU::read() {
     // Obtain the lock
     _mutex.lock();
 
+    float temp_yaw, temp_pitch, temp_roll;
+    float sum_yaw = 0.0, sum_pitch = 0.0, sum_roll = 0.0;
+
     // Get the IMU data
-    _imu_sensor->get_data(&_imu_data.yaw, &_imu_data.pitch, &_imu_data.roll);
+    for (int i = 0; i < 3; i++) {
+        _imu_sensor->get_data(&temp_yaw, &temp_pitch, &temp_roll);
+        sum_yaw += temp_yaw;
+        sum_pitch += temp_pitch;
+        sum_roll += temp_roll;
+    }
+
+    _imu_data.yaw = sum_yaw / 3;
+    _imu_data.pitch = sum_pitch / 3;
+    _imu_data.roll = sum_roll / 3;
 
     // Return the lock
     _mutex.unlock();
