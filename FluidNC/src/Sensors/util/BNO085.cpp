@@ -145,9 +145,9 @@ bool BNO085::init(int32_t sensor_id) {
   //sh2_setTareNow(SH2_TARE_X | SH2_TARE_Y | SH2_TARE_Z, basis);
 
   // Enable calibration - use defaults for now
-  //sh2_getCalConfig(&cal_config);
-  //cal_config |= (SH2_CAL_MAG | SH2_CAL_ACCEL); // SH2_CAL_GYRO, SH2_CAL_PLANAR
-  //sh2_setCalConfig(cal_config);
+  sh2_getCalConfig(&cal_config);
+  cal_config |= (SH2_CAL_MAG | SH2_CAL_ACCEL); // SH2_CAL_GYRO, SH2_CAL_PLANAR
+  sh2_setCalConfig(cal_config);
 
   // Enable reporting
   if (status) {
@@ -196,8 +196,8 @@ bool BNO085::_init_sensor(int32_t sensor_id) {
   // Register sensor listener
   sh2_setSensorCallback(sensorHandler, NULL);
 
-  // Disable automatic saving of dynamic calibration data
-  status = sh2_setDcdAutoSave(false);
+  // Enable automatic saving of dynamic calibration data
+  status = sh2_setDcdAutoSave(true);
   if (status != SH2_OK) {
     return false;
   }
@@ -224,7 +224,7 @@ void BNO085::get_data(float *yaw, float *pitch, float *roll) {
   }
 
   // Wait for data to become available
-  while (!getSensorEvent(&sensor_value)) {
+  while (!getSensorEvent(&sensor_value) || sensor_value.sensorId != _report_type) {
     delay_ms(10);
   }
 
@@ -294,7 +294,7 @@ void BNO085::get_data(float *yaw, float *pitch, float *roll) {
 
   // DEBUG: Print out mag accuracy (0-3) for calibration purposes
 #ifdef BNO085_DEBUG_TRY_MAG_CAL
-  if (sensor_value.sensorId == SH2_MAGNETIC_FIELD_CALIBRATED) &&
+  if ((sensor_value.sensorId == SH2_MAGNETIC_FIELD_CALIBRATED) &&
       ((millis() - mag_start_time) >= BNO085_DEBUG_PRINT_MS)) {
     mag_start_time = millis();
     log_info("mag xyz: [" << sensor_value.un.magneticField.x << " " << sensor_value.un.magneticField.y << " " << sensor_value.un.magneticField.z << "] acc: " << sensor_value.status);
