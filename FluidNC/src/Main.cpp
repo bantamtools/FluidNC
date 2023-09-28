@@ -98,14 +98,6 @@ void setup() {
                 }
             }
 
-            if (config->_oled) {
-                config->_oled->init();
-            }
-
-            if (config->_sensors) {
-                config->_sensors->init();
-            }
-
             config->_stepping->init();  // Configure stepper interrupt timers
 
             plan_init();
@@ -117,6 +109,14 @@ void setup() {
             config->_control->init();
 
             config->_kinematics->init();
+
+            if (config->_oled) {
+                config->_oled->init();
+            }
+
+            if (config->_sensors) {
+                config->_sensors->init();
+            }
         }
 
         // Initialize system state.

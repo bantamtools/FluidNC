@@ -46,6 +46,7 @@ void Sensors::init() {
         _ultrasonic->init();
     }
     if (_imu) {
+        delay_ms(1000);  // Wait for steppers to settle
         _imu->init();
     }
 
