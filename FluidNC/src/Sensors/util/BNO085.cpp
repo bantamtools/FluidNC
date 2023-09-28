@@ -62,7 +62,9 @@
 
 #ifdef BNO085_DEBUG
 static uint32_t quat_start_time = 0;
+#ifdef BNO085_DEBUG_TRY_MAG_CAL
 static uint32_t mag_start_time = 0;
+#endif
 #endif
 
 static I2CBus *_i2c;
@@ -138,15 +140,19 @@ bool BNO085::init(int32_t sensor_id) {
   if (status) {
     status = enableReport(_report_type, _report_interval_us);
     delay_ms(100);
-    //status = enableReport(SH2_MAGNETIC_FIELD_CALIBRATED);  // Needed for mag cal
-    //delay_ms(100);
+#ifdef BNO085_DEBUG_TRY_MAG_CAL
+    status = enableReport(SH2_MAGNETIC_FIELD_CALIBRATED);  // Needed for mag cal
+    delay_ms(100);
+#endif
   }
 
 
 #ifdef BNO085_DEBUG
   // DEBUG: Start print timer
   quat_start_time = millis();
+#ifdef BNO085_DEBUG_TRY_MAG_CAL
   mag_start_time = millis();
+#endif
 #endif
 
   return status;
@@ -262,13 +268,13 @@ void BNO085::get_data(float *yaw, float *pitch, float *roll) {
   }
 
   // DEBUG: Print out mag accuracy (0-3) for calibration purposes
-//#ifdef BNO085_DEBUG
-//  if ((getSensorEvent(&sensor_value) && sensor_value.sensorId == SH2_MAGNETIC_FIELD_CALIBRATED) &&
-//      ((millis() - mag_start_time) >= BNO085_DEBUG_PRINT_MS)) {
-//    mag_start_time = millis();
-//    log_info("mag xyz: [" << sensor_value.un.magneticField.x << " " << sensor_value.un.magneticField.y << " " << sensor_value.un.magneticField.z << "] acc: " << sensor_value.status);
-//  }
-//#endif
+#ifdef BNO085_DEBUG_TRY_MAG_CAL
+  if ((getSensorEvent(&sensor_value) && sensor_value.sensorId == SH2_MAGNETIC_FIELD_CALIBRATED) &&
+      ((millis() - mag_start_time) >= BNO085_DEBUG_PRINT_MS)) {
+    mag_start_time = millis();
+    log_info("mag xyz: [" << sensor_value.un.magneticField.x << " " << sensor_value.un.magneticField.y << " " << sensor_value.un.magneticField.z << "] acc: " << sensor_value.status);
+  }
+#endif
 }
 
 /**

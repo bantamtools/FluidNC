@@ -53,6 +53,7 @@ using namespace Machine;
 
 #define BNO085_DEBUG
 #define BNO085_DEBUG_PRINT_MS   1000
+//#define BNO085_DEBUG_TRY_MAG_CAL
 
 /* Additional Activities not listed in SH-2 lib */
 #define PAC_ON_STAIRS 8 ///< Activity code for being on stairs
