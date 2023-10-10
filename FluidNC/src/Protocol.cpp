@@ -1123,7 +1123,7 @@ static void protocol_do_enter() {
                     }
 
                 // Back button
-                } else if (strcmp(config->_oled->_menu->get_selected()->display_name, "< Back") == 0) {
+                } else if ((strcmp(config->_oled->_menu->get_selected()->display_name, "< Back") == 0) || long_press) {
                     config->_oled->_menu->exit_submenu();
 
                 // Run file command if files menu
