@@ -1177,7 +1177,7 @@ void protocol_read_encoder() {
             case State::Idle:
 
                 enc_diff = config->_encoder->get_difference();
-                if (enc_diff != 0) {
+                if (abs(enc_diff) == 1) {  // Filter out excessive scrolling during other states
                     log_info("Encoder difference -> " << enc_diff); // Used by display for updates
                 }
                 break;
