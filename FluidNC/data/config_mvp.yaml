@@ -20,67 +20,67 @@ axes:
   shared_stepper_reset_pin: NO_PIN
   
   x:
-    steps_per_mm: 40
-    max_rate_mm_per_min: 12000
-    acceleration_mm_per_sec2: 7500
-    rapid_acceleration_mm_per_sec2: 7500
-    max_travel_mm: 216
+    steps_per_mm: 40.1
+    max_rate_mm_per_min: 18000
+    acceleration_mm_per_sec2: 6000
+    rapid_acceleration_mm_per_sec2: 10000
+    max_travel_mm: 222
     soft_limits: false
     homing:
       cycle: 2
-      mpos_mm: 4
+      mpos_mm: 11.4
       positive_direction: false
       feed_mm_per_min: 200
       seek_mm_per_min: 2000
     
     motor0:
       limit_neg_pin: gpio.1:high
-      pulloff_mm: 3
+      pulloff_mm: 4
       stepstick:
         disable_pin: gpio.15:low
-        direction_pin: gpio.16
+        direction_pin: gpio.16:low
         step_pin: gpio.17
     motor1:
       null_motor:
 
   y:
-    steps_per_mm: 34.5
-    max_rate_mm_per_min: 12000
-    acceleration_mm_per_sec2: 7500
-    rapid_acceleration_mm_per_sec2: 7500
-    max_travel_mm: 230
+    steps_per_mm: 36.7
+    max_rate_mm_per_min: 18000
+    acceleration_mm_per_sec2: 6000
+    rapid_acceleration_mm_per_sec2: 10000
+    max_travel_mm: 500
     soft_limits: false
     homing:
       cycle: -1
-      mpos_mm: -40
+      mpos_mm: -82.5
 
     motor0:
       limit_neg_pin: gpio.2:low
       pulloff_mm: 10
       stepstick:
         disable_pin: gpio.18:low
-        direction_pin: gpio.21:low
+        direction_pin: gpio.21:high
         step_pin: gpio.26
     motor1:
       null_motor:
 
   z:
-    steps_per_mm: 12.25
-    max_rate_mm_per_min: 12000
-    acceleration_mm_per_sec2: 70000
-    rapid_acceleration_mm_per_sec2: 70000
-    max_travel_mm: 16
+    steps_per_mm: 22.7
+    max_rate_mm_per_min: 18000
+    acceleration_mm_per_sec2: 2000
+    rapid_acceleration_mm_per_sec2: 10000
+    max_travel_mm: 10
     soft_limits: false
     homing:
       cycle: 1
-      mpos_mm: 2
+      mpos_mm: 0
       positive_direction: true
       feed_mm_per_min: 500
       seek_mm_per_min: 1000
 
     motor0:
       limit_pos_pin: gpio.4:high
-      pulloff_mm: 4
+      pulloff_mm: 2
       stepstick:
         disable_pin: gpio.47:low
         direction_pin: gpio.33:high
@@ -106,13 +106,6 @@ encoder:
   a_pin: gpio.35
   b_pin: gpio.48
 
-# Ultrasonic
-ultrasonic: 
-  trig_pin: gpio.37
-  echo_pin: gpio.38
-  pause_time_ms: 6000
-  pause_distance_cm: 15
-  
 # Configure SD card in SPI mode
 spi:
   miso_pin: gpio.8
