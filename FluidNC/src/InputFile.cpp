@@ -6,7 +6,9 @@
 #include "Report.h"
 
 InputFile::InputFile(const char* defaultFs, const char* path, WebUI::AuthenticationLevel auth_level, Channel& out) :
-    FileStream(path, "r", defaultFs), _auth_level(auth_level), _out(out), _line_num(0)  {}
+    FileStream(path, "r", defaultFs), _auth_level(auth_level), _out(out), _line_num(0)  {
+    log_info("Run file opened");  // Used by OLED for elapsed time
+}
 /*
   Read a line from the file
   Returns Error::Ok if a line was read, even if the line was empty.
@@ -93,4 +95,5 @@ void InputFile::stopJob() {
 
 InputFile::~InputFile() {
     _progress = "";
+    log_info("Run file closed");  // Used by OLED for elapsed time
 }

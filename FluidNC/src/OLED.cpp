@@ -171,6 +171,8 @@ void OLED::init() {
     allChannels.registration(this);
     setReportInterval(250);
 
+    _file_job_running = false;
+
     _active = true;
 }
 
@@ -212,7 +214,7 @@ void OLED::show_menu() {
     int menu_max_active_entries;
 
     // Don't show menu during Alarm, Run or Hold states
-    if (_state == "Alarm" || _state == "Run" || _state == "Hold:0" || _state == "Hold:1" || _download_mode || _popup) {
+    if (_state == "Alarm" || _state == "Run" || _state == "Hold:0" || _state == "Hold:1" || _download_mode || _file_job_running || _popup) {
         return;
     }
 
@@ -264,12 +266,12 @@ void OLED::show_file() {
     if (_state == "Run" && _run_start_time == 0) {
         _run_start_time = millis();
 
-    } else if ((_state == "Idle" && !sys.suspend.value && !_download_mode) || pct == 100) {
+    } else if ((_state == "Idle" && !_file_job_running && !_download_mode) || pct == 100) {
         _run_start_time = 0;
         _prev_run_time = 0;
         return;
-    } 
-
+    }
+    
     // Save off previous run time during a pause
     if ((_state == "Hold:0" || _state == "Hold:1") && (_run_start_time != 0)) {
         _prev_run_time += (millis() - _run_start_time);
@@ -277,12 +279,8 @@ void OLED::show_file() {
         return;
     }
 
-    if (_filename.length() == 0) {
-        return;
-    }
-    if (_state != "Run" && pct == 100) {
-        // This handles the case where the system returns to idle
-        // but shows one last SD report
+    // Exit if file not running, no filename or have one last SD report
+    if ((!_file_job_running) || (_run_start_time == 0) || (_filename.length() == 0) || (_state != "Run" && pct == 100)) {
         return;
     }
 
@@ -333,7 +331,7 @@ void OLED::show_dro(float* axes, bool isMpos, bool* limits) {
     saved_isMpos = isMpos;
     saved_limits = limits;
 
-    if (_state == "Alarm" || _state == "Hold:0" || _state == "Hold:1" || _menu->is_full_width() || _popup) {
+    if (_state == "Alarm" || _state == "Hold:0" || _state == "Hold:1" || _menu->is_full_width() || _popup || _file_job_running) {
         return;
     }
 
@@ -376,7 +374,7 @@ void OLED::show_dro(float* axes, bool isMpos, bool* limits) {
 }
 
 void OLED::show_radio_info() {
-    if (((_state == "Run" || _download_mode) && _filename.length()) || _state == "Hold:0" || _state == "Hold:1") {
+    if (((_state == "Run" || _download_mode) && _filename.length()) || _state == "Hold:0" || _state == "Hold:1" || _file_job_running) {
         return;
     }
 
@@ -797,6 +795,15 @@ void OLED::parse_report() {
     }
     if (_report.rfind("[MSG:INFO: File download completed]", 0) == 0) {
         _download_mode = false;        
+        return;
+    }
+    if (_report.rfind("[MSG:INFO: Run file opened]", 0) == 0) {
+        _file_job_running = true;
+        return;
+    }
+    if (_report.rfind("[MSG:INFO: Run file closed]", 0) == 0) {
+        _file_job_running = false;
+        refresh_display();  // Makes sure we clear the elapsed time display
         return;
     }
 }

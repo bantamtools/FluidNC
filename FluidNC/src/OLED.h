@@ -57,6 +57,7 @@ private:
     bool        _download_mode = false;
 
     float       _percent;
+    bool        _file_job_running = false;
     uint32_t    _run_start_time = 0;
     uint32_t    _prev_run_time = 0;
 
