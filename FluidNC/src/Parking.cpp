@@ -89,6 +89,8 @@ void Parking::park(bool restart) {
         retract_waypoint = MIN(retract_waypoint, _target_mpos);
     }
 
+    log_debug("PARK: restart = " << restart << " can_park = " << can_park() << " _axis = " << _axis << " parking_target = " << parking_target[_axis] << " _target_mpos = " << _target_mpos << " retract_waypoint = " << retract_waypoint);
+
     if (can_park() && parking_target[_axis] < _target_mpos) {
         // Retract spindle by pullout distance. Ensure retraction motion moves away from
         // the workpiece and waypoint motion doesn't exceed the parking target location.
@@ -131,6 +133,9 @@ void Parking::park(bool restart) {
     }
 }
 void Parking::unpark(bool restart) {
+
+    log_debug("UNPARK: can_park = " << can_park() << " _axis = " << _axis << " parking_target = " << parking_target[_axis] << " _target_mpos = " << _target_mpos << " retract_waypoint = " << retract_waypoint);
+
     // Execute fast restore motion to the pull-out position. Parking requires homing enabled.
     // NOTE: State is will remain DOOR, until the de-energizing and retract is complete.
     if (can_park()) {
@@ -196,4 +201,5 @@ void Parking::group(Configuration::HandlerBase& handler) {
     handler.item("rate_mm_per_min", _rate);
     handler.item("pullout_distance_mm", _pullout, 0, 3e38);
     handler.item("pullout_rate_mm_per_min", _pullout_rate);
+    handler.item("park_on_feedhold", _park_on_feedhold);
 }
