@@ -648,7 +648,14 @@ static void protocol_do_cycle_start() {
                 if (spindle_stop_ovr.value) {
                     spindle_stop_ovr.bit.restoreCycle = true;  // Set to restore in suspend routine and cycle start after.
                 } else {
-                    protocol_do_initiate_cycle();
+                    // Resume if not using parking on feedhold
+                    if ((!config->_parking->park_on_feedhold())) {
+                        protocol_do_initiate_cycle();
+
+                    // Unpark before resuming if needed
+                    } else if ((config->_parking->park_on_feedhold()) && (sys.suspend.bit.retractComplete)) {
+                        sys.suspend.bit.initiateRestore = true;
+                    }
                 }
             }
             break;
@@ -871,8 +878,8 @@ static void protocol_exec_rt_suspend() {
         // Block until initial hold is complete and the machine has stopped motion.
         if (sys.suspend.bit.holdComplete) {
             // Parking manager. Handles de/re-energizing, switch state checks, and parking motions for
-            // the safety door and sleep states.
-            if (sys.state == State::SafetyDoor || sys.state == State::Sleep) {
+            // the safety door, sleep and hold states (if enabled).
+            if (sys.state == State::SafetyDoor || sys.state == State::Sleep || (sys.state == State::Hold && config->_parking->park_on_feedhold())) {
                 // Handles retraction motions and de-energizing.
                 config->_parking->set_target();
                 if (!sys.suspend.bit.retractComplete) {
@@ -909,7 +916,9 @@ static void protocol_exec_rt_suspend() {
                     if (sys.suspend.bit.initiateRestore) {
                         config->_parking->unpark(sys.suspend.bit.restartRetract);
 
-                        if (!sys.suspend.bit.restartRetract && sys.state == State::SafetyDoor && !sys.suspend.bit.safetyDoorAjar) {
+                        if (!sys.suspend.bit.restartRetract && 
+                            ((sys.state == State::SafetyDoor && !sys.suspend.bit.safetyDoorAjar) ||
+                             (sys.state == State::Hold && config->_parking->park_on_feedhold()))) {
                             sys.state = State::Idle;
                             protocol_send_event(&cycleStartEvent);  // Resume program.
                         }
