@@ -18,6 +18,9 @@ Some features should not be changed. See notes below.
 
 */
 
+// DEBUG: Enable memory printouts
+//#define DEBUG_MEMORY
+
 // It is no longer necessary to edit this file to choose
 // a machine configuration; edit machine.h instead
 // machine.h is #included below, after some definitions

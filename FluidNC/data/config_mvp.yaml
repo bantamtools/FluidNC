@@ -116,11 +116,3 @@ sdcard:
   cs_pin: gpio.12
   card_detect_pin: gpio.14
   frequency_hz: 8000000
-
-# LED (0) and expansion IOs (1-4)
-user_outputs:
-  digital0_pin: gpio.5
-  digital1_pin: gpio.43
-  digital2_pin: gpio.44
-  digital3_pin: gpio.42
-  digital4_pin: gpio.6

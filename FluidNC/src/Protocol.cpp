@@ -156,6 +156,9 @@ void send_line(Channel& channel, const std::string& line) {
 }
 
 void output_loop(void* unused) {
+#ifdef DEBUG_MEMORY
+    uint32_t start_time = millis();
+#endif
     while (true) {
         LogMessage message;
         if (xQueueReceive(message_queue, &message, 0)) {
@@ -171,6 +174,12 @@ void output_loop(void* unused) {
             }
         }
         vTaskDelay(0);
+#ifdef DEBUG_MEMORY
+        if (millis() - start_time >= 10000) {
+            log_warn("output_loop watermark -> " << uxTaskGetStackHighWaterMark(NULL));
+            start_time = millis();
+        }
+#endif
     }
 }
 
@@ -182,6 +191,9 @@ char activeLine[Channel::maxLine];
 
 bool pollingPaused = false;
 void polling_loop(void* unused) {
+#ifdef DEBUG_MEMORY
+    uint32_t start_time = millis();
+#endif
     // Poll the input sources waiting for a complete line to arrive
     for (; true; /*feedLoopWDT(), */ vTaskDelay(0)) {
 
@@ -205,6 +217,12 @@ void polling_loop(void* unused) {
         // Polling without an argument both checks for realtime characters and
         // returns a line-oriented command if one is ready.
         activeChannel = pollChannels(activeLine);
+#ifdef DEBUG_MEMORY
+        if (millis() - start_time >= 10000) {
+            log_warn("polling_loop watermark -> " << uxTaskGetStackHighWaterMark(NULL));
+            start_time = millis();
+        }
+#endif
     }
 }
 
@@ -220,7 +238,7 @@ void start_polling() {
     } else {
         xTaskCreatePinnedToCore(polling_loop,      // task
                                 "poller",          // name for task
-                                8192,              // size of task stack
+                                6144,              // size of task stack
                                 0,                 // parameters
                                 1,                 // priority
                                 &pollingTask,      // task handle
@@ -228,8 +246,8 @@ void start_polling() {
         );
         xTaskCreatePinnedToCore(output_loop,  // task
                                 "output",     // name for task
-                                16000,
-                                // 8192,              // size of task stack
+                                4096,
+                                // 16000,              // size of task stack
                                 0,                 // parameters
                                 1,                 // priority
                                 &outputTask,       // task handle
