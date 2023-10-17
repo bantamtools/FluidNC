@@ -115,4 +115,4 @@ spi:
 sdcard:
   cs_pin: gpio.12
   card_detect_pin: gpio.14
-  frequency_hz: 8000000
+  frequency_hz: 4000000
