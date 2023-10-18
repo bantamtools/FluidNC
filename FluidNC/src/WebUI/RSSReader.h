@@ -10,6 +10,7 @@
 #include "../OLED.h"
 #include "../DownloadFile.h"
 #include <nvs.h>
+#include <WiFiClientSecure.h>
 
 #ifndef ENABLE_WIFI
 

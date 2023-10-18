@@ -22,6 +22,30 @@ namespace WebUI {
 
 #include "RSSReader.h"
 
+const char* dropbox_root_ca= \
+    "-----BEGIN CERTIFICATE-----\n" \
+    "MIIDrzCCApegAwIBAgIQCDvgVpBCRrGhdWrJWZHHSjANBgkqhkiG9w0BAQUFADBh\n" \
+    "MQswCQYDVQQGEwJVUzEVMBMGA1UEChMMRGlnaUNlcnQgSW5jMRkwFwYDVQQLExB3\n" \
+    "d3cuZGlnaWNlcnQuY29tMSAwHgYDVQQDExdEaWdpQ2VydCBHbG9iYWwgUm9vdCBD\n" \
+    "QTAeFw0wNjExMTAwMDAwMDBaFw0zMTExMTAwMDAwMDBaMGExCzAJBgNVBAYTAlVT\n" \
+    "MRUwEwYDVQQKEwxEaWdpQ2VydCBJbmMxGTAXBgNVBAsTEHd3dy5kaWdpY2VydC5j\n" \
+    "b20xIDAeBgNVBAMTF0RpZ2lDZXJ0IEdsb2JhbCBSb290IENBMIIBIjANBgkqhkiG\n" \
+    "9w0BAQEFAAOCAQ8AMIIBCgKCAQEA4jvhEXLeqKTTo1eqUKKPC3eQyaKl7hLOllsB\n" \
+    "CSDMAZOnTjC3U/dDxGkAV53ijSLdhwZAAIEJzs4bg7/fzTtxRuLWZscFs3YnFo97\n" \
+    "nh6Vfe63SKMI2tavegw5BmV/Sl0fvBf4q77uKNd0f3p4mVmFaG5cIzJLv07A6Fpt\n" \
+    "43C/dxC//AH2hdmoRBBYMql1GNXRor5H4idq9Joz+EkIYIvUX7Q6hL+hqkpMfT7P\n" \
+    "T19sdl6gSzeRntwi5m3OFBqOasv+zbMUZBfHWymeMr/y7vrTC0LUq7dBMtoM1O/4\n" \
+    "gdW7jVg/tRvoSSiicNoxBN33shbyTApOB6jtSj1etX+jkMOvJwIDAQABo2MwYTAO\n" \
+    "BgNVHQ8BAf8EBAMCAYYwDwYDVR0TAQH/BAUwAwEB/zAdBgNVHQ4EFgQUA95QNVbR\n" \
+    "TLtm8KPiGxvDl7I90VUwHwYDVR0jBBgwFoAUA95QNVbRTLtm8KPiGxvDl7I90VUw\n" \
+    "DQYJKoZIhvcNAQEFBQADggEBAMucN6pIExIK+t1EnE9SsPTfrgT1eXkIoyQY/Esr\n" \
+    "hMAtudXH/vTBH1jLuG2cenTnmCmrEbXjcKChzUyImZOMkXDiqw8cvpOp/2PV5Adg\n" \
+    "06O/nVsJ8dWO41P0jmP6P6fbtGbfYmbW0W5BjfIttep3Sp+dWOIrWcBAI+0tKIJF\n" \
+    "PnlUkiaY4IBIqDfv8NZ5YBberOgOzW6sRBc4L0na4UU+Krk2U886UAb3LujEV0ls\n" \
+    "YSEY1QSteDwsOoBrp+uvFRTp2InBuThs4pFsiv9kuXclVzDAGySj4dzp30d8tbQk\n" \
+    "CAUw7C29C79Fv1C5qfPrmAESrciIxpg0X40KPMbp1ZWVbd4=\n" \
+    "-----END CERTIFICATE-----\n";
+
 namespace WebUI {
     RSSReader rssReader __attribute__((init_priority(106))) ;
 }
@@ -474,7 +498,7 @@ namespace WebUI {
     // Downloads the specified RSS feed link to SD card
     void RSSReader::download_file(char *link, char *filename) {
 
-        WiFiClient download_client;
+        WiFiClientSecure download_client;
         String server, address;
 
         // Check for SD card, send message and return on fail
@@ -490,20 +514,22 @@ namespace WebUI {
             return;
         }
 
+        // Set the client certificate for HTTPS
+        download_client.setCACert(dropbox_root_ca);
+
         // Connect to selected server
-        if (download_client.connect(server.c_str(), 80)) {
+        if (download_client.connect(server.c_str(), 443)) {
 
             // Set no delay
             download_client.setNoDelay(1);
 
-            // Make GET request for selected link, use keep-alive for faster download
-            download_client.print("GET ");
+            // Make HEAD request to get the content length (Dropbox doesn't always honor in GET requests)
+            download_client.print("HEAD ");
             download_client.print(address.c_str());
             download_client.print(" HTTP/1.1\r\n");
             download_client.print("Host: ");
             download_client.print(server.c_str());
-            download_client.print("\r\n");
-            download_client.print("Connection: keep-alive\r\n\r\n");
+            download_client.print("\r\n\r\n");
 
             // Wait for HTTP connection
             while (download_client.connected() && !download_client.available()) {
@@ -528,12 +554,39 @@ namespace WebUI {
                     break;
                 }
             }
+
+            // Make GET request for selected link, use keep-alive for faster download
+            download_client.print("GET ");
+            download_client.print(address.c_str());
+            download_client.print(" HTTP/1.1\r\n");
+            download_client.print("Host: ");
+            download_client.print(server.c_str());
+            download_client.print("\r\n");
+            download_client.print("Connection: keep-alive\r\n\r\n");
+
+            // Wait for HTTP connection
+            while (download_client.connected() && !download_client.available()) {
+                delay(1);
+            }
+
+            // Skip the headers
+            while (download_client.available()) {
+
+                String line = download_client.readStringUntil('\n');
+                line.trim(); // Remove whitespace
+
+                // Read until find end of the headers (so we don't write them into our file)
+                if (line.length() == 0) {
+                    break;
+                }
+            }
             
             // Open the write file on SD
             DownloadFile *file = new DownloadFile(filename, content_length, allChannels);
             if (file) {
 
                 int bytes_read = 0;
+                int total_bytes = 0;
                 uint8_t buffer[1024];
 
                 // Download file
@@ -542,6 +595,8 @@ namespace WebUI {
                     if (download_client.available()) {
                         bytes_read = download_client.readBytes(buffer, sizeof(buffer));
                         file->write(buffer, bytes_read);
+                        total_bytes += bytes_read;
+                        if (total_bytes == content_length) break;  // Workaround for Dropbox not auto-closing after file completes
                     }
                 }
                 delete(file);
