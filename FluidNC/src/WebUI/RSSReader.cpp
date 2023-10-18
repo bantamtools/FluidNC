@@ -600,14 +600,14 @@ namespace WebUI {
                     }
                 }
                 delete(file);
-                log_info("File download completed");
 
                 // Update the files list on SD card and exit to main menu
                 sd_populate_files_menu();
                 if (config->_oled) {
                     config->_oled->_menu->exit_submenu();
                 }
-            
+                log_info("File download completed");
+
             } else {
                 log_warn("Error opening file");
             }
