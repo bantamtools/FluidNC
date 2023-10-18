@@ -28,7 +28,7 @@ bool i2c_master_init(int bus_number, pinnum_t sda_pin, pinnum_t scl_pin, uint32_
     }
 #ifdef CONFIG_IDF_TARGET_ESP32S3
     //Clock Stretching Timeout: 16b:esp32-s3
-    i2c_set_timeout((i2c_port_t)bus_number, 0x1f);$ss
+    i2c_set_timeout((i2c_port_t)bus_number, 0x1f);
 #else
     //Clock Stretching Timeout: 20b:esp32, 5b:esp32-c3, 24b:esp32-s2
     i2c_set_timeout((i2c_port_t)bus_number, 0xfffff);
