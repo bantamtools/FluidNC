@@ -31,7 +31,7 @@ namespace WebUI {
     StringSetting* rss_url;
     IntSetting* rss_refresh_sec;
 
-    static const String DEFAULT_RSS_WEB_SERVER  = "rss.bantamtools.com/";
+    static const String DEFAULT_RSS_WEB_SERVER  = "rss.bantamtools.com";
     static const String DEFAULT_RSS_ADDRESS     = "/";
     static const String DEFAULT_RSS_FULL_URL    = DEFAULT_RSS_WEB_SERVER + DEFAULT_RSS_ADDRESS;
     static const int MIN_RSS_URL = 0;
@@ -108,7 +108,7 @@ namespace WebUI {
 
             // RSS enabled, configure URL
             } else {
-                
+
                 // Parse the URL
                 res = parse_server_address(String(rss_url->get()), &_web_server, &_web_rss_address);
             }
@@ -218,6 +218,10 @@ namespace WebUI {
             if (found1 >= 0) {
                 *server = url.substring(found, found1);
                 *address = url.substring(found1);
+            // Special case with no trailing slash
+            } else {
+                *server = url;
+                *address = "/";
             }
         }
 
