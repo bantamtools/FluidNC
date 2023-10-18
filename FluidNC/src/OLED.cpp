@@ -279,8 +279,8 @@ void OLED::show_file() {
         return;
     }
 
-    // Exit if file not running, no filename or have one last SD report
-    if ((!_file_job_running) || (_run_start_time == 0) || (_filename.length() == 0) || (_state != "Run" && pct == 100)) {
+    // Exit if file/download not running, no filename or have one last SD report
+    if ((!_file_job_running && !_download_mode) || (_run_start_time == 0) || (_filename.length() == 0) || (_state != "Run" && pct == 100)) {
         return;
     }
 
