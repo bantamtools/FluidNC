@@ -41,7 +41,7 @@ namespace WebUI {
         void            handle();
         bool            started();
         String          get_url();
-        void            download_file(char *link);
+        void            download_file(char *link, char *filename);
         time_t          get_last_update_time() { return _last_update_time; };
         void            sync() { _refresh_start_ms = 0; };
         ListNodeType    *get_rss_feed() { return _rss_feed->head; };

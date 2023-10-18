@@ -472,10 +472,10 @@ namespace WebUI {
     }
 
     // Downloads the specified RSS feed link to SD card
-    void RSSReader::download_file(char *link) {
+    void RSSReader::download_file(char *link, char *filename) {
 
         WiFiClient download_client;
-        String server, address, filename;
+        String server, address;
 
         // Check for SD card, send message and return on fail
         if (!sd_card_is_present()) {
@@ -489,13 +489,6 @@ namespace WebUI {
         if(!parse_server_address(String(link), &server, &address)) {
             return;
         }
-
-        // Extract the filename from the address
-        int found = address.lastIndexOf("/");
-        if (found < 0) {
-            return;
-        }
-        filename = address.substring(found + 1);
 
         // Connect to selected server
         if (download_client.connect(server.c_str(), 80)) {
@@ -537,7 +530,7 @@ namespace WebUI {
             }
             
             // Open the write file on SD
-            DownloadFile *file = new DownloadFile(filename.c_str(), content_length, allChannels);
+            DownloadFile *file = new DownloadFile(filename, content_length, allChannels);
             if (file) {
 
                 int bytes_read = 0;

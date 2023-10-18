@@ -1153,7 +1153,7 @@ static void protocol_do_enter() {
                 // Download file command if RSS menu
                 } else if (config->_oled->_menu->is_rss_menu()) {
 #ifdef ENABLE_WIFI
-                    WebUI::rssReader.download_file(config->_oled->_menu->get_selected()->path);
+                    WebUI::rssReader.download_file(config->_oled->_menu->get_selected()->path, config->_oled->_menu->get_selected()->display_name);
 #endif
                 // Otherwise, enter the submenu if it exists
                 } else {
