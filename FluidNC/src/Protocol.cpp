@@ -156,7 +156,7 @@ void send_line(Channel& channel, const std::string& line) {
 }
 
 void output_loop(void* unused) {
-#ifdef DEBUG_MEMORY
+#ifdef DEBUG_MEMORY_WATERMARKS
     uint32_t start_time = millis();
 #endif
     while (true) {
@@ -174,7 +174,7 @@ void output_loop(void* unused) {
             }
         }
         vTaskDelay(0);
-#ifdef DEBUG_MEMORY
+#ifdef DEBUG_MEMORY_WATERMARKS
         if (millis() - start_time >= 10000) {
             log_warn("output_loop watermark -> " << uxTaskGetStackHighWaterMark(NULL));
             start_time = millis();
@@ -191,7 +191,7 @@ char activeLine[Channel::maxLine];
 
 bool pollingPaused = false;
 void polling_loop(void* unused) {
-#ifdef DEBUG_MEMORY
+#ifdef DEBUG_MEMORY_WATERMARKS
     uint32_t start_time = millis();
 #endif
     // Poll the input sources waiting for a complete line to arrive
@@ -217,7 +217,7 @@ void polling_loop(void* unused) {
         // Polling without an argument both checks for realtime characters and
         // returns a line-oriented command if one is ready.
         activeChannel = pollChannels(activeLine);
-#ifdef DEBUG_MEMORY
+#ifdef DEBUG_MEMORY_WATERMARKS
         if (millis() - start_time >= 10000) {
             log_warn("polling_loop watermark -> " << uxTaskGetStackHighWaterMark(NULL));
             start_time = millis();

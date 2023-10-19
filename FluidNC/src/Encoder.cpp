@@ -45,7 +45,7 @@ void Encoder::read_task(void *pvParameters) {
             instance->_ready_flag = true;
         }
 
-#ifdef DEBUG_MEMORY
+#ifdef DEBUG_MEMORY_WATERMARKS
         if (millis() - start_time >= 10000) {
             log_warn("encoder_read_task watermark -> " << uxTaskGetStackHighWaterMark(NULL));
             start_time = millis();

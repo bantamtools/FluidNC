@@ -19,7 +19,10 @@ Some features should not be changed. See notes below.
 */
 
 // DEBUG: Enable memory printouts
-//#define DEBUG_MEMORY
+#define DEBUG_MEMORY
+#ifdef DEBUG_MEMORY
+//#define DEBUG_MEMORY_WATERMARKS
+#endif
 
 // It is no longer necessary to edit this file to choose
 // a machine configuration; edit machine.h instead
