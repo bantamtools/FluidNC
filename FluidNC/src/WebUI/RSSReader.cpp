@@ -341,15 +341,9 @@ namespace WebUI {
     // Fetch an RSS feed and parse the data
     void RSSReader::fetch_and_parse_feed() {
         
-        bool insideItem = false;
-        char read_buf[RSS_FETCH_BUF_SIZE];
-        char c;
-        size_t nbytes;
         String rssChunk = "";
-        String rssItem = "";
         tinyxml2::XMLDocument rssDoc;
         tinyxml2::XMLElement *itemNode = nullptr;
-        String lastBuildDate = "";
 
         // Set up RSS client (use instead of HTTPClient, takes more memory)
         WiFiClient rssClient;
@@ -377,7 +371,7 @@ namespace WebUI {
 
             // Wait for HTTP connection
             while (rssClient.connected() && !rssClient.available()) {
-                delay(1);
+                vTaskDelay(RSS_FETCH_PERIODIC_MS/portTICK_PERIOD_MS);
             }
 
             // Skip the headers for speed
@@ -397,8 +391,12 @@ namespace WebUI {
                 while (rssClient.available() && _valid_feed) {
 
                     // Read a RSS data and append locally to RSS chunk
-                    nbytes = rssClient.readBytes(read_buf, RSS_FETCH_BUF_SIZE);
-                    rssChunk += String(read_buf).substring(0, nbytes);
+                    rssChunk += rssClient.readString();
+
+                    // Check for the start of a new item
+                    if (!itemNode && rssChunk.indexOf("<item>") >= 0) {
+                        itemNode = rssDoc.NewElement("item");
+                    }
 
                     // Check for the end of an item
                     if (itemNode && rssChunk.indexOf("</item>") >= 0) {
@@ -406,14 +404,10 @@ namespace WebUI {
                         // Extract the <item> content from the chunk
                         size_t start = rssChunk.indexOf("<item>");
                         size_t end = rssChunk.indexOf("</item>") + 7; // Include the </item> tag
-                        rssItem = rssChunk.substring(start, end);
-                        log_debug("RSS Item: " << rssItem.c_str());
-
-                        // Remove everything up to the item content from the chunk
-                        rssChunk.remove(0, end);
+                        log_debug("RSS Item: " << rssChunk.substring(start, end).c_str());
 
                         // Parse the extracted item content
-                        if (rssDoc.Parse(rssItem.c_str(), rssItem.length()) == tinyxml2::XML_SUCCESS) {
+                        if (rssDoc.Parse(rssChunk.substring(start, end).c_str(), rssChunk.substring(start, end).length()) == tinyxml2::XML_SUCCESS) {
 
                             itemNode = rssDoc.FirstChildElement("item");
                             parse_item(itemNode);
@@ -424,12 +418,9 @@ namespace WebUI {
                             _valid_feed = false;
                             log_warn("Failed to parse item XML");
                         }
-                        rssItem = "";
-                    }
 
-                    // Check for the start of a new item
-                    if (!itemNode && rssChunk.indexOf("<item>") >= 0) {
-                        itemNode = rssDoc.NewElement("item");
+                        // Remove everything up to the item content from the chunk
+                        rssChunk.remove(0, end);
                     }
                 }
 
@@ -446,8 +437,6 @@ namespace WebUI {
                         config->_oled->popup_msg("New RSS updates!", 5000);
                     }
                 }
-
-                // Check every 100ms
                 vTaskDelay(RSS_FETCH_PERIODIC_MS/portTICK_PERIOD_MS);
             }
 
@@ -474,7 +463,7 @@ namespace WebUI {
         
                 log_rss("Fetch completed");
             }
-        
+
         // Connection to RSS server failed
         } else {
 

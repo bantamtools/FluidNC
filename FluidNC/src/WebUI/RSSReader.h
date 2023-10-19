@@ -51,8 +51,7 @@ namespace WebUI {
 
     private:
 
-        static constexpr uint32_t       RSS_FETCH_PERIODIC_MS   = 100;
-        static constexpr uint32_t       RSS_FETCH_BUF_SIZE      = 512;
+        static constexpr uint32_t       RSS_FETCH_PERIODIC_MS   = 1;
 
         ListType        *_rss_feed;
 
