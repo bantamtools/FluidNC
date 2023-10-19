@@ -171,9 +171,10 @@ namespace WebUI {
 
         if (_started) {
 
-            // Poll the XML data and refresh the list after refresh period expires or after boot
-            if ((_refresh_start_ms == 0) || 
-                ((millis() - _refresh_start_ms) >= (_refresh_period_sec * 1000))) {
+            // Poll the XML data and refresh the list when IDLE, either after 
+            // refresh period expires or after boot
+            if ((sys.state == State::Idle) && ((_refresh_start_ms == 0) || 
+                ((millis() - _refresh_start_ms) >= (_refresh_period_sec * 1000)))) {
 
                 // Ensure the WebUI gets the updates first (if available)
                 // before we refresh and set the new update time
