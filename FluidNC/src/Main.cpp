@@ -31,8 +31,6 @@
 
 extern void make_user_commands();
 
-Encoder *encoder = new Encoder();
-
 #ifdef DEBUG_MEMORY
 // DEBUG: Memory management task
 void mem_task( void * pvParameters ) {

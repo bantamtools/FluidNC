@@ -21,6 +21,8 @@ Encoder::~Encoder() {}
 // Encoder read task
 void Encoder::read_task(void *pvParameters) {
 
+    uint32_t start_time = millis();
+
     // Connect pointer
     Encoder* instance = static_cast<Encoder*>(pvParameters);
 
@@ -42,6 +44,13 @@ void Encoder::read_task(void *pvParameters) {
             // Set ready flag
             instance->_ready_flag = true;
         }
+
+#ifdef DEBUG_MEMORY
+        if (millis() - start_time >= 10000) {
+            log_warn("encoder_read_task watermark -> " << uxTaskGetStackHighWaterMark(NULL));
+            start_time = millis();
+        }
+#endif
 
         // Check every 10ms
         vTaskDelay(ENC_READ_PERIODIC_MS/portTICK_PERIOD_MS);
