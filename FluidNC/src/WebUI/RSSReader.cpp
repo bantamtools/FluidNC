@@ -178,7 +178,7 @@ namespace WebUI {
 
                 // Ensure the WebUI gets the updates first (if available)
                 // before we refresh and set the new update time
-                vTaskDelay(RSS_FETCH_PERIODIC_MS/portTICK_PERIOD_MS);
+                vTaskDelay(100/portTICK_PERIOD_MS);
 
                 // Fetch and parse RSS feed
                 fetch_and_parse_feed();
