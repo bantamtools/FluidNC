@@ -342,8 +342,11 @@ namespace WebUI {
     void RSSReader::fetch_and_parse_feed() {
         
         bool insideItem = false;
+        char read_buf[RSS_FETCH_BUF_SIZE];
         char c;
+        size_t nbytes;
         String rssChunk = "";
+        String rssItem = "";
         tinyxml2::XMLDocument rssDoc;
         tinyxml2::XMLElement *itemNode = nullptr;
         String lastBuildDate = "";
@@ -374,20 +377,24 @@ namespace WebUI {
 
                 while (rssClient.available() && _valid_feed) {
 
-                    // Read a byte at a time into RSS chunk
-                    c = rssClient.read();
-                    rssChunk += c;
+                    // Read a RSS data and append locally to RSS chunk
+                    nbytes = rssClient.readBytes(read_buf, RSS_FETCH_BUF_SIZE);
+                    rssChunk += String(read_buf).substring(0, nbytes);
 
                     // Check for the end of an item
-                    if (itemNode && c == '>' && rssChunk.endsWith("</item>")) {
+                    if (itemNode && rssChunk.indexOf("</item>") >= 0) {
 
                         // Extract the <item> content from the chunk
                         size_t start = rssChunk.indexOf("<item>");
                         size_t end = rssChunk.indexOf("</item>") + 7; // Include the </item> tag
-                        rssChunk = rssChunk.substring(start, end);
+                        rssItem = rssChunk.substring(start, end);
+                        log_debug("RSS Item: " << rssItem.c_str());
+
+                        // Remove everything up to the item content from the chunk
+                        rssChunk.remove(0, end);
 
                         // Parse the extracted item content
-                        if (rssDoc.Parse(rssChunk.c_str(), rssChunk.length()) == tinyxml2::XML_SUCCESS) {
+                        if (rssDoc.Parse(rssItem.c_str(), rssItem.length()) == tinyxml2::XML_SUCCESS) {
 
                             itemNode = rssDoc.FirstChildElement("item");
                             parse_item(itemNode);
@@ -398,13 +405,12 @@ namespace WebUI {
                             _valid_feed = false;
                             log_warn("Failed to parse item XML");
                         }
-                        rssChunk = "";
+                        rssItem = "";
                     }
 
                     // Check for the start of a new item
-                    if (!itemNode && c == '>' && rssChunk.endsWith("<item>")) {
+                    if (!itemNode && rssChunk.indexOf("<item>") >= 0) {
                         itemNode = rssDoc.NewElement("item");
-                        rssChunk = "<item>";
                     }
                 }
 
