@@ -181,6 +181,69 @@ Channel* OLED::pollLine(char* line) {
     return nullptr;
 }
 
+// Updates the menu with encoder values
+void OLED::encoder_update(int16_t enc_diff) {
+   
+    // Save off the encoder difference to update the menu
+    _enc_diff = enc_diff;
+
+    // System IDLE and scrolling to jog
+    if ((sys.state == State::Idle) && (jog_state == JogState::Scrolling)) {
+
+        // Extract axis from menu item
+        char *axis = (strrchr(_menu->get_selected()->display_name, ' ') + 1);
+
+        // Start timer if not active
+        if (!jog_timer_active) {
+
+            // Set flag
+            jog_timer_active = true;
+
+            // Set up and start timer
+            const esp_timer_create_args_t jog_timer_args = {
+                .callback = &jog_timer_cb,
+                .arg = (void*)axis,
+                .name = "jog_timer"
+            };
+            esp_timer_handle_t jog_timer;
+            ESP_ERROR_CHECK(esp_timer_create(&jog_timer_args, &jog_timer));
+            ESP_ERROR_CHECK(esp_timer_start_once(jog_timer, JOG_TIMER_MS * 1000));
+        }
+
+        // Set the selected axis to the increment value and clamp to extents
+        switch (axis[0]) {
+            case 'X': 
+            
+                saved_axes[X_AXIS] += (JOG_X_STEP * (float)_enc_diff); 
+                if (saved_axes[X_AXIS] < limitsMinPosition(X_AXIS)) saved_axes[X_AXIS] = limitsMinPosition(X_AXIS);
+                if (saved_axes[X_AXIS] > limitsMaxPosition(X_AXIS)) saved_axes[X_AXIS] = limitsMaxPosition(X_AXIS);
+                break;
+            
+            case 'Y': 
+            
+                saved_axes[Y_AXIS] += (JOG_Y_STEP * (float)_enc_diff);
+                if (saved_axes[Y_AXIS] < limitsMinPosition(Y_AXIS)) saved_axes[Y_AXIS] = limitsMinPosition(Y_AXIS);
+                if (saved_axes[Y_AXIS] > limitsMaxPosition(Y_AXIS)) saved_axes[Y_AXIS] = limitsMaxPosition(Y_AXIS);
+                break;
+
+            case 'Z': 
+            
+                saved_axes[Z_AXIS] += (JOG_Z_STEP * (float)_enc_diff); 
+                if (saved_axes[Z_AXIS] < limitsMinPosition(Z_AXIS)) saved_axes[Z_AXIS] = limitsMinPosition(Z_AXIS);
+                if (saved_axes[Z_AXIS] > limitsMaxPosition(Z_AXIS)) saved_axes[Z_AXIS] = limitsMaxPosition(Z_AXIS);
+                break;
+            
+            default: break;
+        }
+
+        // Update the dro with the jog axis value
+        show_dro(saved_axes, saved_isMpos, saved_limits);
+    }
+
+    // Refresh the menu
+    show_menu();
+}
+
 void OLED::show_state() {
 
     // Clear anything left in radio area
@@ -691,72 +754,6 @@ void OLED::parse_BT() {
     delay_ms(_radio_delay);
 }
 
-//[MSG:INFO: Encoder difference -> 1]
-void OLED::parse_encoder() {
-
-    size_t  start   = strlen("[MSG:INFO: Encoder difference -> ");
-    size_t  end     = _report.rfind("]");
-    
-    // Save off the encoder difference to update the menu
-    _enc_diff = stoi(_report.substr(start, end - start));
-
-    // System IDLE and scrolling to jog
-    if ((sys.state == State::Idle) && (jog_state == JogState::Scrolling)) {
-
-        // Extract axis from menu item
-        char *axis = (strrchr(_menu->get_selected()->display_name, ' ') + 1);
-
-        // Start timer if not active
-        if (!jog_timer_active) {
-
-            // Set flag
-            jog_timer_active = true;
-
-            // Set up and start timer
-            const esp_timer_create_args_t jog_timer_args = {
-                .callback = &jog_timer_cb,
-                .arg = (void*)axis,
-                .name = "jog_timer"
-            };
-            esp_timer_handle_t jog_timer;
-            ESP_ERROR_CHECK(esp_timer_create(&jog_timer_args, &jog_timer));
-            ESP_ERROR_CHECK(esp_timer_start_once(jog_timer, JOG_TIMER_MS * 1000));
-        }
-
-        // Set the selected axis to the increment value and clamp to extents
-        switch (axis[0]) {
-            case 'X': 
-            
-                saved_axes[X_AXIS] += (JOG_X_STEP * (float)_enc_diff); 
-                if (saved_axes[X_AXIS] < limitsMinPosition(X_AXIS)) saved_axes[X_AXIS] = limitsMinPosition(X_AXIS);
-                if (saved_axes[X_AXIS] > limitsMaxPosition(X_AXIS)) saved_axes[X_AXIS] = limitsMaxPosition(X_AXIS);
-                break;
-            
-            case 'Y': 
-            
-                saved_axes[Y_AXIS] += (JOG_Y_STEP * (float)_enc_diff);
-                if (saved_axes[Y_AXIS] < limitsMinPosition(Y_AXIS)) saved_axes[Y_AXIS] = limitsMinPosition(Y_AXIS);
-                if (saved_axes[Y_AXIS] > limitsMaxPosition(Y_AXIS)) saved_axes[Y_AXIS] = limitsMaxPosition(Y_AXIS);
-                break;
-
-            case 'Z': 
-            
-                saved_axes[Z_AXIS] += (JOG_Z_STEP * (float)_enc_diff); 
-                if (saved_axes[Z_AXIS] < limitsMinPosition(Z_AXIS)) saved_axes[Z_AXIS] = limitsMinPosition(Z_AXIS);
-                if (saved_axes[Z_AXIS] > limitsMaxPosition(Z_AXIS)) saved_axes[Z_AXIS] = limitsMaxPosition(Z_AXIS);
-                break;
-            
-            default: break;
-        }
-
-        // Update the dro with the jog axis value
-        show_dro(saved_axes, saved_isMpos, saved_limits);
-    }
-
-    // Refresh the menu
-    show_menu();
-}
-
 void OLED::parse_report() {
     if (_report.length() == 0) {
         return;
@@ -785,10 +782,6 @@ void OLED::parse_report() {
         parse_BT();
         return;
     }
-    if (_report.rfind("[MSG:INFO: Encoder difference -> ", 0) == 0) {
-        parse_encoder();
-        return;
-    } 
     if (_report.rfind("[MSG:INFO: File download started]", 0) == 0) {
         _download_mode = true;
         return;

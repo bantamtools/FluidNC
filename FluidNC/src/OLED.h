@@ -76,7 +76,6 @@ private:
     void parse_IP();
     void parse_AP();
     void parse_BT();
-    void parse_encoder();
 
     void parse_axes(std::string s, float* axes);
     void parse_numbers(std::string s, float* nums, int maxnums);
@@ -118,6 +117,7 @@ public:
     virtual ~OLED() = default;
 
     void init();
+    void encoder_update(int16_t enc_diff);
     void refresh_display(bool menu_only = false);
     void popup_msg(std::string msg, int dly = 2000);
     JogState get_jog_state();

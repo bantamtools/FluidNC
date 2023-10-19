@@ -1,14 +1,13 @@
 // Copyright (c) 2023 Matt Staniszewski, Bantam Tools
 
 #include "Encoder.h"
+#include "Machine/MachineConfig.h"
 
 static const char *TAG = "encoder";
 
 // Encoder constructor
 Encoder::Encoder() {
 
-    _is_active = false;
-    _ready_flag = false;
 	_pcnt_unit = PCNT_UNIT_0;
     _current_value = -1;
     _previous_value = -1;
@@ -21,7 +20,9 @@ Encoder::~Encoder() {}
 // Encoder read task
 void Encoder::read_task(void *pvParameters) {
 
+#ifdef DEBUG_MEMORY_WATERMARKS
     uint32_t start_time = millis();
+#endif
 
     // Connect pointer
     Encoder* instance = static_cast<Encoder*>(pvParameters);
@@ -29,20 +30,18 @@ void Encoder::read_task(void *pvParameters) {
     // Loop forever
     while(1) {
 
-        // Read new values when data has been read or not initialized
-        if (!instance->_ready_flag) {
+        // Save the previous value
+        instance->_previous_value = instance->_current_value;
 
-            // Save the previous value
-            instance->_previous_value = instance->_current_value;
+        // Read the current encoder value
+        pcnt_get_counter_value(instance->_pcnt_unit, &instance->_current_value);
 
-            // Read the current encoder value
-            pcnt_get_counter_value(instance->_pcnt_unit, &instance->_current_value);
+        // Calculate the difference
+        instance->_difference = instance->_current_value - instance->_previous_value;
 
-            // Calculate the difference
-            instance->_difference = instance->_current_value - instance->_previous_value;
-
-            // Set ready flag
-            instance->_ready_flag = true;
+        // Update display if IDLE (filter out excessing scrolling)
+        if (sys.state == State::Idle && abs(instance->_difference) == 1) {
+            config->_oled->encoder_update(instance->_difference);
         }
 
 #ifdef DEBUG_MEMORY_WATERMARKS
@@ -64,7 +63,6 @@ void Encoder::init() {
 
     // Check if encoder pins configured
     if (!_a_pin.defined() || !_b_pin.defined()) {
-        _is_active = false;
         return;
     }
 
@@ -109,27 +107,6 @@ void Encoder::init() {
 
     // Start read task
     xTaskCreate(read_task, "encoder_read_task", ENC_READ_STACK_SIZE, this, ENC_READ_PRIORITY, NULL);
-
-    // Set flag
-    _is_active = true;
-}
-
-// Get the difference between current and previous value
-int16_t Encoder::get_difference() {
-
-    // Return zero if not active or not ready yet
-    if (!_is_active || !_ready_flag) return 0;
-
-    // Return the difference and clear the flag
-    int16_t difference = _difference;
-    _ready_flag = false;
-
-    return difference;
-}
-
-// Returns active flag
-bool Encoder::is_active() {
-    return _is_active;
 }
 
 // Configurable functions

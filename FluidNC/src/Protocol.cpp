@@ -203,8 +203,7 @@ void polling_loop(void* unused) {
             continue;
         }
 
-        // Read encoder and ultrasonic sensor
-        protocol_read_encoder();
+        // Read ultrasonic sensor
         protocol_read_ultrasonic();
 
         if (activeChannel) {
@@ -1163,45 +1162,6 @@ static void protocol_do_enter() {
             break;
 
         default: break;
-    }
-}
-
-// Reads the encoder input and prints a report if available
-void protocol_read_encoder() {
-
-    int16_t enc_diff;
-
-    // Bail if encoder not configured
-    if (!config->_encoder) return;
-    
-    // Read and report the difference if encoder is active
-    if (config->_encoder->is_active()) {
-
-        switch (sys.state) {
-
-            // Encoder does nothing in these states
-            case State::ConfigAlarm:
-            case State::CheckMode:
-            case State::Homing:
-            case State::Sleep:
-            case State::SafetyDoor:
-            case State::Alarm:
-            case State::Cycle:
-            case State::Hold:
-            case State::Jog:
-                break;
-
-            // Read the difference if idle
-            case State::Idle:
-
-                enc_diff = config->_encoder->get_difference();
-                if (abs(enc_diff) == 1) {  // Filter out excessive scrolling during other states
-                    log_info("Encoder difference -> " << enc_diff); // Used by display for updates
-                }
-                break;
-
-            default: break;
-        }
     }
 }
 
