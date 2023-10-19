@@ -354,6 +354,8 @@ namespace WebUI {
         // Set up RSS client (use instead of HTTPClient, takes more memory)
         WiFiClient rssClient;
 
+        log_debug("Fetch started");
+
         // Set flag to start with valid feed and clear entry count
         _valid_feed = true;
         _num_entries = 0;
@@ -372,7 +374,24 @@ namespace WebUI {
             rssClient.print(_web_server.c_str());
             rssClient.print("\r\n");
             rssClient.print("Connection: close\r\n\r\n");
-            
+
+            // Wait for HTTP connection
+            while (rssClient.connected() && !rssClient.available()) {
+                delay(1);
+            }
+
+            // Skip the headers for speed
+            while (rssClient.available()) {
+
+                String line = rssClient.readStringUntil('\n');
+                line.trim(); // Remove whitespace
+
+                // Read until find end of the headers (so we don't parse them)
+                if (line.length() == 0) {
+                    break;
+                }
+            } 
+
             while ((rssClient.connected() || rssClient.available()) && _valid_feed) {
 
                 while (rssClient.available() && _valid_feed) {
