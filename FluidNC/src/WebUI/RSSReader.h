@@ -67,13 +67,12 @@ namespace WebUI {
         time_t          _last_update_time;
         time_t          _new_update_time;
         nvs_handle_t    _handle;
-        bool            _refresh_rss;
 
         bool            parse_server_address(const String url, String *server, String *address);
         void            parse_item(tinyxml2::XMLElement *itemNode);
         int             parse_month_name(const char *monthName);
         time_t          parse_pub_date(const char *pubDate);
-        static void     fetch_and_parse_task(void *pvParameters);
+        void            fetch_and_parse_feed();
     };
 
     extern RSSReader rssReader; 

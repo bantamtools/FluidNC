@@ -24,7 +24,7 @@ class Encoder : public Configuration::Configurable {
 
 private:
 
-    static constexpr UBaseType_t    ENC_READ_PRIORITY       = (configMAX_PRIORITIES - 3);
+    static constexpr UBaseType_t    ENC_READ_PRIORITY       = (configMAX_PRIORITIES - 2);
     static constexpr uint32_t       ENC_READ_STACK_SIZE     = 1536;
     static constexpr uint32_t       ENC_READ_PERIODIC_MS    = 10;
 

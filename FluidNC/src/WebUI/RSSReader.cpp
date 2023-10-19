@@ -79,7 +79,6 @@ namespace WebUI {
         _valid_feed         = false;
         _num_entries        = 0;
         _handle             = 0;
-        _refresh_rss        = false;
 
         rss_url = new StringSetting("RSS URL", WEBSET, WA, NULL, "RSS/URL", DEFAULT_RSS_FULL_URL.c_str(), MIN_RSS_URL, MAX_RSS_URL, NULL);
         rss_refresh_sec = new IntSetting("RSS Refresh Time (s)", WEBSET, WA, NULL, "RSS/RefreshTimeSec", DEFAULT_RSS_REFRESH_SEC, MIN_RSS_REFRESH_SEC, MAX_RSS_REFRESH_SEC, NULL);
@@ -142,11 +141,6 @@ namespace WebUI {
             end();
         }
         _started = res;
-
-        // Fork a task for parsing XML data
-        if (res) {
-            xTaskCreate(fetch_and_parse_task, "fetch_and_parse_task", RSS_FETCH_STACK_SIZE, this, RSS_FETCH_PRIORITY, NULL);
-        }
         
         return _started;
     }
@@ -166,7 +160,6 @@ namespace WebUI {
         _started            = false;
         _valid_feed         = false;
         _num_entries        = 0;
-        _refresh_rss        = false;
 
         // Close NVS handle
         nvs_close(_handle);  
@@ -184,13 +177,10 @@ namespace WebUI {
 
                 // Ensure the WebUI gets the updates first (if available)
                 // before we refresh and set the new update time
-                delay_ms(100);
+                vTaskDelay(RSS_FETCH_PERIODIC_MS/portTICK_PERIOD_MS);
 
-                // Flag an RSS refresh
-                _refresh_rss = true;
-
-                // DEBUG: Print Heap
-                //log_warn("Heap: " << xPortGetFreeHeapSize());
+                // Fetch and parse RSS feed
+                fetch_and_parse_feed();
 
                 // Set new refresh start time
                 _refresh_start_ms = millis();
@@ -349,7 +339,7 @@ namespace WebUI {
     }
 
     // Fetch an RSS feed and parse the data
-    void RSSReader::fetch_and_parse_task(void *pvParameters) {
+    void RSSReader::fetch_and_parse_feed() {
         
         bool insideItem = false;
         char c;
@@ -358,141 +348,124 @@ namespace WebUI {
         tinyxml2::XMLElement *itemNode = nullptr;
         String lastBuildDate = "";
 
-        // Connect pointer
-        RSSReader* instance = static_cast<RSSReader*>(pvParameters);
-
         // Set up RSS client (use instead of HTTPClient, takes more memory)
         WiFiClient rssClient;
 
-        // Loop forever
-        while(1) {
+        // Set flag to start with valid feed and clear entry count
+        _valid_feed = true;
+        _num_entries = 0;
 
-            // Wait for flag to trigger
-            if (instance->_refresh_rss) {
+        // Prep the RSS feed list
+        prep(_rss_feed);
 
-                // Clear flag
-                instance->_refresh_rss = false;
+        // Connected to RSS server
+        if (rssClient.connect(_web_server.c_str(), 80)) {
 
-                // Set flag to start with valid feed and clear entry count
-                instance->_valid_feed = true;
-                instance->_num_entries = 0;
+            // GET Request
+            rssClient.print("GET ");
+            rssClient.print(_web_rss_address.c_str());
+            rssClient.print(" HTTP/1.1\r\n");
+            rssClient.print("Host: ");
+            rssClient.print(_web_server.c_str());
+            rssClient.print("\r\n");
+            rssClient.print("Connection: close\r\n\r\n");
+            
+            while ((rssClient.connected() || rssClient.available()) && _valid_feed) {
 
-                // Prep the RSS feed list
-                instance->prep(instance->_rss_feed);
+                while (rssClient.available() && _valid_feed) {
 
-                // Connected to RSS server
-                if (rssClient.connect(instance->_web_server.c_str(), 80)) {
+                    // Read a byte at a time into RSS chunk
+                    c = rssClient.read();
+                    rssChunk += c;
 
-                    // GET Request
-                    rssClient.print("GET ");
-                    rssClient.print(instance->_web_rss_address.c_str());
-                    rssClient.print(" HTTP/1.1\r\n");
-                    rssClient.print("Host: ");
-                    rssClient.print(instance->_web_server.c_str());
-                    rssClient.print("\r\n");
-                    rssClient.print("Connection: close\r\n\r\n");
-                    
-                    while ((rssClient.connected() || rssClient.available()) && instance->_valid_feed) {
+                    // Check for the end of an item
+                    if (itemNode && c == '>' && rssChunk.endsWith("</item>")) {
 
-                        while (rssClient.available() && instance->_valid_feed) {
+                        // Extract the <item> content from the chunk
+                        size_t start = rssChunk.indexOf("<item>");
+                        size_t end = rssChunk.indexOf("</item>") + 7; // Include the </item> tag
+                        rssChunk = rssChunk.substring(start, end);
 
-                            // Read a byte at a time into RSS chunk
-                            c = rssClient.read();
-                            rssChunk += c;
+                        // Parse the extracted item content
+                        if (rssDoc.Parse(rssChunk.c_str(), rssChunk.length()) == tinyxml2::XML_SUCCESS) {
 
-                            // Check for the end of an item
-                            if (itemNode && c == '>' && rssChunk.endsWith("</item>")) {
+                            itemNode = rssDoc.FirstChildElement("item");
+                            parse_item(itemNode);
+                            itemNode = nullptr;
+                            rssDoc.Clear();
 
-                                // Extract the <item> content from the chunk
-                                size_t start = rssChunk.indexOf("<item>");
-                                size_t end = rssChunk.indexOf("</item>") + 7; // Include the </item> tag
-                                rssChunk = rssChunk.substring(start, end);
-
-                                // Parse the extracted item content
-                                if (rssDoc.Parse(rssChunk.c_str(), rssChunk.length()) == tinyxml2::XML_SUCCESS) {
-
-                                    itemNode = rssDoc.FirstChildElement("item");
-                                    instance->parse_item(itemNode);
-                                    itemNode = nullptr;
-                                    rssDoc.Clear();
-
-                                } else {
-                                    instance->_valid_feed = false;
-                                    log_warn("Failed to parse item XML");
-                                }
-                                rssChunk = "";
-                            }
-
-                            // Check for the start of a new item
-                            if (!itemNode && c == '>' && rssChunk.endsWith("<item>")) {
-                                itemNode = rssDoc.NewElement("item");
-                                rssChunk = "<item>";
-                            }
+                        } else {
+                            _valid_feed = false;
+                            log_warn("Failed to parse item XML");
                         }
-
-                        // Once gone through all RSS entries, update the last update time to
-                        // the newest one available and popup message about new updates
-                        if (instance->_new_update_time > instance->_last_update_time) {
-                            if (nvs_set_i32(instance->_handle, "update_time", instance->_new_update_time) == ESP_OK) {
-                                instance->_last_update_time = instance->_new_update_time;
-                            } else {
-                                log_warn("Failed to store RSS update time in NVS!");
-                            }
-
-                            if (config->_oled) {
-                                config->_oled->popup_msg("New RSS updates!", 5000);
-                            }
-                        }
-
-                        // Check every 100ms
-                        vTaskDelay(RSS_FETCH_PERIODIC_MS/portTICK_PERIOD_MS);
+                        rssChunk = "";
                     }
 
-                    // Bad RSS URL or format
-                    if ((instance->_num_entries == 0) || (!instance->_valid_feed)) {
-
-                        // Report error
-                        instance->prep(instance->_rss_feed);
-                        instance->add_entry(instance->_rss_feed, NULL, "ERROR", "Error: Bad URL/format", false);
-
-                        // Print error message to display
-                        if (config->_oled) {
-                            config->_oled->refresh_display(true);
-                        }
-
-                        log_rss("Error: Bad URL or format");
-
-                    } else {
-
-                        // Refresh the menu
-                        if (config->_oled) {
-                            config->_oled->refresh_display(true);
-                        }
-                
-                        log_rss("Fetch completed");
+                    // Check for the start of a new item
+                    if (!itemNode && c == '>' && rssChunk.endsWith("<item>")) {
+                        itemNode = rssDoc.NewElement("item");
+                        rssChunk = "<item>";
                     }
-                
-                // Connection to RSS server failed
-                } else {
-
-                    // Report error
-                    instance->add_entry(instance->_rss_feed, NULL, "ERROR", "Error: Connection failed", false);
-
-                    // Print error message to display
-                    if (config->_oled) {
-                        config->_oled->refresh_display(true);
-                    }
-                    
-                    log_rss("Error: Connection failed");
                 }
-                
-                // End the RSS connection
-                rssClient.stop();
+
+                // Once gone through all RSS entries, update the last update time to
+                // the newest one available and popup message about new updates
+                if (_new_update_time > _last_update_time) {
+                    if (nvs_set_i32(_handle, "update_time", _new_update_time) == ESP_OK) {
+                        _last_update_time = _new_update_time;
+                    } else {
+                        log_warn("Failed to store RSS update time in NVS!");
+                    }
+
+                    if (config->_oled) {
+                        config->_oled->popup_msg("New RSS updates!", 5000);
+                    }
+                }
+
+                // Check every 100ms
+                vTaskDelay(RSS_FETCH_PERIODIC_MS/portTICK_PERIOD_MS);
             }
 
-            // Check every 100ms
-            vTaskDelay(RSS_FETCH_PERIODIC_MS/portTICK_PERIOD_MS);
+            // Bad RSS URL or format
+            if ((_num_entries == 0) || (!_valid_feed)) {
+
+                // Report error
+                prep(_rss_feed);
+                add_entry(_rss_feed, NULL, "ERROR", "Error: Bad URL/format", false);
+
+                // Print error message to display
+                if (config->_oled) {
+                    config->_oled->refresh_display(true);
+                }
+
+                log_rss("Error: Bad URL or format");
+
+            } else {
+
+                // Refresh the menu
+                if (config->_oled) {
+                    config->_oled->refresh_display(true);
+                }
+        
+                log_rss("Fetch completed");
+            }
+        
+        // Connection to RSS server failed
+        } else {
+
+            // Report error
+            add_entry(_rss_feed, NULL, "ERROR", "Error: Connection failed", false);
+
+            // Print error message to display
+            if (config->_oled) {
+                config->_oled->refresh_display(true);
+            }
+            
+            log_rss("Error: Connection failed");
         }
+
+        // End the RSS connection
+        rssClient.stop();
     }
 
     // Downloads the specified RSS feed link to SD card
