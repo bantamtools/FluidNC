@@ -66,6 +66,7 @@ private:
     uint8_t _i2c_num = 0;
 
     int _enc_diff = 0;
+    bool _enc_scroll_lockout = true;
 
     bool _popup = false;
     

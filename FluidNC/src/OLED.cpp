@@ -151,6 +151,10 @@ void OLED::init() {
     if (_error) {
         return;
     }
+
+    // Lock out encoder scrolling until menu ready
+    _enc_scroll_lockout = true;
+
     log_info("OLED I2C address:" << to_hex(_address) << " width: " << _width << " height: " << _height);
     _oled = new SSD1306_I2C(_address, _geometry, config->_i2c[_i2c_num], 400000);
     _oled->init();
@@ -183,6 +187,9 @@ Channel* OLED::pollLine(char* line) {
 
 // Updates the menu with encoder values
 void OLED::encoder_update(int16_t enc_diff) {
+
+    // Bail if we're locked out or downloading a file
+    if (_enc_scroll_lockout || _download_mode) return;
    
     // Save off the encoder difference to update the menu
     _enc_diff = enc_diff;
@@ -319,6 +326,7 @@ void OLED::show_menu() {
         i++;
     }
     _oled->display();
+    _enc_scroll_lockout = false;  // Unlock scrolling to use menu (if needed)
 }
 
 void OLED::show_file() {
