@@ -13,6 +13,7 @@ private:
     I2CBus* _i2c;
     int     _frequency;
     bool    _error = false;
+    int     _num_retries;
 
 public:
     SSD1306_I2C(uint8_t address, OLEDDISPLAY_GEOMETRY g, I2CBus* i2c, int frequency) :
@@ -111,8 +112,14 @@ private:
         uint8_t _data[2];
         _data[0] = 0x80;  // control
         _data[1] = command;
-        if (_i2c->write(_address, _data, sizeof(_data)) < 0) {
-            log_error("OLED is not responding");
+        _num_retries = 0;
+        while ((_i2c->write(_address, _data, sizeof(_data)) < 0) && (_num_retries < 3)) {
+            log_debug("OLED is not responding, retrying...");
+            _num_retries++;
+            delay_ms(100);
+        }
+        if (_num_retries == 3) {
+            log_error("OLED failed to respond");
             _error = true;
         }
     }
