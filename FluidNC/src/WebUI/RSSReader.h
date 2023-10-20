@@ -51,9 +51,9 @@ namespace WebUI {
 
     private:
 
-        static constexpr UBaseType_t    RSS_FETCH_PRIORITY      = (configMAX_PRIORITIES - 4);
-        static constexpr uint32_t       RSS_FETCH_STACK_SIZE    = 3072;
-        static constexpr uint32_t       RSS_FETCH_PERIODIC_MS   = 100;
+        static constexpr UBaseType_t    RSS_FETCH_PRIORITY      = 1;    // Same priority as loop, polling tasks
+        static constexpr uint32_t       RSS_FETCH_STACK_SIZE    = 2560;
+        static constexpr uint32_t       RSS_FETCH_PERIODIC_MS   = 1000;
 
         ListType        *_rss_feed;
 
