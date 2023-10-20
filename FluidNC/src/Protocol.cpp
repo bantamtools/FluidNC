@@ -175,7 +175,7 @@ void output_loop(void* unused) {
         }
         vTaskDelay(0);
 #ifdef DEBUG_MEMORY_WATERMARKS
-        if (millis() - start_time >= 10000) {
+        if (millis() - start_time >= DEBUG_MEMORY_WM_TIME_MS) {
             log_warn("output_loop watermark -> " << uxTaskGetStackHighWaterMark(NULL));
             start_time = millis();
         }
@@ -217,7 +217,7 @@ void polling_loop(void* unused) {
         // returns a line-oriented command if one is ready.
         activeChannel = pollChannels(activeLine);
 #ifdef DEBUG_MEMORY_WATERMARKS
-        if (millis() - start_time >= 10000) {
+        if (millis() - start_time >= DEBUG_MEMORY_WM_TIME_MS) {
             log_warn("polling_loop watermark -> " << uxTaskGetStackHighWaterMark(NULL));
             start_time = millis();
         }
@@ -290,6 +290,10 @@ void protocol_main_loop() {
     check_startup_state();
     start_polling();
 
+#ifdef DEBUG_MEMORY_WATERMARKS
+    uint32_t start_time = millis();
+#endif
+
     // ---------------------------------------------------------------------------------
     // Primary loop! Upon a system abort, this exits back to main() to reset the system.
     // This is also where the system idles while waiting for something to do.
@@ -341,6 +345,13 @@ void protocol_main_loop() {
                 log_warn("Low memory: " << heapLowWater << " bytes");
             }
         }
+
+#ifdef DEBUG_MEMORY_WATERMARKS
+        if (millis() - start_time >= DEBUG_MEMORY_WM_TIME_MS) {
+            log_warn("loop_task watermark -> " << uxTaskGetStackHighWaterMark(NULL));
+            start_time = millis();
+        }
+#endif
     }
     return; /* Never reached */
 }

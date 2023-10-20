@@ -39,13 +39,13 @@ void Encoder::read_task(void *pvParameters) {
         // Calculate the difference
         instance->_difference = instance->_current_value - instance->_previous_value;
 
-        // Update display if IDLE (filter out excessing scrolling)
+        // Update display if IDLE (filter out excessive scrolling)
         if (sys.state == State::Idle && abs(instance->_difference) == 1) {
             config->_oled->encoder_update(instance->_difference);
         }
 
 #ifdef DEBUG_MEMORY_WATERMARKS
-        if (millis() - start_time >= 10000) {
+        if (millis() - start_time >= DEBUG_MEMORY_WM_TIME_MS) {
             log_warn("encoder_read_task watermark -> " << uxTaskGetStackHighWaterMark(NULL));
             start_time = millis();
         }
