@@ -47,7 +47,7 @@ const char* dropbox_root_ca= \
     "-----END CERTIFICATE-----\n";
 
 namespace WebUI {
-    RSSReader rssReader __attribute__((init_priority(106))) ;
+    RSSReader rssReader __attribute__((init_priority(110))) ;
 }
 
 namespace WebUI {
