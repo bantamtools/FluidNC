@@ -26,7 +26,7 @@ class Encoder : public Configuration::Configurable {
 private:
 
     static constexpr UBaseType_t    ENC_READ_PRIORITY       = (configMAX_PRIORITIES - 2);
-    static constexpr uint32_t       ENC_READ_STACK_SIZE     = 1536;
+    static constexpr uint32_t       ENC_READ_STACK_SIZE     = 3072;
     static constexpr uint32_t       ENC_READ_PERIODIC_MS    = 10;
 
     static void read_task(void *pvParameters);
@@ -34,7 +34,6 @@ private:
 protected:
 
 	pcnt_unit_t _pcnt_unit;
-    bool _is_active = false;
     int16_t _current_value = -1;
 	int16_t _previous_value = -1;
 	int16_t _difference = -1;
@@ -45,7 +44,6 @@ public:
     ~Encoder();
 
     void init();
-    bool is_active();
 
     // Configuration handlers.
     void validate() override;
