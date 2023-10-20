@@ -9,51 +9,23 @@ static const char *TAG = "encoder";
 Encoder::Encoder() {
 
 	_pcnt_unit = PCNT_UNIT_0;
-    _current_value = -1;
-    _previous_value = -1;
-    _difference = -1;
+    _difference = 0;
 }
 
 // Encoder destructor
 Encoder::~Encoder() {}
 
-// Encoder read task
-void Encoder::read_task(void *pvParameters) {
-
-#ifdef DEBUG_MEMORY_WATERMARKS
-    uint32_t start_time = millis();
-#endif
+// Encoder read callback
+void IRAM_ATTR Encoder::encoder_read_cb(void *args) {
 
     // Connect pointer
-    Encoder* instance = static_cast<Encoder*>(pvParameters);
+    Encoder* instance = static_cast<Encoder*>(args);
 
-    // Loop forever
-    while(1) {
+    // Read the current encoder value
+    pcnt_get_counter_value(instance->_pcnt_unit, &instance->_difference);
 
-        // Save the previous value
-        instance->_previous_value = instance->_current_value;
-
-        // Read the current encoder value
-        pcnt_get_counter_value(instance->_pcnt_unit, &instance->_current_value);
-
-        // Calculate the difference
-        instance->_difference = instance->_current_value - instance->_previous_value;
-
-        // Update display if IDLE (filter out excessive scrolling)
-        if (sys.state == State::Idle && abs(instance->_difference) == 1) {
-            config->_oled->encoder_update(instance->_difference);
-        }
-
-#ifdef DEBUG_MEMORY_WATERMARKS
-        if (millis() - start_time >= DEBUG_MEMORY_WM_TIME_MS) {
-            log_warn("encoder_read_task watermark -> " << uxTaskGetStackHighWaterMark(NULL));
-            start_time = millis();
-        }
-#endif
-
-        // Check every 10ms
-        vTaskDelay(ENC_READ_PERIODIC_MS/portTICK_PERIOD_MS);
-    }
+    // Clear the counter to zero
+    pcnt_counter_clear(instance->_pcnt_unit);
 }
 
 // Initializes the encoder subsystem
@@ -95,6 +67,12 @@ void Encoder::init() {
 	pcnt_set_filter_value(_pcnt_unit, 1023);
 	pcnt_filter_enable(_pcnt_unit);
 
+    // Set interruipt events for +/-1
+    pcnt_set_event_value(_pcnt_unit, PCNT_EVT_THRES_1, 1);
+    pcnt_event_enable(_pcnt_unit, PCNT_EVT_THRES_1);
+    pcnt_set_event_value(_pcnt_unit, PCNT_EVT_THRES_0, -1);
+    pcnt_event_enable(_pcnt_unit, PCNT_EVT_THRES_0);
+
 	// Initialize PCNT's counter
 	pcnt_counter_pause(_pcnt_unit);
 	pcnt_counter_clear(_pcnt_unit);
@@ -102,11 +80,19 @@ void Encoder::init() {
 	// Everything is set up, now go to counting
 	pcnt_counter_resume(_pcnt_unit);
 
-    // Load up the first current value, gives us an accurate difference on first read_task run
-    pcnt_get_counter_value(_pcnt_unit, &_current_value);
+    // Install the PCNT ISR service and add read callback
+    pcnt_isr_service_install(0);
+    pcnt_isr_handler_add(_pcnt_unit, encoder_read_cb, this);    
+}
 
-    // Start read task
-    xTaskCreate(read_task, "encoder_read_task", ENC_READ_STACK_SIZE, this, ENC_READ_PRIORITY, NULL);
+// Get the difference between current and previous value
+int16_t Encoder::get_difference() {
+
+    // Return the difference and reset internal
+    int16_t difference = _difference;
+    _difference = 0;
+
+    return difference;
 }
 
 // Configurable functions

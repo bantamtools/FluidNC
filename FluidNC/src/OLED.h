@@ -69,6 +69,8 @@ private:
     bool _enc_scroll_lockout = true;
 
     bool _popup = false;
+
+    void encoder_update(int16_t enc_diff);
     
     void parse_report();
     void parse_status_report();
@@ -118,7 +120,6 @@ public:
     virtual ~OLED() = default;
 
     void init();
-    void encoder_update(int16_t enc_diff);
     void refresh_display(bool menu_only = false);
     void popup_msg(std::string msg, int dly = 2000);
     JogState get_jog_state();

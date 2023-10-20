@@ -182,14 +182,15 @@ void OLED::init() {
 
 Channel* OLED::pollLine(char* line) {
     autoReport();
+    encoder_update(config->_encoder->get_difference());    
     return nullptr;
 }
 
 // Updates the menu with encoder values
 void OLED::encoder_update(int16_t enc_diff) {
 
-    // Bail if we're locked out or downloading a file
-    if (_enc_scroll_lockout || _download_mode) return;
+    // Bail if 1) Not IDLE, 2) excessive scrolling, 3) locked out or 4) downloading a file
+    if ((sys.state != State::Idle) || (abs(enc_diff) != 1) || _enc_scroll_lockout || _download_mode) return;
    
     // Save off the encoder difference to update the menu
     _enc_diff = enc_diff;
