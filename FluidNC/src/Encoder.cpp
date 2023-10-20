@@ -1,51 +1,31 @@
 // Copyright (c) 2023 Matt Staniszewski, Bantam Tools
 
 #include "Encoder.h"
+#include "Machine/MachineConfig.h"
 
 static const char *TAG = "encoder";
 
 // Encoder constructor
 Encoder::Encoder() {
 
-    _is_active = false;
-    _ready_flag = false;
 	_pcnt_unit = PCNT_UNIT_0;
-    _current_value = -1;
-    _previous_value = -1;
-    _difference = -1;
+    _difference = 0;
 }
 
 // Encoder destructor
 Encoder::~Encoder() {}
 
-// Encoder read task
-void Encoder::read_task(void *pvParameters) {
+// Encoder read callback
+void IRAM_ATTR Encoder::encoder_read_cb(void *args) {
 
     // Connect pointer
-    Encoder* instance = static_cast<Encoder*>(pvParameters);
+    Encoder* instance = static_cast<Encoder*>(args);
 
-    // Loop forever
-    while(1) {
+    // Read the current encoder value
+    pcnt_get_counter_value(instance->_pcnt_unit, &instance->_difference);
 
-        // Read new values when data has been read or not initialized
-        if (!instance->_ready_flag) {
-
-            // Save the previous value
-            instance->_previous_value = instance->_current_value;
-
-            // Read the current encoder value
-            pcnt_get_counter_value(instance->_pcnt_unit, &instance->_current_value);
-
-            // Calculate the difference
-            instance->_difference = instance->_current_value - instance->_previous_value;
-
-            // Set ready flag
-            instance->_ready_flag = true;
-        }
-
-        // Check every 10ms
-        vTaskDelay(ENC_READ_PERIODIC_MS/portTICK_PERIOD_MS);
-    }
+    // Clear the counter to zero
+    pcnt_counter_clear(instance->_pcnt_unit);
 }
 
 // Initializes the encoder subsystem
@@ -55,7 +35,6 @@ void Encoder::init() {
 
     // Check if encoder pins configured
     if (!_a_pin.defined() || !_b_pin.defined()) {
-        _is_active = false;
         return;
     }
 
@@ -88,6 +67,12 @@ void Encoder::init() {
 	pcnt_set_filter_value(_pcnt_unit, 1023);
 	pcnt_filter_enable(_pcnt_unit);
 
+    // Set interruipt events for +/-1
+    pcnt_set_event_value(_pcnt_unit, PCNT_EVT_THRES_1, 1);
+    pcnt_event_enable(_pcnt_unit, PCNT_EVT_THRES_1);
+    pcnt_set_event_value(_pcnt_unit, PCNT_EVT_THRES_0, -1);
+    pcnt_event_enable(_pcnt_unit, PCNT_EVT_THRES_0);
+
 	// Initialize PCNT's counter
 	pcnt_counter_pause(_pcnt_unit);
 	pcnt_counter_clear(_pcnt_unit);
@@ -95,32 +80,19 @@ void Encoder::init() {
 	// Everything is set up, now go to counting
 	pcnt_counter_resume(_pcnt_unit);
 
-    // Load up the first current value, gives us an accurate difference on first read_task run
-    pcnt_get_counter_value(_pcnt_unit, &_current_value);
-
-    // Start read task
-    xTaskCreate(read_task, "encoder_read_task", ENC_READ_STACK_SIZE, this, ENC_READ_PRIORITY, NULL);
-
-    // Set flag
-    _is_active = true;
+    // Install the PCNT ISR service and add read callback
+    pcnt_isr_service_install(0);
+    pcnt_isr_handler_add(_pcnt_unit, encoder_read_cb, this);    
 }
 
 // Get the difference between current and previous value
 int16_t Encoder::get_difference() {
 
-    // Return zero if not active or not ready yet
-    if (!_is_active || !_ready_flag) return 0;
-
-    // Return the difference and clear the flag
+    // Return the difference and reset internal
     int16_t difference = _difference;
-    _ready_flag = false;
+    _difference = 0;
 
     return difference;
-}
-
-// Returns active flag
-bool Encoder::is_active() {
-    return _is_active;
 }
 
 // Configurable functions

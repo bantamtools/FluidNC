@@ -156,6 +156,9 @@ void send_line(Channel& channel, const std::string& line) {
 }
 
 void output_loop(void* unused) {
+#ifdef DEBUG_MEMORY_WATERMARKS
+    uint32_t start_time = millis();
+#endif
     while (true) {
         LogMessage message;
         if (xQueueReceive(message_queue, &message, 0)) {
@@ -171,6 +174,12 @@ void output_loop(void* unused) {
             }
         }
         vTaskDelay(0);
+#ifdef DEBUG_MEMORY_WATERMARKS
+        if (millis() - start_time >= DEBUG_MEMORY_WM_TIME_MS) {
+            log_warn("output_loop watermark -> " << uxTaskGetStackHighWaterMark(NULL));
+            start_time = millis();
+        }
+#endif
     }
 }
 
@@ -182,6 +191,9 @@ char activeLine[Channel::maxLine];
 
 bool pollingPaused = false;
 void polling_loop(void* unused) {
+#ifdef DEBUG_MEMORY_WATERMARKS
+    uint32_t start_time = millis();
+#endif
     // Poll the input sources waiting for a complete line to arrive
     for (; true; /*feedLoopWDT(), */ vTaskDelay(0)) {
 
@@ -191,8 +203,7 @@ void polling_loop(void* unused) {
             continue;
         }
 
-        // Read encoder and ultrasonic sensor
-        protocol_read_encoder();
+        // Read ultrasonic sensor
         protocol_read_ultrasonic();
 
         if (activeChannel) {
@@ -205,6 +216,12 @@ void polling_loop(void* unused) {
         // Polling without an argument both checks for realtime characters and
         // returns a line-oriented command if one is ready.
         activeChannel = pollChannels(activeLine);
+#ifdef DEBUG_MEMORY_WATERMARKS
+        if (millis() - start_time >= DEBUG_MEMORY_WM_TIME_MS) {
+            log_warn("polling_loop watermark -> " << uxTaskGetStackHighWaterMark(NULL));
+            start_time = millis();
+        }
+#endif
     }
 }
 
@@ -220,7 +237,7 @@ void start_polling() {
     } else {
         xTaskCreatePinnedToCore(polling_loop,      // task
                                 "poller",          // name for task
-                                8192,              // size of task stack
+                                6144,              // size of task stack
                                 0,                 // parameters
                                 1,                 // priority
                                 &pollingTask,      // task handle
@@ -228,8 +245,8 @@ void start_polling() {
         );
         xTaskCreatePinnedToCore(output_loop,  // task
                                 "output",     // name for task
-                                16000,
-                                // 8192,              // size of task stack
+                                4096,
+                                // 16000,              // size of task stack
                                 0,                 // parameters
                                 1,                 // priority
                                 &outputTask,       // task handle
@@ -272,6 +289,10 @@ uint32_t heapLowWater = UINT_MAX;
 void protocol_main_loop() {
     check_startup_state();
     start_polling();
+
+#ifdef DEBUG_MEMORY_WATERMARKS
+    uint32_t start_time = millis();
+#endif
 
     // ---------------------------------------------------------------------------------
     // Primary loop! Upon a system abort, this exits back to main() to reset the system.
@@ -324,6 +345,13 @@ void protocol_main_loop() {
                 log_warn("Low memory: " << heapLowWater << " bytes");
             }
         }
+
+#ifdef DEBUG_MEMORY_WATERMARKS
+        if (millis() - start_time >= DEBUG_MEMORY_WM_TIME_MS) {
+            log_warn("loop_task watermark -> " << uxTaskGetStackHighWaterMark(NULL));
+            start_time = millis();
+        }
+#endif
     }
     return; /* Never reached */
 }
@@ -1144,7 +1172,7 @@ static void protocol_do_enter() {
                 // Download file command if RSS menu
                 } else if (config->_oled->_menu->is_rss_menu()) {
 #ifdef ENABLE_WIFI
-                    WebUI::rssReader.download_file(config->_oled->_menu->get_selected()->path);
+                    WebUI::rssReader.download_file(config->_oled->_menu->get_selected()->path, config->_oled->_menu->get_selected()->display_name);
 #endif
                 // Otherwise, enter the submenu if it exists
                 } else {
@@ -1154,45 +1182,6 @@ static void protocol_do_enter() {
             break;
 
         default: break;
-    }
-}
-
-// Reads the encoder input and prints a report if available
-void protocol_read_encoder() {
-
-    int16_t enc_diff;
-
-    // Bail if encoder not configured
-    if (!config->_encoder) return;
-    
-    // Read and report the difference if encoder is active
-    if (config->_encoder->is_active()) {
-
-        switch (sys.state) {
-
-            // Encoder does nothing in these states
-            case State::ConfigAlarm:
-            case State::CheckMode:
-            case State::Homing:
-            case State::Sleep:
-            case State::SafetyDoor:
-            case State::Alarm:
-            case State::Cycle:
-            case State::Hold:
-            case State::Jog:
-                break;
-
-            // Read the difference if idle
-            case State::Idle:
-
-                enc_diff = config->_encoder->get_difference();
-                if (abs(enc_diff) == 1) {  // Filter out excessive scrolling during other states
-                    log_info("Encoder difference -> " << enc_diff); // Used by display for updates
-                }
-                break;
-
-            default: break;
-        }
     }
 }
 
