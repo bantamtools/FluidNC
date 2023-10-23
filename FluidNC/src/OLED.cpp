@@ -797,6 +797,7 @@ void OLED::parse_report() {
     }
     if (_report.rfind("[MSG:INFO: File download completed]", 0) == 0) {
         _download_mode = false;        
+        refresh_display();  // Makes sure we clear the download display
         return;
     }
     if (_report.rfind("[MSG:INFO: Run file opened]", 0) == 0) {
