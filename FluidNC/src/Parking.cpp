@@ -89,8 +89,6 @@ void Parking::park(bool restart) {
         retract_waypoint = MIN(retract_waypoint, _target_mpos);
     }
 
-    log_debug("PARK: restart = " << restart << " can_park = " << can_park() << " _axis = " << _axis << " parking_target = " << parking_target[_axis] << " _target_mpos = " << _target_mpos << " retract_waypoint = " << retract_waypoint);
-
     if (can_park() && parking_target[_axis] < _target_mpos) {
         // Retract spindle by pullout distance. Ensure retraction motion moves away from
         // the workpiece and waypoint motion doesn't exceed the parking target location.
@@ -118,7 +116,7 @@ void Parking::park(bool restart) {
 
         // Execute fast parking retract motion to parking target location.
         if (parking_target[_axis] < _target_mpos) {
-            log_debug("Parking motion");
+            log_debug("Parking motion: parking_target = " << parking_target[_axis] << ", target_mpos = " << _target_mpos);
             parking_target[_axis] = _target_mpos;
             plan_data.feed_rate   = _rate;
             moveto(parking_target);
@@ -131,10 +129,21 @@ void Parking::park(bool restart) {
         config->_coolant->off();
         report_ovr_counter = 0;  // Set to report changes immediately
     }
+
+    // Update the restore target after moving to park (planner may have processed an additional move)
+        if (config->_parking->park_on_feedhold()) {
+        float restore_z = restore_target[2];
+        copyAxes(restore_target, get_mpos());
+        restore_target[2] = restore_z;
+    }
+
+    log_debug("PARK: parking target = [ " << parking_target[0] << " " << parking_target[1] << " " << parking_target[2] << " ]");
+    log_debug("PARK: restore target = [ " << restore_target[0] << " " << restore_target[1] << " " << restore_target[2] << " ]");
 }
 void Parking::unpark(bool restart) {
 
-    log_debug("UNPARK: can_park = " << can_park() << " _axis = " << _axis << " parking_target = " << parking_target[_axis] << " _target_mpos = " << _target_mpos << " retract_waypoint = " << retract_waypoint);
+    log_debug("UNPARK: parking target = [ " << parking_target[0] << " " << parking_target[1] << " " << parking_target[2] << " ]");
+    log_debug("UNPARK: restore target = [ " << restore_target[0] << " " << restore_target[1] << " " << restore_target[2] << " ]");
 
     // Execute fast restore motion to the pull-out position. Parking requires homing enabled.
     // NOTE: State is will remain DOOR, until the de-energizing and retract is complete.
