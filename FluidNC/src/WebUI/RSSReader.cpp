@@ -22,8 +22,32 @@ namespace WebUI {
 
 #include "RSSReader.h"
 
+const char* dropbox_root_ca= \
+    "-----BEGIN CERTIFICATE-----\n" \
+    "MIIDrzCCApegAwIBAgIQCDvgVpBCRrGhdWrJWZHHSjANBgkqhkiG9w0BAQUFADBh\n" \
+    "MQswCQYDVQQGEwJVUzEVMBMGA1UEChMMRGlnaUNlcnQgSW5jMRkwFwYDVQQLExB3\n" \
+    "d3cuZGlnaWNlcnQuY29tMSAwHgYDVQQDExdEaWdpQ2VydCBHbG9iYWwgUm9vdCBD\n" \
+    "QTAeFw0wNjExMTAwMDAwMDBaFw0zMTExMTAwMDAwMDBaMGExCzAJBgNVBAYTAlVT\n" \
+    "MRUwEwYDVQQKEwxEaWdpQ2VydCBJbmMxGTAXBgNVBAsTEHd3dy5kaWdpY2VydC5j\n" \
+    "b20xIDAeBgNVBAMTF0RpZ2lDZXJ0IEdsb2JhbCBSb290IENBMIIBIjANBgkqhkiG\n" \
+    "9w0BAQEFAAOCAQ8AMIIBCgKCAQEA4jvhEXLeqKTTo1eqUKKPC3eQyaKl7hLOllsB\n" \
+    "CSDMAZOnTjC3U/dDxGkAV53ijSLdhwZAAIEJzs4bg7/fzTtxRuLWZscFs3YnFo97\n" \
+    "nh6Vfe63SKMI2tavegw5BmV/Sl0fvBf4q77uKNd0f3p4mVmFaG5cIzJLv07A6Fpt\n" \
+    "43C/dxC//AH2hdmoRBBYMql1GNXRor5H4idq9Joz+EkIYIvUX7Q6hL+hqkpMfT7P\n" \
+    "T19sdl6gSzeRntwi5m3OFBqOasv+zbMUZBfHWymeMr/y7vrTC0LUq7dBMtoM1O/4\n" \
+    "gdW7jVg/tRvoSSiicNoxBN33shbyTApOB6jtSj1etX+jkMOvJwIDAQABo2MwYTAO\n" \
+    "BgNVHQ8BAf8EBAMCAYYwDwYDVR0TAQH/BAUwAwEB/zAdBgNVHQ4EFgQUA95QNVbR\n" \
+    "TLtm8KPiGxvDl7I90VUwHwYDVR0jBBgwFoAUA95QNVbRTLtm8KPiGxvDl7I90VUw\n" \
+    "DQYJKoZIhvcNAQEFBQADggEBAMucN6pIExIK+t1EnE9SsPTfrgT1eXkIoyQY/Esr\n" \
+    "hMAtudXH/vTBH1jLuG2cenTnmCmrEbXjcKChzUyImZOMkXDiqw8cvpOp/2PV5Adg\n" \
+    "06O/nVsJ8dWO41P0jmP6P6fbtGbfYmbW0W5BjfIttep3Sp+dWOIrWcBAI+0tKIJF\n" \
+    "PnlUkiaY4IBIqDfv8NZ5YBberOgOzW6sRBc4L0na4UU+Krk2U886UAb3LujEV0ls\n" \
+    "YSEY1QSteDwsOoBrp+uvFRTp2InBuThs4pFsiv9kuXclVzDAGySj4dzp30d8tbQk\n" \
+    "CAUw7C29C79Fv1C5qfPrmAESrciIxpg0X40KPMbp1ZWVbd4=\n" \
+    "-----END CERTIFICATE-----\n";
+
 namespace WebUI {
-    RSSReader rssReader __attribute__((init_priority(106))) ;
+    RSSReader rssReader __attribute__((init_priority(110))) ;
 }
 
 namespace WebUI {
@@ -31,7 +55,7 @@ namespace WebUI {
     StringSetting* rss_url;
     IntSetting* rss_refresh_sec;
 
-    static const String DEFAULT_RSS_WEB_SERVER  = "rss.bantamtools.com/";
+    static const String DEFAULT_RSS_WEB_SERVER  = "rss.bantamtools.com";
     static const String DEFAULT_RSS_ADDRESS     = "/";
     static const String DEFAULT_RSS_FULL_URL    = DEFAULT_RSS_WEB_SERVER + DEFAULT_RSS_ADDRESS;
     static const int MIN_RSS_URL = 0;
@@ -108,7 +132,7 @@ namespace WebUI {
 
             // RSS enabled, configure URL
             } else {
-                
+
                 // Parse the URL
                 res = parse_server_address(String(rss_url->get()), &_web_server, &_web_rss_address);
             }
@@ -118,7 +142,7 @@ namespace WebUI {
             end();
         }
         _started = res;
-
+        
         // Fork a task for parsing XML data
         if (res) {
             xTaskCreate(fetch_and_parse_task, "fetch_and_parse_task", RSS_FETCH_STACK_SIZE, this, RSS_FETCH_PRIORITY, NULL);
@@ -164,9 +188,6 @@ namespace WebUI {
 
                 // Flag an RSS refresh
                 _refresh_rss = true;
-
-                // DEBUG: Print Heap
-                //log_warn("Heap: " << xPortGetFreeHeapSize());
 
                 // Set new refresh start time
                 _refresh_start_ms = millis();
@@ -218,6 +239,10 @@ namespace WebUI {
             if (found1 >= 0) {
                 *server = url.substring(found, found1);
                 *address = url.substring(found1);
+            // Special case with no trailing slash
+            } else {
+                *server = url;
+                *address = "/";
             }
         }
 
@@ -323,24 +348,26 @@ namespace WebUI {
     // Fetch an RSS feed and parse the data
     void RSSReader::fetch_and_parse_task(void *pvParameters) {
         
-        bool insideItem = false;
-        char c;
-        String rssChunk = "";
-        tinyxml2::XMLDocument rssDoc;
-        tinyxml2::XMLElement *itemNode = nullptr;
-        String lastBuildDate = "";
+#ifdef DEBUG_MEMORY_WATERMARKS
+        uint32_t start_time = millis();
+#endif
 
         // Connect pointer
         RSSReader* instance = static_cast<RSSReader*>(pvParameters);
-
-        // Set up RSS client (use instead of HTTPClient, takes more memory)
-        WiFiClient rssClient;
 
         // Loop forever
         while(1) {
 
             // Wait for flag to trigger
             if (instance->_refresh_rss) {
+
+                // Instantiate variables
+                String *rssChunk = new String;
+                tinyxml2::XMLDocument *rssDoc = new tinyxml2::XMLDocument;
+                tinyxml2::XMLElement *itemNode = nullptr;
+
+                // Set up RSS client (use instead of HTTPClient, takes more memory)
+                WiFiClient *rssClient = new WiFiClient;
 
                 // Clear flag
                 instance->_refresh_rss = false;
@@ -353,52 +380,56 @@ namespace WebUI {
                 instance->prep(instance->_rss_feed);
 
                 // Connected to RSS server
-                if (rssClient.connect(instance->_web_server.c_str(), 80)) {
+                if (rssClient->connect(instance->_web_server.c_str(), 80)) {
 
                     // GET Request
-                    rssClient.print("GET ");
-                    rssClient.print(instance->_web_rss_address.c_str());
-                    rssClient.print(" HTTP/1.1\r\n");
-                    rssClient.print("Host: ");
-                    rssClient.print(instance->_web_server.c_str());
-                    rssClient.print("\r\n");
-                    rssClient.print("Connection: close\r\n\r\n");
+                    rssClient->print("GET ");
+                    rssClient->print(instance->_web_rss_address.c_str());
+                    rssClient->print(" HTTP/1.1\r\n");
+                    rssClient->print("Host: ");
+                    rssClient->print(instance->_web_server.c_str());
+                    rssClient->print("\r\n");
+                    rssClient->print("Connection: close\r\n\r\n");
                     
-                    while ((rssClient.connected() || rssClient.available()) && instance->_valid_feed) {
+                    while ((rssClient->connected() || rssClient->available()) && instance->_valid_feed) {
 
-                        while (rssClient.available() && instance->_valid_feed) {
+                        while (rssClient->available() && instance->_valid_feed) {
 
-                            // Read a byte at a time into RSS chunk
-                            c = rssClient.read();
-                            rssChunk += c;
+                            // Read a RSS data and append locally to RSS chunk
+                            *rssChunk += rssClient->readString();
 
-                            // Check for the end of an item
-                            if (itemNode && c == '>' && rssChunk.endsWith("</item>")) {
+                            // Parse the items in the RSS chunk
+                            while((rssChunk->indexOf("<item>") >= 0) || (rssChunk->indexOf("</item>") >= 0)) {
 
-                                // Extract the <item> content from the chunk
-                                size_t start = rssChunk.indexOf("<item>");
-                                size_t end = rssChunk.indexOf("</item>") + 7; // Include the </item> tag
-                                rssChunk = rssChunk.substring(start, end);
-
-                                // Parse the extracted item content
-                                if (rssDoc.Parse(rssChunk.c_str(), rssChunk.length()) == tinyxml2::XML_SUCCESS) {
-
-                                    itemNode = rssDoc.FirstChildElement("item");
-                                    instance->parse_item(itemNode);
-                                    itemNode = nullptr;
-                                    rssDoc.Clear();
-
-                                } else {
-                                    instance->_valid_feed = false;
-                                    log_warn("Failed to parse item XML");
+                                // Check for the start of a new item
+                                if (!itemNode && rssChunk->indexOf("<item>") >= 0) {
+                                    itemNode = rssDoc->NewElement("item");
                                 }
-                                rssChunk = "";
-                            }
 
-                            // Check for the start of a new item
-                            if (!itemNode && c == '>' && rssChunk.endsWith("<item>")) {
-                                itemNode = rssDoc.NewElement("item");
-                                rssChunk = "<item>";
+                                // Check for the end of an item
+                                if (itemNode && rssChunk->indexOf("</item>") >= 0) {
+
+                                    // Extract the <item> content from the chunk
+                                    size_t start = rssChunk->indexOf("<item>");
+                                    size_t end = rssChunk->indexOf("</item>") + 7; // Include the </item> tag
+                                    log_debug("RSS Item: " << rssChunk->substring(start, end).c_str());
+
+                                    // Parse the extracted item content
+                                    if (rssDoc->Parse(rssChunk->substring(start, end).c_str(), rssChunk->substring(start, end).length()) == tinyxml2::XML_SUCCESS) {
+
+                                        itemNode = rssDoc->FirstChildElement("item");
+                                        instance->parse_item(itemNode);
+                                        itemNode = nullptr;
+                                        rssDoc->Clear();
+
+                                    } else {
+                                        instance->_valid_feed = false;
+                                        log_warn("Failed to parse item XML");
+                                    }
+
+                                    // Remove everything up to the item content from the chunk
+                                    rssChunk->remove(0, end);
+                                }
                             }
                         }
 
@@ -459,8 +490,20 @@ namespace WebUI {
                 }
                 
                 // End the RSS connection
-                rssClient.stop();
+                rssClient->stop();
+
+                // Free memory
+                delete(rssClient);
+                delete(rssDoc);  // Also deletes all itemNodes
+                delete(rssChunk);
             }
+
+#ifdef DEBUG_MEMORY_WATERMARKS
+            if (millis() - start_time >= DEBUG_MEMORY_WM_TIME_MS) {
+                log_warn("rss_fetch_and_parse_task watermark -> " << uxTaskGetStackHighWaterMark(NULL));
+                start_time = millis();
+            }
+#endif
 
             // Check every 100ms
             vTaskDelay(RSS_FETCH_PERIODIC_MS/portTICK_PERIOD_MS);
@@ -468,10 +511,10 @@ namespace WebUI {
     }
 
     // Downloads the specified RSS feed link to SD card
-    void RSSReader::download_file(char *link) {
+    void RSSReader::download_file(char *link, char *filename) {
 
-        WiFiClient download_client;
-        String server, address, filename;
+        WiFiClientSecure download_client;
+        String server, address;
 
         // Check for SD card, send message and return on fail
         if (!sd_card_is_present()) {
@@ -486,27 +529,22 @@ namespace WebUI {
             return;
         }
 
-        // Extract the filename from the address
-        int found = address.lastIndexOf("/");
-        if (found < 0) {
-            return;
-        }
-        filename = address.substring(found + 1);
+        // Set the client certificate for HTTPS
+        download_client.setCACert(dropbox_root_ca);
 
         // Connect to selected server
-        if (download_client.connect(server.c_str(), 80)) {
+        if (download_client.connect(server.c_str(), 443)) {
 
             // Set no delay
             download_client.setNoDelay(1);
 
-            // Make GET request for selected link, use keep-alive for faster download
-            download_client.print("GET ");
+            // Make HEAD request to get the content length (Dropbox doesn't always honor in GET requests)
+            download_client.print("HEAD ");
             download_client.print(address.c_str());
             download_client.print(" HTTP/1.1\r\n");
             download_client.print("Host: ");
             download_client.print(server.c_str());
-            download_client.print("\r\n");
-            download_client.print("Connection: keep-alive\r\n\r\n");
+            download_client.print("\r\n\r\n");
 
             // Wait for HTTP connection
             while (download_client.connected() && !download_client.available()) {
@@ -531,12 +569,39 @@ namespace WebUI {
                     break;
                 }
             }
+
+            // Make GET request for selected link, use keep-alive for faster download
+            download_client.print("GET ");
+            download_client.print(address.c_str());
+            download_client.print(" HTTP/1.1\r\n");
+            download_client.print("Host: ");
+            download_client.print(server.c_str());
+            download_client.print("\r\n");
+            download_client.print("Connection: keep-alive\r\n\r\n");
+
+            // Wait for HTTP connection
+            while (download_client.connected() && !download_client.available()) {
+                delay(1);
+            }
+
+            // Skip the headers
+            while (download_client.available()) {
+
+                String line = download_client.readStringUntil('\n');
+                line.trim(); // Remove whitespace
+
+                // Read until find end of the headers (so we don't write them into our file)
+                if (line.length() == 0) {
+                    break;
+                }
+            }
             
             // Open the write file on SD
-            DownloadFile *file = new DownloadFile(filename.c_str(), content_length, allChannels);
+            DownloadFile *file = new DownloadFile(filename, content_length, allChannels);
             if (file) {
 
                 int bytes_read = 0;
+                int total_bytes = 0;
                 uint8_t buffer[1024];
 
                 // Download file
@@ -545,17 +610,19 @@ namespace WebUI {
                     if (download_client.available()) {
                         bytes_read = download_client.readBytes(buffer, sizeof(buffer));
                         file->write(buffer, bytes_read);
+                        total_bytes += bytes_read;
+                        if (total_bytes == content_length) break;  // Workaround for Dropbox not auto-closing after file completes
                     }
                 }
                 delete(file);
-                log_info("File download completed");
 
                 // Update the files list on SD card and exit to main menu
                 sd_populate_files_menu();
                 if (config->_oled) {
                     config->_oled->_menu->exit_submenu();
                 }
-            
+                log_info("File download completed");
+
             } else {
                 log_warn("Error opening file");
             }

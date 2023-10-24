@@ -66,8 +66,11 @@ private:
     uint8_t _i2c_num = 0;
 
     int _enc_diff = 0;
+    bool _enc_scroll_lockout = true;
 
     bool _popup = false;
+
+    void encoder_update(int16_t enc_diff);
     
     void parse_report();
     void parse_status_report();
@@ -76,7 +79,6 @@ private:
     void parse_IP();
     void parse_AP();
     void parse_BT();
-    void parse_encoder();
 
     void parse_axes(std::string s, float* axes);
     void parse_numbers(std::string s, float* nums, int maxnums);

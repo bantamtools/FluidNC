@@ -29,10 +29,10 @@ axes:
   shared_stepper_reset_pin: NO_PIN
   
   x:
-    steps_per_mm: 40.1
-    max_rate_mm_per_min: 18000
-    acceleration_mm_per_sec2: 6000
-    rapid_acceleration_mm_per_sec2: 10000
+    steps_per_mm: 40.16
+    max_rate_mm_per_min: 15000
+    acceleration_mm_per_sec2: 9000
+    rapid_acceleration_mm_per_sec2: 12000
     max_travel_mm: 222
     soft_limits: false
     homing:
@@ -54,9 +54,9 @@ axes:
 
   y:
     steps_per_mm: 36.7
-    max_rate_mm_per_min: 18000
-    acceleration_mm_per_sec2: 6000
-    rapid_acceleration_mm_per_sec2: 10000
+    max_rate_mm_per_min: 15000
+    acceleration_mm_per_sec2: 9000
+    rapid_acceleration_mm_per_sec2: 12000
     max_travel_mm: 500
     soft_limits: false
     homing:
@@ -74,8 +74,8 @@ axes:
       null_motor:
 
   z:
-    steps_per_mm: 22.7
-    max_rate_mm_per_min: 18000
+    steps_per_mm: 28
+    max_rate_mm_per_min: 12000
     acceleration_mm_per_sec2: 2000
     rapid_acceleration_mm_per_sec2: 10000
     max_travel_mm: 10
@@ -124,12 +124,4 @@ spi:
 sdcard:
   cs_pin: gpio.12
   card_detect_pin: gpio.14
-  frequency_hz: 8000000
-
-# LED (0) and expansion IOs (1-4)
-user_outputs:
-  digital0_pin: gpio.5
-  digital1_pin: gpio.43
-  digital2_pin: gpio.44
-  digital3_pin: gpio.42
-  digital4_pin: gpio.6
+  frequency_hz: 4000000

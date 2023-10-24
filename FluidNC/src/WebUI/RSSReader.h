@@ -10,6 +10,7 @@
 #include "../OLED.h"
 #include "../DownloadFile.h"
 #include <nvs.h>
+#include <WiFiClientSecure.h>
 
 #ifndef ENABLE_WIFI
 
@@ -41,7 +42,7 @@ namespace WebUI {
         void            handle();
         bool            started();
         String          get_url();
-        void            download_file(char *link);
+        void            download_file(char *link, char *filename);
         time_t          get_last_update_time() { return _last_update_time; };
         void            sync() { _refresh_start_ms = 0; };
         ListNodeType    *get_rss_feed() { return _rss_feed->head; };
@@ -50,9 +51,9 @@ namespace WebUI {
 
     private:
 
-        static constexpr UBaseType_t    RSS_FETCH_PRIORITY      = (configMAX_PRIORITIES - 4);
-        static constexpr uint32_t       RSS_FETCH_STACK_SIZE    = 4096;
-        static constexpr uint32_t       RSS_FETCH_PERIODIC_MS   = 100;
+        static constexpr UBaseType_t    RSS_FETCH_PRIORITY      = 1;    // Same priority as loop, polling tasks
+        static constexpr uint32_t       RSS_FETCH_STACK_SIZE    = 2560;
+        static constexpr uint32_t       RSS_FETCH_PERIODIC_MS   = 1000;
 
         ListType        *_rss_feed;
 

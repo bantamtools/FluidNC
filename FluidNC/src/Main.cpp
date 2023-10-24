@@ -31,7 +31,16 @@
 
 extern void make_user_commands();
 
-Encoder *encoder = new Encoder();
+#ifdef DEBUG_MEMORY
+// DEBUG: Memory management task
+void mem_task( void * pvParameters ) {
+
+    while(1) {
+        log_warn("Free Heap Size -> " << xPortGetFreeHeapSize());
+        vTaskDelay(pdMS_TO_TICKS(10000));
+    }
+}
+#endif
 
 void setup() {
     disableCore0WDT();
@@ -205,6 +214,11 @@ void loop() {
     static int tries = 0;
     try {
         reset_variables();
+
+#ifdef DEBUG_MEMORY
+        // DEBUG: Start memory management task 
+        xTaskCreate(mem_task, "mem_task", 4096, NULL, 3, NULL);
+#endif
         // Start the main loop. Processes program inputs and executes them.
         // This can exit on a system abort condition, in which case run_once()
         // is re-executed by an enclosing loop.  It can also exit via a
