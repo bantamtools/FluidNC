@@ -723,10 +723,10 @@ void OLED::parse_IP() {
     _radio_addr  = _report.substr(start, _report.size() - start - 1);
 
     _oled->clear();
-    auto fh = font_height(DejaVu_Sans_10);
     wrapped_draw_string(0, "Wi-Fi Info", DejaVu_Sans_10);
-    wrapped_draw_string(fh + 1, "Network ID: " + _radio_info, DejaVu_Sans_10);
-    wrapped_draw_string((fh * 2) + 1, "IP Addr: " + _radio_addr, DejaVu_Sans_10);
+    _oled->fillRect(0, _header_height - 2, _width, 2);  // Thick line
+    wrapped_draw_string(_header_height, "Network ID: " + _radio_info, DejaVu_Sans_10);
+    wrapped_draw_string(_header_height + 12, "IP Addr: " + _radio_addr, DejaVu_Sans_10);
     _oled->display();
     delay_ms(_radio_delay);
 }
@@ -743,9 +743,9 @@ void OLED::parse_AP() {
     _radio_addr = _report.substr(ip_start, ip_end - ip_start);
 
     _oled->clear();
-    auto fh = font_height(DejaVu_Sans_10);
     wrapped_draw_string(0, _radio_info, DejaVu_Sans_10);
-    wrapped_draw_string((fh * 2) + 1, _radio_addr, DejaVu_Sans_10);
+    _oled->fillRect(0, _header_height - 2, _width, 2);  // Thick line
+    wrapped_draw_string(_header_height + 1, _radio_addr, DejaVu_Sans_10);
     _oled->display();
     delay_ms(_radio_delay);
 }
