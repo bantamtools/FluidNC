@@ -18,10 +18,10 @@ stepping:
 parking:
   enable: true
   axis: Z
-  pullout_distance_mm: 0
-  pullout_rate_mm_per_min: 2000
-  target_mpos_mm: 0.0
-  rate_mm_per_min: 2000
+  pullout_distance_mm: -0.01
+  pullout_rate_mm_per_min: 1000
+  target_mpos_mm: 0
+  rate_mm_per_min: 1000
   park_on_feedhold: true
 
 axes:
