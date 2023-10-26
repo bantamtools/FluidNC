@@ -226,9 +226,9 @@ with open(os.path.join(manifestRelPath, "manifest.json"), "w") as manifest_file:
     json.dump(manifest, manifest_file, indent=2)
                  
 
-# Create "update only" zip
-updateZipName = os.path.join(relPath, f'update-only-{tag}-{platform}.zip')
-with ZipFile(updateZipName, 'w') as updateZip:
+    # Create "update only" zip
+    updateZipName = os.path.join(relPath, f'update-only-{tag}-{platform}.zip')
+    with ZipFile(updateZipName, 'w') as updateZip:
         # Add index.html.gz
         addToUpdateZip(updateZip, os.path.join('FluidNC', 'data', 'index.html.gz'), os.path.join('update', 'index.html.gz'))
         
