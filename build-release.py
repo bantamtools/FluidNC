@@ -67,6 +67,11 @@ def copyToZip(zipObj, platform, fileName, destPath, mode=0o100755):
     info.external_attr = mode << 16
     zipObj.writestr(info, bytes)
 
+def addToUpdateZip(zipObj, filePath, destPath):
+    """Add a specific file to the update zip."""
+    with open(filePath, 'rb') as f:
+        data = f.read()
+    zipObj.write(filePath, destPath)
 
 relPath = os.path.join('release')
 if not os.path.exists(relPath):
@@ -206,23 +211,10 @@ filesystem_update = { "name": "filesystem-update", "description": "Update FluidN
 def makeManifest():
     addMCU("esp32", "ESP32-WROOM", "Firmware variant")
 
-    addVariant("wifi", "Supports WiFi and WebUI", "Installation type")
-    addInstallable(fresh_install, True, ["esp32-4m-partitions", "esp32-bootloader", "esp32-bootapp", "esp32-wifi-firmware", "esp32-wifi-4m-filesystem"])
-    addInstallable(firmware_update, False, ["esp32-wifi-firmware"])
-    addInstallable(filesystem_update, False, ["esp32-wifi-4m-filesystem"])
-
     addVariant("wifi_s3", "Supports WiFi and WebUI on the esp32_s3", "Installation type")
     addInstallable(fresh_install, True, ["esp32-4m_s3-partitions", "esp32_s3-bootloader", "esp32_s3-bootapp", "esp32-wifi_s3-firmware", "esp32-wifi_s3-4m-filesystem"])
     addInstallable(firmware_update, False, ["esp32-wifi_s3-firmware"])
     addInstallable(filesystem_update, False, ["esp32-wifi_s3-4m-filesystem"])
-
-    addVariant("bt", "Supports Bluetooth serial", "Installation type")
-    addInstallable(fresh_install, True, ["esp32-4m-partitions", "esp32-bootloader", "esp32-bootapp", "esp32-bt-firmware"])
-    addInstallable(firmware_update, False, ["esp32-bt-firmware"])
-
-    addVariant("noradio", "Supports neither WiFi nor Bluetooth", "Installation type")
-    addInstallable(fresh_install, True, ["esp32-4m-partitions", "esp32-bootloader", "esp32-bootapp", "esp32-noradio-firmware"])
-    addInstallable(firmware_update, False, ["esp32-noradio-firmware"])
 
 makeManifest()
 
@@ -234,7 +226,24 @@ with open(os.path.join(manifestRelPath, "manifest.json"), "w") as manifest_file:
     json.dump(manifest, manifest_file, indent=2)
                  
 
+    # Create "update only" zip
+    updateZipName = os.path.join(relPath, f'update-only-{tag}.zip')
+    with ZipFile(updateZipName, 'w') as updateZip:
+        # Add index.html.gz
+        addToUpdateZip(updateZip, os.path.join('FluidNC', 'data', 'index.html.gz'), os.path.join('update', 'index.html.gz'))
+        
+        # Add firmware.bin
+        firmwarePath = os.path.join('.pio', 'build', envName, 'firmware.bin')
+        addToUpdateZip(updateZip, firmwarePath, os.path.join('update', 'firmware.bin'))
+        
+        # Add config.yaml
+        configPath = os.path.join('FluidNC', 'data', 'config.yaml')
+        addToUpdateZip(updateZip, configPath, os.path.join('update', 'config.yaml'))
+    
+    print(f"Update only zip file created: {updateZipName}")
+
 for platform in ['win64', 'posix']:
+
     print("Creating zip file for ", platform)
     terseOSName = {
         'win64': 'win',
@@ -253,7 +262,7 @@ for platform in ['win64', 'posix']:
         'posix': False,
     }
 
-    zipDirName = os.path.join('fluidnc-' + tag + '-' + platform)
+    zipDirName = os.path.join('fluidnc-full_install' + tag + '-' + platform)
     zipFileName = os.path.join(relPath, zipDirName + '.zip')
 
     print("zipDirName=", zipDirName)
@@ -273,7 +282,7 @@ for platform in ['win64', 'posix']:
             zipObj.write(os.path.join(sharedPath, 'common', secFuses), os.path.join(zipDirName, 'common', secFuses))
 
         # Put FluidNC binaries, partition maps, and installers in the archive
-        for envName in ['wifi','bt',"wifi_s3"]:
+        for envName in ["wifi_s3"]:
 
             # Put bootloader binaries in the archive
             bootloader = 'bootloader.bin'
@@ -283,11 +292,6 @@ for platform in ['win64', 'posix']:
 
             # Put littlefs.bin and index.html.gz in the archive
             # bt does not need a littlefs.bin because there is no use for index.html.gz
-            if envName == 'wifi':
-                name = 'littlefs.bin'
-                zipObj.write(os.path.join(pioPath, envName, name), os.path.join(zipDirName, envName, name))
-                name = 'index.html.gz'
-                zipObj.write(os.path.join('FluidNC', 'data', name), os.path.join(zipDirName, envName, name))
             if envName == 'wifi_s3':
                 print("zipDirName=", zipFileName)
                 name = 'littlefs.bin'
