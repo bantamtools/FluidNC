@@ -123,7 +123,7 @@ void Parking::park(bool restart) {
         if (parking_target[_axis] < _target_mpos) {
             parking_target[_axis] = _target_mpos;
             plan_data.feed_rate   = _rate;
-            moveto(parking_target);  //NOTE: This breaks ALLLLLLLLL
+            moveto(parking_target);  //NOTE: This breaks immediate parking
         }
     } else {
         log_debug("Spin down only");
@@ -132,13 +132,6 @@ void Parking::park(bool restart) {
         spindle->spinDown();
         config->_coolant->off();
         report_ovr_counter = 0;  // Set to report changes immediately
-    }
-
-    // Update the restore target after moving to park (planner may have processed an additional move)
-        if (config->_parking->park_on_feedhold()) {
-        float restore_z = restore_target[2];
-        copyAxes(restore_target, get_mpos());
-        restore_target[2] = restore_z;
     }
 
     log_debug("PARK: parking target =\t[ " << parking_target[0] << " " << parking_target[1] << " " << parking_target[2] << " ]");

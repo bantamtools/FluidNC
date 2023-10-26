@@ -1104,7 +1104,9 @@ static void protocol_do_enter() {
 
             // Click / short press, feedhold job
             } else {
+                protocol_buffer_synchronize();  // Sync and finish all remaining buffered motions before moving on.
                 protocol_send_event(&feedHoldEvent);
+                protocol_execute_realtime();  // Execute suspend.
             }
             break;
 
