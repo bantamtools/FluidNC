@@ -107,6 +107,12 @@ Error WebCommand::action(char* value, WebUI::AuthenticationLevel auth_level, Cha
 
 namespace WebUI {
 
+    static Error getHomed(char* parameter, AuthenticationLevel auth_level, Channel& out) {  // ESP903
+        LogStream s(out, "");
+        s << (int)config->_axes->_homed;
+        return Error::Ok;
+    }
+
 #ifdef ENABLE_WIFI
     // Used by js
     static Error listRssFeed(char* parameter, AuthenticationLevel auth_level, Channel& out) {  // ESP902
@@ -745,5 +751,6 @@ namespace WebUI {
         new WebCommand(NULL, WEBCMD, WA, "ESP901", "RSS/syncRssFeed", syncRssFeed);
         new WebCommand(NULL, WEBCMD, WA, "ESP902", "RSS/listRssFeed", listRssFeed);
 #endif
+        new WebCommand(NULL, WEBCMD, WA, "ESP903", "Homed", getHomed);
     }
 }
