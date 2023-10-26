@@ -260,7 +260,7 @@ for platform in ['win64', 'posix']:
             zipObj.write(os.path.join(sharedPath, 'common', secFuses), os.path.join(zipDirName, 'common', secFuses))
 
         # Put FluidNC binaries, partition maps, and installers in the archive
-        for envName in ['wifi','bt',"wifi_s3"]:
+        for envName in ["wifi_s3"]:
 
             # Put bootloader binaries in the archive
             bootloader = 'bootloader.bin'
@@ -270,11 +270,6 @@ for platform in ['win64', 'posix']:
 
             # Put littlefs.bin and index.html.gz in the archive
             # bt does not need a littlefs.bin because there is no use for index.html.gz
-            if envName == 'wifi':
-                name = 'littlefs.bin'
-                zipObj.write(os.path.join(pioPath, envName, name), os.path.join(zipDirName, envName, name))
-                name = 'index.html.gz'
-                zipObj.write(os.path.join('FluidNC', 'data', name), os.path.join(zipDirName, envName, name))
             if envName == 'wifi_s3':
                 print("zipDirName=", zipFileName)
                 name = 'littlefs.bin'
