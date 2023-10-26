@@ -206,23 +206,10 @@ filesystem_update = { "name": "filesystem-update", "description": "Update FluidN
 def makeManifest():
     addMCU("esp32", "ESP32-WROOM", "Firmware variant")
 
-    addVariant("wifi", "Supports WiFi and WebUI", "Installation type")
-    addInstallable(fresh_install, True, ["esp32-4m-partitions", "esp32-bootloader", "esp32-bootapp", "esp32-wifi-firmware", "esp32-wifi-4m-filesystem"])
-    addInstallable(firmware_update, False, ["esp32-wifi-firmware"])
-    addInstallable(filesystem_update, False, ["esp32-wifi-4m-filesystem"])
-
     addVariant("wifi_s3", "Supports WiFi and WebUI on the esp32_s3", "Installation type")
     addInstallable(fresh_install, True, ["esp32-4m_s3-partitions", "esp32_s3-bootloader", "esp32_s3-bootapp", "esp32-wifi_s3-firmware", "esp32-wifi_s3-4m-filesystem"])
     addInstallable(firmware_update, False, ["esp32-wifi_s3-firmware"])
     addInstallable(filesystem_update, False, ["esp32-wifi_s3-4m-filesystem"])
-
-    addVariant("bt", "Supports Bluetooth serial", "Installation type")
-    addInstallable(fresh_install, True, ["esp32-4m-partitions", "esp32-bootloader", "esp32-bootapp", "esp32-bt-firmware"])
-    addInstallable(firmware_update, False, ["esp32-bt-firmware"])
-
-    addVariant("noradio", "Supports neither WiFi nor Bluetooth", "Installation type")
-    addInstallable(fresh_install, True, ["esp32-4m-partitions", "esp32-bootloader", "esp32-bootapp", "esp32-noradio-firmware"])
-    addInstallable(firmware_update, False, ["esp32-noradio-firmware"])
 
 makeManifest()
 
