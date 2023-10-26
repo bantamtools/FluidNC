@@ -226,11 +226,9 @@ with open(os.path.join(manifestRelPath, "manifest.json"), "w") as manifest_file:
     json.dump(manifest, manifest_file, indent=2)
                  
 
-for platform in ['win64', 'posix']:
-    
-    # Create "update only" zip
-    updateZipName = os.path.join(relPath, f'update-{tag}-{platform}.zip')
-    with ZipFile(updateZipName, 'w') as updateZip:
+# Create "update only" zip
+updateZipName = os.path.join(relPath, f'update-only-{tag}-{platform}.zip')
+with ZipFile(updateZipName, 'w') as updateZip:
         # Add index.html.gz
         addToUpdateZip(updateZip, os.path.join('FluidNC', 'data', 'index.html.gz'), os.path.join('update', 'index.html.gz'))
         
@@ -243,7 +241,9 @@ for platform in ['win64', 'posix']:
         addToUpdateZip(updateZip, configPath, os.path.join('update', 'config.yaml'))
     
     print(f"Update only zip file created: {updateZipName}")
-    
+
+for platform in ['win64', 'posix']:
+
     print("Creating zip file for ", platform)
     terseOSName = {
         'win64': 'win',
