@@ -15,6 +15,15 @@ stepping:
   pulse_us: 4
   disable_delay_us: 1
 
+parking:
+  enable: true
+  axis: Z
+  pullout_distance_mm: 0
+  pullout_rate_mm_per_min: 2000
+  target_mpos_mm: 0.0
+  rate_mm_per_min: 2000
+  park_on_feedhold: true
+
 axes:
   shared_stepper_disable_pin: NO_PIN
   shared_stepper_reset_pin: NO_PIN
