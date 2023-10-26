@@ -67,6 +67,11 @@ def copyToZip(zipObj, platform, fileName, destPath, mode=0o100755):
     info.external_attr = mode << 16
     zipObj.writestr(info, bytes)
 
+def addToUpdateZip(zipObj, filePath, destPath):
+    """Add a specific file to the update zip."""
+    with open(filePath, 'rb') as f:
+        data = f.read()
+    zipObj.write(filePath, destPath)
 
 relPath = os.path.join('release')
 if not os.path.exists(relPath):
@@ -222,6 +227,23 @@ with open(os.path.join(manifestRelPath, "manifest.json"), "w") as manifest_file:
                  
 
 for platform in ['win64', 'posix']:
+    
+    # Create "update only" zip
+    updateZipName = os.path.join(relPath, f'update-{tag}-{platform}.zip')
+    with ZipFile(updateZipName, 'w') as updateZip:
+        # Add index.html.gz
+        addToUpdateZip(updateZip, os.path.join('FluidNC', 'data', 'index.html.gz'), os.path.join('update', 'index.html.gz'))
+        
+        # Add firmware.bin
+        firmwarePath = os.path.join('.pio', 'build', envName, 'firmware.bin')
+        addToUpdateZip(updateZip, firmwarePath, os.path.join('update', 'firmware.bin'))
+        
+        # Add config.yaml
+        configPath = os.path.join('FluidNC', 'data', 'config.yaml')
+        addToUpdateZip(updateZip, configPath, os.path.join('update', 'config.yaml'))
+    
+    print(f"Update only zip file created: {updateZipName}")
+    
     print("Creating zip file for ", platform)
     terseOSName = {
         'win64': 'win',
