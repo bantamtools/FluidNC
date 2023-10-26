@@ -1141,24 +1141,27 @@ static void protocol_do_enter() {
                 if (strcmp(config->_oled->_menu->get_selected()->display_name, "Home") == 0) {
                     Machine::Homing::run_cycles(Machine::Homing::AllCycles);
 
-                // Display homing error if try to jog unhomed
-                } else if (strstr(config->_oled->_menu->get_selected()->display_name, "Jog") && !config->_axes->_homed)   {
-
-                    // Display error
-                    config->_oled->popup_msg("Machine not homed");
-
                 // Jog command
                 } else if (strstr(config->_oled->_menu->get_selected()->display_name, "Jog ")) {
 
-                    char axis = (strrchr(config->_oled->_menu->get_selected()->display_name, ' ') + 1)[0];
+                    // Display homing error if try to jog unhomed
+                    if (!config->_axes->_homed) {
 
-                    // Enter jogging mode if not active
-                    if (config->_oled->get_jog_state() == JogState::Idle) {
-                        config->_oled->set_jog_state(JogState::Scrolling);
+                        // Display error
+                        config->_oled->popup_msg("Machine not homed");
 
-                    // Exit jogging mode if press 
                     } else {
-                        config->_oled->set_jog_state(JogState::Idle);
+
+                        char axis = (strrchr(config->_oled->_menu->get_selected()->display_name, ' ') + 1)[0];
+
+                        // Enter jogging mode if not active
+                        if (config->_oled->get_jog_state() == JogState::Idle) {
+                            config->_oled->set_jog_state(JogState::Scrolling);
+
+                        // Exit jogging mode if press 
+                        } else {
+                            config->_oled->set_jog_state(JogState::Idle);
+                        }
                     }
 
                 // Back button
@@ -1168,8 +1171,17 @@ static void protocol_do_enter() {
                 // Run file command if files menu
                 } else if (config->_oled->_menu->is_files_menu()) {
 
-                    InputFile *infile = new InputFile("sd", config->_oled->_menu->get_selected()->path, WebUI::AuthenticationLevel::LEVEL_ADMIN, allChannels);
-                    allChannels.registration(infile);
+                    // Display homing error if try to run unhomed
+                    if (!config->_axes->_homed) {
+
+                        // Display error
+                        config->_oled->popup_msg("Machine not homed");
+
+                    } else {
+
+                        InputFile *infile = new InputFile("sd", config->_oled->_menu->get_selected()->path, WebUI::AuthenticationLevel::LEVEL_ADMIN, allChannels);
+                        allChannels.registration(infile);
+                    }
 
                 // Download file command if RSS menu
                 } else if (config->_oled->_menu->is_rss_menu()) {
