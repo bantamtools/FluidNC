@@ -99,10 +99,9 @@ void OLED::show(Layout& layout, const char* msg) {
 
 OLED::Layout OLED::stateLayout          = { 0, 0, 0, DejaVu_Sans_10, TEXT_ALIGN_LEFT };
 OLED::Layout OLED::elapsedTimeLayout    = { 63, 0, 128, DejaVu_Sans_10, TEXT_ALIGN_CENTER };
-OLED::Layout OLED::filenameLayout       = { 63, 13, 128, DejaVu_Sans_10, TEXT_ALIGN_CENTER };
 OLED::Layout OLED::percentLayout128     = { 128, 0, 128, DejaVu_Sans_10, TEXT_ALIGN_RIGHT };
 OLED::Layout OLED::percentLayout64      = { 64, 0, 64, DejaVu_Sans_10, TEXT_ALIGN_RIGHT };
-OLED::Layout OLED::posLabelLayout       = { 110, 13, 128, DejaVu_Sans_10, TEXT_ALIGN_RIGHT };
+OLED::Layout OLED::posLabelLayout       = { 110, 15, 128, DejaVu_Sans_10, TEXT_ALIGN_RIGHT };
 OLED::Layout OLED::radioAddrLayout      = { 128, 0, 128, DejaVu_Sans_10, TEXT_ALIGN_RIGHT };
 OLED::Layout OLED::connectWifiLayout    = { 63, 52, 128, DejaVu_Sans_10, TEXT_ALIGN_CENTER };
 
@@ -164,7 +163,7 @@ void OLED::init() {
 
     _oled->clear();
 
-    _oled->drawXbm(0, 18, 128, 26, bantam_logo_bits);
+    _oled->drawXbm(0, 18, _width, 26, bantam_logo_bits);
 
     _oled->display();
 
@@ -256,11 +255,11 @@ void OLED::show_state() {
 
     // Clear anything left in radio area
     _oled->setColor(BLACK);
-    _oled->fillRect(0, 0, 40, 11);
+    _oled->fillRect(0, 0, 40, _header_height);
     _oled->setColor(WHITE);
 
     show(stateLayout, _state);
-    _oled->drawLine(0, 11, 128, 11);
+    _oled->fillRect(0, _header_height - 2, _width, 2);  // Thick line
 }
 
 void OLED::show_limits(bool probe, const bool* limits) {
@@ -293,13 +292,13 @@ void OLED::show_menu() {
 
     // Set up font and menu window
     _oled->setFont(DejaVu_Sans_10);
-    menu_height = 13;
+    menu_height = 12;
     (_menu->is_full_width()) ? menu_width = 128 : menu_width = 64;
     menu_max_active_entries = 4;
 
     // Clear any highlighting left in menu area
     _oled->setColor(BLACK);
-    _oled->fillRect(0, 13, menu_width, 64);
+    _oled->fillRect(0, _header_height, menu_width, _height);
     _oled->setColor(WHITE);
 
     // Update the menu selection if not jogging
@@ -316,11 +315,11 @@ void OLED::show_menu() {
 
         // Highlight selected entry
         (entry->selected) ? _oled->setColor(WHITE) : _oled->setColor(BLACK);
-        _oled->fillRect(0, 13 + (menu_height * i), menu_width, menu_height);
+        _oled->fillRect(0, _header_height + (menu_height * i) + 1, menu_width, menu_height);
         (entry->selected) ? _oled->setColor(BLACK) : _oled->setColor(WHITE);
 
         // Write out the entry name, bolding updated ones
-        truncated_draw_string(13 + (menu_height * i), entry->display_name, (entry->updated ? DejaVu_Sans_Bold_10 : DejaVu_Sans_10));
+        truncated_draw_string(_header_height + (menu_height * i), entry->display_name, (entry->updated ? DejaVu_Sans_Bold_10 : DejaVu_Sans_10));
 
         // Advance the line and pointer
         entry = entry->next;
@@ -359,7 +358,7 @@ void OLED::show_file() {
     // Clear anything left in file areas
     _oled->setColor(BLACK);
     _oled->fillRect(50, 0, 78, 11);
-    _oled->fillRect(0, 13, 128, 64);
+    _oled->fillRect(0, _header_height, _width, _height);
     _oled->setColor(WHITE);
 
     if (_width == 128) {
@@ -367,9 +366,9 @@ void OLED::show_file() {
 
         if (_download_mode) {
             
-            truncated_draw_string(14, "Downloading:", DejaVu_Sans_10);
-            truncated_draw_string(26, _filename, DejaVu_Sans_10);
-            _oled->drawProgressBar(0, 39, 120, 10, pct);          
+            truncated_draw_string(_header_height, "Downloading:", DejaVu_Sans_10);
+            truncated_draw_string(_header_height + 12, _filename, DejaVu_Sans_10);
+            _oled->drawProgressBar(0, _header_height + 12 + 16, 120, 10, pct);          
 
         } else {
 
@@ -382,9 +381,9 @@ void OLED::show_file() {
 
             show(elapsedTimeLayout, time_str);
 
-            truncated_draw_string(14, _filename, DejaVu_Sans_10);
+            truncated_draw_string(_header_height, _filename, DejaVu_Sans_10);
 
-            _oled->drawProgressBar(0, 26, 120, 10, pct);
+            _oled->drawProgressBar(0, _header_height + 12, 120, 10, pct);
         }
     } else {
         show(percentLayout64, std::to_string(pct) + '%');
@@ -392,7 +391,7 @@ void OLED::show_file() {
 
     // Display pause/resume message at bottom
     if (!_download_mode) {
-        _oled->drawString(0, 39, "Click to PAUSE/RESUME");
+        _oled->drawString(0, 40, "Click to PAUSE/RESUME");
         _oled->drawString(0, 52, "Long Press to CANCEL");
     }
 }
@@ -417,7 +416,7 @@ void OLED::show_dro(float* axes, bool isMpos, bool* limits) {
 
     // Clear any highlighting left in DRO area
     _oled->setColor(BLACK);
-    _oled->fillRect(64, 13, 64, 64);
+    _oled->fillRect(64, _header_height, 64, _height);
     _oled->setColor(WHITE);
 
     show(posLabelLayout, isMpos ? "M Pos" : "W Pos");
@@ -425,7 +424,7 @@ void OLED::show_dro(float* axes, bool isMpos, bool* limits) {
     _oled->setFont(DejaVu_Sans_10);
     uint8_t oled_y_pos;
     for (uint8_t axis = X_AXIS; axis < n_axis; axis++) {
-        oled_y_pos = ((_height == 64) ? 24 : 17) + (axis * 10);
+        oled_y_pos = ((_height == 64) ? 26 : 19) + (axis * 10);
 
         std::string axis_msg(1, Machine::Axes::_names[axis]);
         if (_width == 128) {
@@ -472,11 +471,11 @@ void OLED::show_error(std::string msg) {
 
     // Clear anything left in error message area
     _oled->setColor(BLACK);
-    _oled->fillRect(0, 13, 128, 64);
+    _oled->fillRect(0, _header_height, _width, _height);
     _oled->setColor(WHITE);
 
     // Draw message
-    truncated_draw_string(13, msg, DejaVu_Sans_10);
+    truncated_draw_string(_header_height, msg, DejaVu_Sans_10);
     _oled->display();    
 }
 
@@ -726,8 +725,8 @@ void OLED::parse_IP() {
     _oled->clear();
     auto fh = font_height(DejaVu_Sans_10);
     wrapped_draw_string(0, "Wi-Fi Info", DejaVu_Sans_10);
-    wrapped_draw_string(fh, "Network ID: " + _radio_info, DejaVu_Sans_10);
-    wrapped_draw_string(fh * 2, "IP Addr: " + _radio_addr, DejaVu_Sans_10);
+    wrapped_draw_string(fh + 1, "Network ID: " + _radio_info, DejaVu_Sans_10);
+    wrapped_draw_string((fh * 2) + 1, "IP Addr: " + _radio_addr, DejaVu_Sans_10);
     _oled->display();
     delay_ms(_radio_delay);
 }
@@ -746,7 +745,7 @@ void OLED::parse_AP() {
     _oled->clear();
     auto fh = font_height(DejaVu_Sans_10);
     wrapped_draw_string(0, _radio_info, DejaVu_Sans_10);
-    wrapped_draw_string(fh * 2, _radio_addr, DejaVu_Sans_10);
+    wrapped_draw_string((fh * 2) + 1, _radio_addr, DejaVu_Sans_10);
     _oled->display();
     delay_ms(_radio_delay);
 }
