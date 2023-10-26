@@ -262,7 +262,7 @@ for platform in ['win64', 'posix']:
         'posix': False,
     }
 
-    zipDirName = os.path.join('fluidnc-full_install' + tag + '-' + platform)
+    zipDirName = os.path.join('fluidnc-full_install-' + tag + '-' + platform)
     zipFileName = os.path.join(relPath, zipDirName + '.zip')
 
     print("zipDirName=", zipDirName)
