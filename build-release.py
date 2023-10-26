@@ -227,7 +227,7 @@ with open(os.path.join(manifestRelPath, "manifest.json"), "w") as manifest_file:
                  
 
     # Create "update only" zip
-    updateZipName = os.path.join(relPath, f'update-only-{tag}.zip')
+    updateZipName = os.path.join(relPath, f'fluidnc-bantam-update-only-{tag}.zip')
     with ZipFile(updateZipName, 'w') as updateZip:
         # Add index.html.gz
         addToUpdateZip(updateZip, os.path.join('FluidNC', 'data', 'index.html.gz'), os.path.join('update', 'index.html.gz'))
@@ -262,7 +262,7 @@ for platform in ['win64', 'posix']:
         'posix': False,
     }
 
-    zipDirName = os.path.join('fluidnc-full_install-' + tag + '-' + platform)
+    zipDirName = os.path.join('fluidnc-bantam-new-install-' + tag + '-' + platform)
     zipFileName = os.path.join(relPath, zipDirName + '.zip')
 
     print("zipDirName=", zipDirName)
