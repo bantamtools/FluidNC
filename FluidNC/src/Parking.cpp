@@ -13,6 +13,8 @@ void Parking::moveto(float* target) {
     if (sys.abort) {
         return;  // Block during abort.
     }
+    log_debug("MOVE: target position =\t[ " << target[0] << " " << target[1] << " " << target[2] << " ]");
+
     if (plan_buffer_line(target, &plan_data)) {
         sys.step_control.executeSysMotion = true;
         sys.step_control.endMotion        = false;  // Allow parking motion to execute, if feed hold is active.
@@ -82,6 +84,9 @@ void Parking::set_target() {
 }
 
 void Parking::park(bool restart) {
+
+    log_debug("PARK: INITIAL position =\t[ " << get_mpos()[0] << " " << get_mpos()[1] << " " << get_mpos()[2] << " ]");
+
     if (!restart) {
         // Get current position and store restore location and spindle retract waypoint.
         copyAxes(restore_target, parking_target);
@@ -116,10 +121,9 @@ void Parking::park(bool restart) {
 
         // Execute fast parking retract motion to parking target location.
         if (parking_target[_axis] < _target_mpos) {
-            log_debug("Parking motion: parking_target = " << parking_target[_axis] << ", target_mpos = " << _target_mpos);
             parking_target[_axis] = _target_mpos;
             plan_data.feed_rate   = _rate;
-            moveto(parking_target);
+            moveto(parking_target);  //NOTE: This breaks ALLLLLLLLL
         }
     } else {
         log_debug("Spin down only");
@@ -137,13 +141,12 @@ void Parking::park(bool restart) {
         restore_target[2] = restore_z;
     }
 
-    log_debug("PARK: parking target = [ " << parking_target[0] << " " << parking_target[1] << " " << parking_target[2] << " ]");
-    log_debug("PARK: restore target = [ " << restore_target[0] << " " << restore_target[1] << " " << restore_target[2] << " ]");
+    log_debug("PARK: parking target =\t[ " << parking_target[0] << " " << parking_target[1] << " " << parking_target[2] << " ]");
+    log_debug("PARK: restore target =\t[ " << restore_target[0] << " " << restore_target[1] << " " << restore_target[2] << " ]");
 }
 void Parking::unpark(bool restart) {
 
-    log_debug("UNPARK: parking target = [ " << parking_target[0] << " " << parking_target[1] << " " << parking_target[2] << " ]");
-    log_debug("UNPARK: restore target = [ " << restore_target[0] << " " << restore_target[1] << " " << restore_target[2] << " ]");
+    log_debug("UNPARK: restore target =\t[ " << restore_target[0] << " " << restore_target[1] << " " << restore_target[2] << " ]");
 
     // Execute fast restore motion to the pull-out position. Parking requires homing enabled.
     // NOTE: State is will remain DOOR, until the de-energizing and retract is complete.
