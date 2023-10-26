@@ -70,6 +70,8 @@ private:
 
     bool _popup = false;
 
+    int _header_height = 15;
+
     void encoder_update(int16_t enc_diff);
     
     void parse_report();

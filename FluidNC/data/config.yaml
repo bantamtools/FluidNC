@@ -108,7 +108,7 @@ oled:
    i2c_address: 60
    width: 128
    height: 64
-   radio_delay_ms: 1000
+   radio_delay_ms: 2000
 
 # Encoder
 encoder:
