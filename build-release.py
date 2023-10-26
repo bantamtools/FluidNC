@@ -132,44 +132,31 @@ def addImage(name, offset, filename, srcpath, dstpath):
 flashsize = "4m"
 
 mcu = "esp32"
-for mcu in ['esp32']:
-    for envName in ['wifi','bt', 'noradio', 'wifi_s3']:
-        if buildEnv(envName, verbose=verbose) != 0:
-            sys.exit(1)
-        buildDir = os.path.join('.pio', 'build', envName)
-        shutil.copy(os.path.join(buildDir, 'firmware.elf'), os.path.join(relPath, envName + '-' + 'firmware.elf'))
+envName = 'wifi_s3'
 
-        addImage(mcu + '-' + envName + '-firmware', '0x10000', 'firmware.bin', buildDir, mcu + '/' + envName)
+if buildEnv(envName, verbose=verbose) != 0:
+    sys.exit(1)
+    
+buildDir = os.path.join('.pio', 'build', envName)
+shutil.copy(os.path.join(buildDir, 'firmware.elf'), os.path.join(relPath, envName + '-' + 'firmware.elf'))
 
-        if envName == 'wifi':
-            if buildFs('wifi', verbose=verbose) != 0:
-                sys.exit(1)
+addImage(mcu + '-' + envName + '-firmware', '0x10000', 'firmware.bin', buildDir, mcu + '/' + envName)
 
-            # bootapp is a data partition that the bootloader and OTA use to determine which
-            # image to run.  Its initial value is in a file "boot_app0.bin" in the platformio
-            # framework package.  We copy it to the build directory so addImage can find it
-            bootappsrc = os.path.join(os.path.expanduser('~'),'.platformio','packages','framework-arduinoespressif32','tools','partitions', 'boot_app0.bin')
-            shutil.copy(bootappsrc, buildDir)
+if envName == 'wifi_s3':
+    if buildFs('wifi_s3', verbose=verbose) != 0:
+        sys.exit(1)
 
-            addImage(mcu + '-' + envName + '-' + flashsize + '-filesystem', '0x3d0000', 'littlefs.bin', buildDir, mcu + '/' + envName + '/' + flashsize)
-            addImage(mcu + '-' + flashsize + '-partitions', '0x8000', 'partitions.bin', buildDir, mcu + '/' + flashsize)
-            addImage(mcu + '-bootloader', '0x1000', 'bootloader.bin', buildDir, mcu)
-            addImage(mcu + '-bootapp', '0xe000', 'boot_app0.bin', buildDir, mcu)
+    # bootapp is a data partition that the bootloader and OTA use to determine which
+    # image to run. Its initial value is in a file "boot_app0.bin" in the platformio
+    # framework package. We copy it to the build directory so addImage can find it
+    bootappsrc = os.path.join(os.path.expanduser('~'), '.platformio', 'packages', 'framework-arduinoespressif32', 'tools', 'partitions', 'boot_app0.bin')
+    shutil.copy(bootappsrc, buildDir)
 
-        if envName == 'wifi_s3':
-            if buildFs('wifi_s3', verbose=verbose) != 0:
-                sys.exit(1)
+    addImage(mcu + '-' + envName + '-' + flashsize + '-filesystem', '0x3d0000', 'littlefs.bin', buildDir, mcu + '/' + envName + '/' + flashsize)
+    addImage(mcu + '-' + flashsize + '_s3-partitions', '0x8000', 'partitions.bin', buildDir, mcu + '/' + flashsize)
+    addImage(mcu + '_s3-bootloader', '0x1000', 'bootloader.bin', buildDir, mcu)
+    addImage(mcu + '_s3-bootapp', '0xe000', 'boot_app0.bin', buildDir, mcu)
 
-            # bootapp is a data partition that the bootloader and OTA use to determine which
-            # image to run.  Its initial value is in a file "boot_app0.bin" in the platformio
-            # framework package.  We copy it to the build directory so addImage can find it
-            bootappsrc = os.path.join(os.path.expanduser('~'),'.platformio','packages','framework-arduinoespressif32','tools','partitions', 'boot_app0.bin')
-            shutil.copy(bootappsrc, buildDir)
-
-            addImage(mcu + '-' + envName + '-' + flashsize + '-filesystem', '0x3d0000', 'littlefs.bin', buildDir, mcu + '/' + envName + '/' + flashsize)
-            addImage(mcu + '-' + flashsize + '_s3-partitions', '0x8000', 'partitions.bin', buildDir, mcu + '/' + flashsize)
-            addImage(mcu + '_s3-bootloader', '0x1000', 'bootloader.bin', buildDir, mcu)
-            addImage(mcu + '_s3-bootapp', '0xe000', 'boot_app0.bin', buildDir, mcu)
 
 def addSection(node, name, description, choice):
     section = {
