@@ -25,6 +25,9 @@ public:
     bool stuck();
     bool safety_door_ajar();
     bool enter_pressed();
+    bool enter_locked();
+    void lock_enter();
+    void unlock_enter();
 
     std::string report_status();
 

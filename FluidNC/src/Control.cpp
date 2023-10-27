@@ -74,3 +74,18 @@ bool Control::safety_door_ajar() {
 bool Control::enter_pressed() {
     return _pins[1]->get();
 }
+
+// Returns whether the enter button is locked out
+bool Control::enter_locked() {
+    return _pins[1]->locked();
+}
+
+// Locks the enter button
+void Control::lock_enter() {
+    _pins[1]->lock(); 
+}
+
+// Unlocks the enter button
+void Control::unlock_enter() {
+    _pins[1]->unlock(); 
+}

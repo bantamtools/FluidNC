@@ -638,6 +638,7 @@ static void protocol_do_initiate_cycle() {
         sys.suspend.value = 0;  // Break suspend state.
         sys.state         = State::Idle;
     }
+    config->_control->unlock_enter();   // Unlock enter button when starting cycle
 }
 static void protocol_initiate_homing_cycle() {
     // log_debug("protocol_initiate_homing_cycle " << state_name());
@@ -921,6 +922,8 @@ static void protocol_exec_rt_suspend() {
 
                     sys.suspend.bit.retractComplete = true;
                     sys.suspend.bit.restartRetract  = false;
+
+                    config->_control->unlock_enter();   // Unlock enter button once parking complete
                 } else {
                     if (sys.state == State::Sleep) {
                         report_feedback_message(Message::SleepMode);
@@ -954,6 +957,7 @@ static void protocol_exec_rt_suspend() {
                 }
             } else {
                 protocol_manage_spindle();
+                config->_control->unlock_enter();   // Unlock enter button once hold complete
             }
         }
         protocol_exec_rt_system();
@@ -1074,6 +1078,9 @@ static void protocol_do_enter() {
 
     bool long_press = false;
 
+    // Bail if enter button locked out
+    if (config->_control->enter_locked()) return;
+
     // Measure enter press and flag if long press
     enterStartTime = millis();
     while (config->_control->enter_pressed() && ((millis() - enterStartTime) < config->_control->_long_press_ms)) {
@@ -1104,6 +1111,7 @@ static void protocol_do_enter() {
 
             // Click / short press, feedhold job
             } else {
+                config->_control->lock_enter();
                 protocol_buffer_synchronize();  // Sync and finish all remaining buffered motions before moving on.
                 protocol_send_event(&feedHoldEvent);
                 protocol_execute_realtime();  // Execute suspend.
@@ -1120,6 +1128,7 @@ static void protocol_do_enter() {
                 if (long_press) {
                     protocol_send_event(&resetEvent);
                 } else {
+                    config->_control->lock_enter();
                     protocol_send_event(&cycleStartEvent);
                 }
             }

@@ -13,6 +13,8 @@ namespace Machine {
 
         pinnum_t _gpio;
 
+        bool _locked;
+
         static bool inactive(EventPin* pin);
 
     public:
@@ -28,6 +30,9 @@ namespace Machine {
 
         void init();
         bool get();
+        bool locked();
+        void lock();
+        void unlock();
 
         virtual void update(bool state) {};
 
