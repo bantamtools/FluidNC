@@ -957,7 +957,9 @@ static void protocol_exec_rt_suspend() {
                 }
             } else {
                 protocol_manage_spindle();
-                config->_control->unlock_enter();   // Unlock enter button once hold complete
+                if (!config->_parking->park_on_feedhold()) {
+                    config->_control->unlock_enter();   // Unlock enter button once hold complete
+                }
             }
         }
         protocol_exec_rt_system();
