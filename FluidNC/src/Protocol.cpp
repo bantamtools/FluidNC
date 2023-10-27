@@ -638,7 +638,6 @@ static void protocol_do_initiate_cycle() {
         sys.suspend.value = 0;  // Break suspend state.
         sys.state         = State::Idle;
     }
-    config->_control->unlock_enter();   // Unlock enter button when starting cycle
 }
 static void protocol_initiate_homing_cycle() {
     // log_debug("protocol_initiate_homing_cycle " << state_name());
@@ -921,9 +920,11 @@ static void protocol_exec_rt_suspend() {
                     config->_parking->park(sys.suspend.bit.restartRetract);
 
                     sys.suspend.bit.retractComplete = true;
-                    sys.suspend.bit.restartRetract  = false;
+                    sys.suspend.bit.restartRetract  = false;  
 
-                    config->_control->unlock_enter();   // Unlock enter button once parking complete
+                    if (config->_control->enter_locked()) {
+                        config->_control->unlock_enter();
+                    }
                 } else {
                     if (sys.state == State::Sleep) {
                         report_feedback_message(Message::SleepMode);
@@ -957,7 +958,7 @@ static void protocol_exec_rt_suspend() {
                 }
             } else {
                 protocol_manage_spindle();
-                if (!config->_parking->park_on_feedhold()) {
+                if (!config->_parking->park_on_feedhold() && config->_control->enter_locked()) {
                     config->_control->unlock_enter();   // Unlock enter button once hold complete
                 }
             }
@@ -1132,6 +1133,10 @@ static void protocol_do_enter() {
                 } else {
                     config->_control->lock_enter();
                     protocol_send_event(&cycleStartEvent);
+                    protocol_execute_realtime();
+                    if (config->_control->enter_locked()) {
+                        config->_control->unlock_enter();
+                    }
                 }
             }
             break;
