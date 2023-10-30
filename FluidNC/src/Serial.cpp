@@ -97,8 +97,12 @@ void execute_realtime_command(Cmd command, Channel& channel) {
             break;
         case Cmd::CycleStart:
             protocol_send_event(&cycleStartEvent);
+            if (config->_control->enter_locked()) {
+                config->_control->unlock_enter();
+            }
             break;
         case Cmd::FeedHold:
+            config->_control->lock_enter();
             protocol_send_event(&feedHoldEvent, true);  // Sync before before feedholding
             break;
         case Cmd::SafetyDoor:
