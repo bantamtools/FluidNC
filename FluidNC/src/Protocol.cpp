@@ -676,13 +676,12 @@ static void protocol_do_cycle_start() {
                 if (spindle_stop_ovr.value) {
                     spindle_stop_ovr.bit.restoreCycle = true;  // Set to restore in suspend routine and cycle start after.
                 } else {
-                    // Resume if not using parking on feedhold
-                    if ((!config->_parking->park_on_feedhold())) {
-                        protocol_do_initiate_cycle();
-
                     // Unpark before resuming if needed
-                    } else if ((config->_parking->park_on_feedhold()) && (sys.suspend.bit.retractComplete)) {
+                    if ((config->_parking->park_on_feedhold()) && (sys.suspend.bit.retractComplete)) {
                         sys.suspend.bit.initiateRestore = true;
+                    // Otherwise, resume
+                    } else {
+                        protocol_do_initiate_cycle();
                     }
                 }
             }
@@ -947,6 +946,12 @@ static void protocol_exec_rt_suspend() {
                     }
                     if (sys.suspend.bit.initiateRestore) {
                         config->_parking->unpark(sys.suspend.bit.restartRetract);
+                        
+                        // Clear flags for park on feedhold
+                        if (config->_parking->park_on_feedhold()) {
+                            sys.suspend.bit.initiateRestore = false;
+                            sys.suspend.bit.retractComplete = false;
+                        }
 
                         if (!sys.suspend.bit.restartRetract && 
                             ((sys.state == State::SafetyDoor && !sys.suspend.bit.safetyDoorAjar) ||
