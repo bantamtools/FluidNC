@@ -112,7 +112,7 @@ void execute_realtime_command(Cmd command, Channel& channel) {
             if (sys.state == State::Jog) {  // Block all other states from invoking motion cancel.
                 protocol_send_event(&motionCancelEvent);
             }
-            break;
+            break; 
         case Cmd::DebugReport:
             protocol_send_event(&debugEvent);
             break;
