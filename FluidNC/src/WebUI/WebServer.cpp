@@ -653,7 +653,7 @@ namespace WebUI {
     }
     // This page issues a feedhold to pause the motion then retries the WebUI reload
     void Web_Server::handleFeedholdReload() {
-        protocol_send_event(&feedHoldEvent);
+        protocol_send_event(&feedHoldEvent, false);
         // Go to the main page
         _webserver->sendHeader(LOCATION_HEADER, "/");
         _webserver->send(302);

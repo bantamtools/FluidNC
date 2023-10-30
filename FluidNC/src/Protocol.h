@@ -94,7 +94,7 @@ extern ArgEvent cardDetectEvent;
 extern ArgEvent reportStatusEvent;
 
 extern NoArgEvent safetyDoorEvent;
-extern NoArgEvent feedHoldEvent;
+extern ArgEvent feedHoldEvent;
 extern NoArgEvent cycleStartEvent;
 extern NoArgEvent cycleStopEvent;
 extern NoArgEvent motionCancelEvent;

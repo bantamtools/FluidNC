@@ -1636,7 +1636,7 @@ Error gc_execute_line(char* line) {
         case ProgramFlow::Paused:
             protocol_buffer_synchronize();  // Sync and finish all remaining buffered motions before moving on.
             if (sys.state != State::CheckMode) {
-                protocol_send_event(&feedHoldEvent);
+                protocol_send_event(&feedHoldEvent, false);
                 protocol_execute_realtime();  // Execute suspend.
             }
             break;

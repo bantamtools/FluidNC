@@ -492,7 +492,15 @@ static void protocol_do_motion_cancel() {
     sys.suspend.bit.motionCancel = true;
 }
 
-static void protocol_do_feedhold() {
+static void protocol_do_feedhold(void *arg) {
+
+    bool sync = (bool)arg;
+
+    // Sync buffers before feedholding if requested
+    if (sync) {
+        protocol_buffer_synchronize();  // Sync and finish all remaining buffered motions before moving on.
+    }
+
     if (runLimitLoop) {
         runLimitLoop = false;  // Hack to stop show_limits()
         return;
@@ -1120,9 +1128,7 @@ static void protocol_do_enter() {
             // Click / short press, feedhold job
             } else {
                 config->_control->lock_enter();
-                protocol_buffer_synchronize();  // Sync and finish all remaining buffered motions before moving on.
-                protocol_send_event(&feedHoldEvent);
-                protocol_execute_realtime();  // Execute suspend.
+                protocol_send_event(&feedHoldEvent, true);  // Sync before before feedholding
             }
             break;
 
@@ -1249,7 +1255,7 @@ void protocol_read_ultrasonic() {
             case State::Cycle:
 
                 if (config->_ultrasonic->within_pause_distance()) {
-                    protocol_send_event(&feedHoldEvent);
+                    protocol_send_event(&feedHoldEvent, false);
                     pauseActive = true;
                 }
                 break;
@@ -1303,7 +1309,7 @@ ArgEvent cardDetectEvent { protocol_do_card_detect};
 ArgEvent reportStatusEvent { (void (*)(void*))report_realtime_status };
 
 NoArgEvent safetyDoorEvent { request_safety_door };
-NoArgEvent feedHoldEvent { protocol_do_feedhold };
+ArgEvent feedHoldEvent { protocol_do_feedhold };
 NoArgEvent cycleStartEvent { protocol_do_cycle_start };
 NoArgEvent cycleStopEvent { protocol_do_cycle_stop };
 NoArgEvent motionCancelEvent { protocol_do_motion_cancel };

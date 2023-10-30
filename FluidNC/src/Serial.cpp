@@ -99,7 +99,7 @@ void execute_realtime_command(Cmd command, Channel& channel) {
             protocol_send_event(&cycleStartEvent);
             break;
         case Cmd::FeedHold:
-            protocol_send_event(&feedHoldEvent);
+            protocol_send_event(&feedHoldEvent, true);  // Sync before before feedholding
             break;
         case Cmd::SafetyDoor:
             protocol_send_event(&safetyDoorEvent);

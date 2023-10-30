@@ -135,7 +135,7 @@ void limits_soft_check(float* cartesian) {
         // workspace volume so just come to a controlled stop so position is not lost. When complete
         // enter alarm mode.
         if (sys.state == State::Cycle) {
-            protocol_send_event(&feedHoldEvent);
+            protocol_send_event(&feedHoldEvent, false);
             do {
                 protocol_execute_realtime();
                 if (sys.abort) {
