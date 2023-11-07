@@ -127,21 +127,22 @@ axes:
         disable_pin: pinext0.2:low
 
   z:
-    steps_per_mm: 50.00
+    steps_per_mm: 360.0
     max_rate_mm_per_min: 1000
-    acceleration_mm_per_sec2: 100
-    rapid_acceleration_mm_per_sec2: 100
-    max_travel_mm: 77.7
+    acceleration_mm_per_sec2: 500
+    rapid_acceleration_mm_per_sec2: 500
+    max_travel_mm: 75
     soft_limits: false
     homing:
       cycle: 1
       mpos_mm: 0
       positive_direction: true
-      feed_mm_per_min: 100
-      seek_mm_per_min: 1000
+      feed_mm_per_min: 500
+      seek_mm_per_min: 500
 
     motor0:
       limit_neg_pin: gpio.3:high
+      pulloff_mm: 5
       tmc_2209:
         uart_num: 1
         addr: 3
@@ -157,7 +158,7 @@ axes:
         run_mode: StealthChop
         homing_mode: StealthChop
         use_enable: true
-        direction_pin: gpio.34
+        direction_pin: gpio.34:low
         step_pin: gpio.33
         disable_pin: pinext0.7:low
     motor1:
