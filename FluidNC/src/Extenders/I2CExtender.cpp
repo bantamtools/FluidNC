@@ -24,14 +24,14 @@ namespace Extenders {
         auto bus = _i2cBus;
 
         int err;
-        if ((err = bus->write(address, &reg, 1)) != 0) {
-            log_warn("Cannot read from I2C bus: Error = " << err);
+        if ((err = bus->write(address, &reg, 1)) < 0) {
+            log_warn("Cannot read from I2C bus");
 
             IOError();
             return 0;
         } else {
             uint8_t result = 0;
-            if (bus->read(address, &result, 1) != 1) {
+            if (bus->read(address, &result, 1) < 0) {
                 log_warn("Cannot read from I2C bus: "
                          << "no response");
 
@@ -54,8 +54,8 @@ namespace Extenders {
 
         int err = bus->write(address, data, 2);
 
-        if (err) {
-            log_warn("Cannot write to I2C bus: Error = " << err);
+        if (err < 0) {
+            log_warn("Cannot write to I2C bus");
             IOError();
         } else {
             // This log line will probably generate a stack overflow and way too much data. Use with care:
