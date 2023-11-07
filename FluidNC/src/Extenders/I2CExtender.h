@@ -114,8 +114,8 @@ namespace Extenders {
 
         // This information is filled based on the "device" and "device_id" during initialization:
         uint8_t _bus          = 0;
-        uint8_t _address      = 0x74;
-        uint8_t _ports        = 16;
+        uint8_t _address      = 0x20;
+        uint8_t _ports        = 8;
         uint8_t _invertReg    = 0xFF;
         uint8_t _operationReg = 0xFF;
         uint8_t _inputReg     = 0xFF;

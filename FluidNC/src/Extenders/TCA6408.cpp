@@ -89,7 +89,7 @@ namespace Extenders {
         for (int i = 0; i < 4; ++i) {
             auto& data = _isrData[i];
 
-            data._address   = uint8_t(0x74 + i);
+            data._address   = uint8_t(0x20 + i);
             data._container = this;
             data._valueBase = reinterpret_cast<volatile uint16_t*>(&_value) + i;
 
@@ -162,7 +162,7 @@ namespace Extenders {
         const uint8_t deviceId = index / 16;
 
         const uint8_t ConfigReg = 6;
-        uint8_t       address   = 0x74 + deviceId;
+        uint8_t       address   = 0x20 + deviceId;
 
         uint8_t value = uint8_t(_configuration >> (8 * (index / 8)));
         uint8_t reg   = ConfigReg + ((index / 8) & 1);
@@ -189,7 +189,7 @@ namespace Extenders {
         // Otherwise, we do. Check:
         if (_isrData[deviceId]._valueBase == nullptr) {
             const uint8_t InputReg = 0;
-            uint8_t       address  = 0x74 + deviceId;
+            uint8_t       address  = 0x20 + deviceId;
 
             auto     readReg  = InputReg + (reg & 1);
             auto     value    = I2CGetValue(_i2cBus, address, readReg);
@@ -212,7 +212,7 @@ namespace Extenders {
         for (int i = 0; i < 8; ++i) {
             if ((_dirtyRegisters & (1 << i)) != 0) {
                 const uint8_t OutputReg = 2;
-                uint8_t       address   = 0x74 + (i / 2);
+                uint8_t       address   = 0x20 + (i / 2);
 
                 uint8_t val = uint8_t(write >> (8 * i));
                 uint8_t reg = OutputReg + (i & 1);

@@ -200,5 +200,3 @@ extenders:
       device_id: 0
       i2c_num: 0
       interrupt: gpio.35
-      address: 0x20
-      ports: 8

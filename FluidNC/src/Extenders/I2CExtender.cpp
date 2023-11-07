@@ -322,8 +322,6 @@ namespace Extenders {
         handler.item("device", _device, i2cDevice);
         handler.item("device_id", _deviceId);
         handler.item("interrupt", _interruptPin);
-        handler.item("address", _address);
-        handler.item("ports", _ports);
     }
 
     void I2CExtender::interruptHandler(void* arg) {
@@ -355,6 +353,15 @@ namespace Extenders {
                 _outputReg    = 2;
                 _invertReg    = 4;
                 _operationReg = 6;
+                break;
+
+            case I2CExtenderDevice::TCA6408:
+                _address      = 0x20 + _deviceId;
+                _ports        = 8;
+                _inputReg     = 0;
+                _outputReg    = 1;
+                _invertReg    = 2;
+                _operationReg = 3;
                 break;
 
             default:
