@@ -54,7 +54,6 @@ axes:
       tmc_2209:
         uart_num: 1
         addr: 0
-        cs_pin: NO_PIN
         r_sense_ohms: 0.100
         run_amps: 1.920
         hold_amps: 0.500
@@ -92,7 +91,6 @@ axes:
       tmc_2209:
         uart_num: 1
         addr: 1
-        cs_pin: NO_PIN
         r_sense_ohms: 0.100
         run_amps: 1.920
         hold_amps: 0.500
@@ -109,11 +107,9 @@ axes:
         step_pin: gpio.26
         disable_pin: NO_PIN
     motor1:
-      limit_neg_pin: gpio.7:low
       tmc_2209:
         uart_num: 1
         addr: 2
-        cs_pin: NO_PIN
         r_sense_ohms: 0.100
         run_amps: 1.920
         hold_amps: 0.500
@@ -151,7 +147,6 @@ axes:
       tmc_2209:
         uart_num: 1
         addr: 3
-        cs_pin: NO_PIN
         r_sense_ohms: 0.100
         run_amps: 1.920
         hold_amps: 0.500
@@ -167,12 +162,14 @@ axes:
         direction_pin: gpio.34
         step_pin: gpio.33
         disable_pin: NO_PIN
+    motor1:
+        null_motor:
 
 # OLED
 i2c0:
    sda_pin: gpio.40
    scl_pin: gpio.41
-   frequency: 400000
+   frequency: 100000
         
 oled:
   i2c_num: 0
