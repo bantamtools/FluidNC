@@ -142,7 +142,6 @@ axes:
 
     motor0:
       limit_neg_pin: gpio.3:high
-      pulloff_mm: 5
       tmc_2209:
         uart_num: 1
         addr: 3
