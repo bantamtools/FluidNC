@@ -112,6 +112,11 @@ void setup() {
                 }
             }
 
+            // We have to initialize the extenders first, before pins are used
+            if (config->_extenders) {
+                config->_extenders->init();
+            }
+
             if (config->_oled) {
                 config->_oled->init();
             }

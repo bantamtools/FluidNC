@@ -28,6 +28,7 @@
 #include "I2SOBus.h"
 #include "UserOutputs.h"
 #include "Macros.h"
+#include "../Extenders/Extenders.h"
 
 #include <string_view>
 
@@ -78,6 +79,7 @@ namespace Machine {
         OLED*                 _oled           = nullptr;
         Encoder*              _encoder        = nullptr;
         Ultrasonic*           _ultrasonic     = nullptr;
+        Extenders::Extenders* _extenders      = nullptr;
         Spindles::SpindleList _spindles;
 
         UartChannel* _uart_channels[MAX_N_UARTS] = { nullptr };
