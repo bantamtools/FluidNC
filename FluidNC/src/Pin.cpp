@@ -86,7 +86,7 @@ const char* Pin::parse(std::string_view pin_str, Pins::PinDetail*& pinImplementa
         pinImplementation = new Pins::VoidPinDetail();
     }
 
-    if (string_util::equal_ignore_case(prefix, "pinext")) {
+    if (prefix.rfind("pinext", 0) == 0) {  // Prefix begins with 'pinext'
         if (prefix.length() == 7 && prefix[6] >= '0' && prefix[6] <= '9') {
             auto deviceId     = prefix[6] - '0';
             pinImplementation = new Pins::ExtPinDetail(deviceId, static_cast<pinnum_t>(pin_number), parser);

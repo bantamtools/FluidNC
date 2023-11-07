@@ -15,6 +15,7 @@
 namespace Extenders {
     EnumItem i2cDevice[] = { { int(I2CExtenderDevice::PCA9539), "pca9539" },
                              { int(I2CExtenderDevice::PCA9555), "pca9555" },
+                             { int(I2CExtenderDevice::TCA6408), "tca6408" },
                              EnumItem(int(I2CExtenderDevice::Unknown)) };
 
     I2CExtender::I2CExtender() : _i2cBus(nullptr), _usedIORegisters(0), _dirtyWriteBuffer(0), _dirtyWrite(0), _status(0) {}
@@ -321,6 +322,8 @@ namespace Extenders {
         handler.item("device", _device, i2cDevice);
         handler.item("device_id", _deviceId);
         handler.item("interrupt", _interruptPin);
+        handler.item("address", _address);
+        handler.item("ports", _ports);
     }
 
     void I2CExtender::interruptHandler(void* arg) {

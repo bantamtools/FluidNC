@@ -14,7 +14,7 @@ namespace Pins {
             } else if (opt.is("high")) {
                 // Default: Active HIGH.
             } else {
-                Assert(false, "Unsupported I2SO option '%s'", opt());
+                Assert(false, "Unsupported extpin option '%s'", opt());
             }
         }
     }

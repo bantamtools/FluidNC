@@ -14,6 +14,7 @@
 namespace Pins {
     class PCA9539PinDetail;
     class PCA9555PinDetail;
+    class TCA6408PinDetail;
 }
 
 namespace Extenders {
@@ -21,6 +22,7 @@ namespace Extenders {
         Unknown,
         PCA9539,
         PCA9555,
+        TCA6408,
     };
 
     // Pin extenders...
@@ -59,6 +61,8 @@ namespace Extenders {
     // changes (pin 31). Address is selected like any other SPI device by CS. MAX7301 includes
     // pullups and schmitt triggers.
     // Datasheet: https://datasheet.lcsc.com/lcsc/1804140032_Maxim-Integrated-MAX7301AAX-_C143583.pdf
+    //
+    // TCA6408: For info, please see: https://www.ti.com/lit/gpn/TCA6408A
     //
     // How this class works...
     //

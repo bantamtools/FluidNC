@@ -68,7 +68,7 @@ axes:
         use_enable: true
         direction_pin: gpio.14
         step_pin: gpio.21
-        disable_pin: NO_PIN
+        disable_pin: pinext0.0
     motor1:
         null_motor:
 
@@ -169,12 +169,12 @@ i2c0:
    scl_pin: gpio.41
    frequency: 100000
         
-oled:
-  i2c_num: 0
-  i2c_address: 60
-  width: 128
-  height: 64
-  radio_delay_ms: 2000
+#oled:
+#  i2c_num: 0
+#  i2c_address: 60
+#  width: 128
+#  height: 64
+#  radio_delay_ms: 2000
 
 # Encoder
 encoder:
@@ -191,3 +191,14 @@ sdcard:
  cs_pin: gpio.10
  card_detect_pin: gpio.12
  frequency_hz: 4000000
+
+# IO Expander
+extenders:
+  pinextender0:
+    i2c_extender:
+      device: tca6408
+      device_id: 0
+      i2c_num: 0
+      interrupt: gpio.35
+      address: 0x20
+      ports: 8
