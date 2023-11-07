@@ -77,7 +77,7 @@ axes:
     max_rate_mm_per_min: 3000
     acceleration_mm_per_sec2: 500
     rapid_acceleration_mm_per_sec2: 500
-    max_travel_mm: -762
+    max_travel_mm: 762
     soft_limits: false
     homing:
       cycle: 3
