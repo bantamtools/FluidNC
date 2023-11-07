@@ -1,0 +1,198 @@
+name: "Serama Rooster"
+board: "Serama Rooster"
+
+start:
+ must_home: false
+
+control:
+ enter_pin: gpio.38:low
+ long_press_ms: 1000
+
+# Stepper UART
+uart1:
+  txd_pin: gpio.43
+  rxd_pin: gpio.44
+  baud: 115200
+  mode: 8N1
+
+stepping:
+ engine: TIMED
+ idle_ms: 255
+ dir_delay_us: 1
+ pulse_us: 4
+ disable_delay_us: 1
+
+# parking:
+#   enable: true
+#   axis: Z
+#   pullout_distance_mm: 0
+#   pullout_rate_mm_per_min: 1000
+#   target_mpos_mm: 0
+#   rate_mm_per_min: 1000
+#   park_on_feedhold: true
+
+axes:
+  shared_stepper_disable_pin: NO_PIN
+  shared_stepper_reset_pin: NO_PIN
+  
+  x:
+    steps_per_mm: 7.4074
+    max_rate_mm_per_min: 3000
+    acceleration_mm_per_sec2: 500
+    rapid_acceleration_mm_per_sec2: 500
+    max_travel_mm: 762
+    soft_limits: false
+    homing:
+      cycle: 2
+      mpos_mm: 10
+      positive_direction: false
+      feed_mm_per_min: 200
+      seek_mm_per_min: 2000
+    
+    motor0:
+      limit_neg_pin: gpio.8:low
+      tmc_2209:
+        uart_num: 1
+        addr: 0
+        cs_pin: NO_PIN
+        r_sense_ohms: 0.100
+        run_amps: 1.920
+        hold_amps: 0.500
+        microsteps: 8
+        stallguard: 0
+        stallguard_debug: false
+        toff_disable: 0
+        toff_stealthchop: 5
+        toff_coolstep: 3
+        run_mode: StealthChop
+        homing_mode: StealthChop
+        use_enable: true
+        direction_pin: gpio.14
+        step_pin: gpio.21
+        disable_pin: NO_PIN
+    motor1:
+        null_motor:
+
+  y:
+    steps_per_mm: 7.4074
+    max_rate_mm_per_min: 3000
+    acceleration_mm_per_sec2: 500
+    rapid_acceleration_mm_per_sec2: 500
+    max_travel_mm: -762
+    soft_limits: false
+    homing:
+      cycle: 3
+      mpos_mm: 10
+      positive_direction: true
+      feed_mm_per_min: 200
+      seek_mm_per_min: 2000
+    
+    motor0:
+      limit_neg_pin: gpio.7:low
+      tmc_2209:
+        uart_num: 1
+        addr: 1
+        cs_pin: NO_PIN
+        r_sense_ohms: 0.100
+        run_amps: 1.920
+        hold_amps: 0.500
+        microsteps: 8
+        stallguard: 0
+        stallguard_debug: false
+        toff_disable: 0
+        toff_stealthchop: 5
+        toff_coolstep: 3
+        run_mode: StealthChop
+        homing_mode: StealthChop
+        use_enable: true
+        direction_pin: gpio.15
+        step_pin: gpio.26
+        disable_pin: NO_PIN
+    motor1:
+      limit_neg_pin: gpio.7:low
+      tmc_2209:
+        uart_num: 1
+        addr: 2
+        cs_pin: NO_PIN
+        r_sense_ohms: 0.100
+        run_amps: 1.920
+        hold_amps: 0.500
+        microsteps: 8
+        stallguard: 0
+        stallguard_debug: false
+        toff_disable: 0
+        toff_stealthchop: 5
+        toff_coolstep: 3
+        run_mode: StealthChop
+        homing_mode: StealthChop
+        use_enable: true
+        direction_pin: gpio.17
+        step_pin: gpio.47
+        disable_pin: NO_PIN
+    motor2:
+        null_motor:
+
+  z:
+    steps_per_mm: 50.00
+    max_rate_mm_per_min: 1000
+    acceleration_mm_per_sec2: 100
+    rapid_acceleration_mm_per_sec2: 100
+    max_travel_mm: 77.7
+    soft_limits: false
+    homing:
+      cycle: 1
+      mpos_mm: 0
+      positive_direction: true
+      feed_mm_per_min: 100
+      seek_mm_per_min: 1000
+
+    motor0:
+      limit_neg_pin: gpio.3:high
+      tmc_2209:
+        uart_num: 1
+        addr: 3
+        cs_pin: NO_PIN
+        r_sense_ohms: 0.100
+        run_amps: 1.920
+        hold_amps: 0.500
+        microsteps: 8
+        stallguard: 0
+        stallguard_debug: false
+        toff_disable: 0
+        toff_stealthchop: 5
+        toff_coolstep: 3
+        run_mode: StealthChop
+        homing_mode: StealthChop
+        use_enable: true
+        direction_pin: gpio.34
+        step_pin: gpio.33
+        disable_pin: NO_PIN
+
+# OLED
+i2c0:
+   sda_pin: gpio.40
+   scl_pin: gpio.41
+   frequency: 400000
+        
+oled:
+  i2c_num: 0
+  i2c_address: 60
+  width: 128
+  height: 64
+  radio_delay_ms: 2000
+
+# Encoder
+encoder:
+ a_pin: gpio.36
+ b_pin: gpio.37
+
+# Configure SD card in SPI mode
+spi:
+ miso_pin: gpio.2
+ mosi_pin: gpio.6
+ sck_pin: gpio.5
+
+sdcard:
+ cs_pin: gpio.10
+ card_detect_pin: gpio.12
+ frequency_hz: 4000000
