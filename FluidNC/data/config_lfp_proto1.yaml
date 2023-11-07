@@ -125,8 +125,6 @@ axes:
         direction_pin: gpio.17
         step_pin: gpio.47
         disable_pin: NO_PIN
-    motor2:
-        null_motor:
 
   z:
     steps_per_mm: 50.00
