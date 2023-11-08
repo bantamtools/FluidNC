@@ -71,6 +71,7 @@ axes:
         step_pin: gpio.21
         disable_pin: pinext0.0:low
     motor1:
+      pulloff_mm: 10
       tmc_2209:
         uart_num: 1
         addr: 1
@@ -171,12 +172,12 @@ i2c0:
    scl_pin: gpio.41
    frequency: 100000
         
-#oled:
-#  i2c_num: 0
-#  i2c_address: 60
-#  width: 128
-#  height: 64
-#  radio_delay_ms: 2000
+oled:
+  i2c_num: 0
+  i2c_address: 60
+  width: 128
+  height: 64
+  radio_delay_ms: 2000
 
 # Encoder
 encoder:
