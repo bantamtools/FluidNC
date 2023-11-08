@@ -37,17 +37,17 @@ axes:
 
   x:
     steps_per_mm: 56.83
-    max_rate_mm_per_min: 5000
+    max_rate_mm_per_min: 7000
     acceleration_mm_per_sec2: 500
     rapid_acceleration_mm_per_sec2: 500
-    max_travel_mm: 914.4
+    max_travel_mm: 762
     soft_limits: false
     homing:
       cycle: 3
       mpos_mm: 0
       positive_direction: false
-      feed_mm_per_min: 1000
-      seek_mm_per_min: 1000
+      feed_mm_per_min: 2000
+      seek_mm_per_min: 2000
     
     motor0:
       limit_neg_pin: gpio.8:low
@@ -93,7 +93,7 @@ axes:
 
   y:
     steps_per_mm: 56.83
-    max_rate_mm_per_min: 5000
+    max_rate_mm_per_min: 7000
     acceleration_mm_per_sec2: 500
     rapid_acceleration_mm_per_sec2: 500
     max_travel_mm: 609.6
@@ -102,8 +102,8 @@ axes:
       cycle: 2
       mpos_mm: -609.6
       positive_direction: false
-      feed_mm_per_min: 1000
-      seek_mm_per_min: 1000
+      feed_mm_per_min: 2000
+      seek_mm_per_min: 2000
     
     motor0:
       limit_neg_pin: gpio.7:low
