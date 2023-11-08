@@ -45,13 +45,13 @@ axes:
     homing:
       cycle: 3
       mpos_mm: 10
-      positive_direction: true
+      positive_direction: false
       feed_mm_per_min: 1000
       seek_mm_per_min: 1000
     
     motor0:
       limit_neg_pin: gpio.8:low
-      pulloff_mm: 5
+      pulloff_mm: 10
       tmc_2209:
         uart_num: 1
         addr: 0
@@ -67,7 +67,7 @@ axes:
         run_mode: StealthChop
         homing_mode: StealthChop
         use_enable: true
-        direction_pin: gpio.14
+        direction_pin: gpio.14:low
         step_pin: gpio.21
         disable_pin: pinext0.0:low
     motor1:
@@ -86,7 +86,7 @@ axes:
         run_mode: StealthChop
         homing_mode: StealthChop
         use_enable: true
-        direction_pin: gpio.15
+        direction_pin: gpio.15:low
         step_pin: gpio.26
         disable_pin: pinext0.1:low
 
