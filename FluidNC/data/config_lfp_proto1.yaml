@@ -34,23 +34,24 @@ stepping:
 axes:
   shared_stepper_disable_pin: NO_PIN
   shared_stepper_reset_pin: NO_PIN
-  
+
   x:
-    steps_per_mm: 7.4074
-    max_rate_mm_per_min: 3000
+    steps_per_mm: 56.83
+    max_rate_mm_per_min: 5000
     acceleration_mm_per_sec2: 500
     rapid_acceleration_mm_per_sec2: 500
     max_travel_mm: 762
     soft_limits: false
     homing:
-      cycle: 2
+      cycle: 3
       mpos_mm: 10
-      positive_direction: false
-      feed_mm_per_min: 200
-      seek_mm_per_min: 2000
+      positive_direction: true
+      feed_mm_per_min: 1000
+      seek_mm_per_min: 1000
     
     motor0:
       limit_neg_pin: gpio.8:low
+      pulloff_mm: 5
       tmc_2209:
         uart_num: 1
         addr: 0
@@ -70,24 +71,6 @@ axes:
         step_pin: gpio.21
         disable_pin: pinext0.0:low
     motor1:
-        null_motor:
-
-  y:
-    steps_per_mm: 7.4074
-    max_rate_mm_per_min: 3000
-    acceleration_mm_per_sec2: 500
-    rapid_acceleration_mm_per_sec2: 500
-    max_travel_mm: 762
-    soft_limits: false
-    homing:
-      cycle: 3
-      mpos_mm: 10
-      positive_direction: true
-      feed_mm_per_min: 200
-      seek_mm_per_min: 2000
-    
-    motor0:
-      limit_neg_pin: gpio.7:low
       tmc_2209:
         uart_num: 1
         addr: 1
@@ -106,7 +89,24 @@ axes:
         direction_pin: gpio.15
         step_pin: gpio.26
         disable_pin: pinext0.1:low
-    motor1:
+
+  y:
+    steps_per_mm: 56.83
+    max_rate_mm_per_min: 5000
+    acceleration_mm_per_sec2: 500
+    rapid_acceleration_mm_per_sec2: 500
+    max_travel_mm: 762
+    soft_limits: false
+    homing:
+      cycle: 2
+      mpos_mm: 0
+      positive_direction: true
+      feed_mm_per_min: 1000
+      seek_mm_per_min: 1000
+    
+    motor0:
+      limit_neg_pin: gpio.7:low
+      pulloff_mm: 5
       tmc_2209:
         uart_num: 1
         addr: 2
@@ -122,9 +122,11 @@ axes:
         run_mode: StealthChop
         homing_mode: StealthChop
         use_enable: true
-        direction_pin: gpio.17
+        direction_pin: gpio.17:low
         step_pin: gpio.47
         disable_pin: pinext0.2:low
+    motor1:
+        null_motor:
 
   z:
     steps_per_mm: 360.0
