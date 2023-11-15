@@ -8,6 +8,8 @@ stepping:
   pulse_us: 4
   disable_delay_us: 1
 
+planner_blocks: 32
+
 start:
   must_home: false
 

@@ -21,7 +21,7 @@ enable_parking_override_control: false
 use_line_numbers: false
 #Allow FluidNC to use line numbers in gcode. To use line numbers, set this to true. Put line numbers in the gcode with N<line number>, like N100. The line number that is currently being executed by the motion planner will be displayed in the status reports with Ln:100. If there is no line number information in the gcode, it will report Ln:0.
 
-planner_blocks: 16
+planner_blocks: 32
 
 stepping:
   engine: TIMED

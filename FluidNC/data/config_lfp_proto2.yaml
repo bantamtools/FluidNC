@@ -1,6 +1,8 @@
 name: "Serama Rooster"
 board: "Serama Rooster"
 
+planner_blocks: 32
+
 start:
  must_home: false
 
@@ -64,8 +66,8 @@ axes:
         toff_disable: 0
         toff_stealthchop: 5
         toff_coolstep: 3
-        run_mode: StealthChop
-        homing_mode: StealthChop
+        run_mode: CoolStep
+        homing_mode: CoolStep
         use_enable: true
         direction_pin: gpio.14:high
         step_pin: gpio.21
@@ -84,8 +86,8 @@ axes:
         toff_disable: 0
         toff_stealthchop: 5
         toff_coolstep: 3
-        run_mode: StealthChop
-        homing_mode: StealthChop
+        run_mode: CoolStep
+        homing_mode: CoolStep
         use_enable: true
         direction_pin: gpio.15:low
         step_pin: gpio.26
@@ -120,8 +122,8 @@ axes:
         toff_disable: 0
         toff_stealthchop: 5
         toff_coolstep: 3
-        run_mode: StealthChop
-        homing_mode: StealthChop
+        run_mode: CoolStep
+        homing_mode: CoolStep
         use_enable: true
         direction_pin: gpio.17:low
         step_pin: gpio.47
@@ -157,8 +159,8 @@ axes:
         toff_disable: 0
         toff_stealthchop: 5
         toff_coolstep: 3
-        run_mode: StealthChop
-        homing_mode: StealthChop
+        run_mode: CoolStep
+        homing_mode: CoolStep
         use_enable: true
         direction_pin: gpio.34:high
         step_pin: gpio.33

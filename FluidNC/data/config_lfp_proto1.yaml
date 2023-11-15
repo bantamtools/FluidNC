@@ -1,6 +1,8 @@
 name: "Serama Rooster"
 board: "Serama Rooster"
 
+planner_blocks: 32
+
 start:
  must_home: false
 
