@@ -17,29 +17,8 @@ SDCard::SDCard() : _state(State::Idle) {}
 
 void SDCard::init() {
 
-    int clkPin = -1, cmdPin = -1, d0Pin = -1, d1Pin = -1, d2Pin = -1, d3Pin = -1, cdPin = -1;
+    pinnum_t clkPin = -1, cmdPin = -1, d0Pin = -1, d1Pin = -1, d2Pin = -1, d3Pin = -1, cdPin = -1;
     static bool init_message = true;  // used to show messages only once.
-/*
-    pinnum_t    csPin;
-    int         csFallback;
-
-    if (_cs.defined()) {
-        if (!config->_spi->defined()) {
-            log_error("SD needs SPI defined");
-        } else {
-            log_info("SD Card cs_pin:" << _cs.name() << " detect:" << _cardDetect.name() << " freq:" << _frequency_hz);
-            init_message = false;
-        }
-        _cs.setAttr(Pin::Attr::Output);
-        csPin = _cs.getNative(Pin::Capabilities::Output | Pin::Capabilities::Native);
-    } else if ((csFallback = sd_fallback_cs->get()) != -1) {
-        csPin = static_cast<pinnum_t>(csFallback);
-        log_info("Using fallback CS pin " << int(csPin));
-    } else {
-        log_debug("See http://wiki.fluidnc.com/en/config/sd_card#sdfallbackcs-access-sd-without-a-config-file");
-        return;
-    }
-*/
 
     log_info("SD Card: freq = " << _frequency_hz << ", width = " << _width << ", clk = " << _clk.name() << ", cmd = " << _cmd.name() <<
              ", d0 = " << _d0.name() << ", d1 = " << _d1.name() << ", d2 = " << _d2.name() << ", d3 = " << _d3.name() << ", cd = " << _cd.name());
@@ -47,12 +26,12 @@ void SDCard::init() {
 
     // Configure the SDMMC clock/data pins
     _clk.setAttr(Pin::Attr::Output);
-    _cmd.setAttr(Pin::Attr::Input); _cmd.setAttr(Pin::Attr::Output);
+    _cmd.setAttr(Pin::Attr::Input | Pin::Attr::Output);
 
-    _d0.setAttr(Pin::Attr::Input); _d0.setAttr(Pin::Attr::Output);
-    if (_d1.defined()) { _d1.setAttr(Pin::Attr::Input); _d1.setAttr(Pin::Attr::Output); };
-    if (_d2.defined()) { _d2.setAttr(Pin::Attr::Input); _d2.setAttr(Pin::Attr::Output); };
-    if (_d3.defined()) { _d3.setAttr(Pin::Attr::Input); _d3.setAttr(Pin::Attr::Output); };
+    _d0.setAttr(Pin::Attr::Input | Pin::Attr::Output);
+    if (_d1.defined()) _d1.setAttr(Pin::Attr::Input | Pin::Attr::Output);
+    if (_d2.defined()) _d2.setAttr(Pin::Attr::Input | Pin::Attr::Output);
+    if (_d3.defined()) _d3.setAttr(Pin::Attr::Input | Pin::Attr::Output);
     if (_cd.defined()) _cd.setAttr(Pin::Attr::Input);
 
     clkPin = _clk.getNative(Pin::Capabilities::Output | Pin::Capabilities::Native);

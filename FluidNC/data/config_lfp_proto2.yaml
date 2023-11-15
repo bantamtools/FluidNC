@@ -188,7 +188,7 @@ encoder:
 
 # Configure SD card in SDMMC mode
 sdcard:
- frequency_hz: 4000000
+ frequency_hz: 40000000
  width: 1
  clk_pin: gpio.5
  cmd_pin: gpio.6
