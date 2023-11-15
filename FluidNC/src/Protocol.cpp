@@ -455,7 +455,7 @@ static void protocol_hold_complete() {
 }
 
 static void protocol_do_motion_cancel() {
-    // log_debug("protocol_do_motion_cancel " << state_name());
+    log_debug("protocol_do_motion_cancel " << state_name());
     // Execute and flag a motion cancel with deceleration and return to idle. Used primarily by probing cycle
     // to halt and cancel the remainder of the motion.
 
@@ -505,7 +505,7 @@ static void protocol_do_feedhold(void *arg) {
         runLimitLoop = false;  // Hack to stop show_limits()
         return;
     }
-    // log_debug("protocol_do_feedhold " << state_name());
+    log_debug("protocol_do_feedhold " << state_name());
     // Execute a feed hold with deceleration, if required. Then, suspend system.
     switch (sys.state) {
         case State::ConfigAlarm:
@@ -539,7 +539,7 @@ static void protocol_do_feedhold(void *arg) {
 }
 
 static void protocol_do_safety_door() {
-    // log_debug("protocol_do_safety_door " << int(sys.state));
+    log_debug("protocol_do_safety_door " << int(sys.state));
     // Execute a safety door stop with a feed hold and disable spindle/coolant.
     // NOTE: Safety door differs from feed holds by stopping everything no matter state, disables powered
     // devices (spindle/coolant), and blocks resuming until switch is re-engaged.
@@ -598,7 +598,7 @@ static void protocol_do_safety_door() {
 }
 
 static void protocol_do_sleep() {
-    // log_debug("protocol_do_sleep " << state_name());
+    log_debug("protocol_do_sleep " << state_name());
     switch (sys.state) {
         case State::ConfigAlarm:
         case State::Alarm:
@@ -632,7 +632,7 @@ void protocol_cancel_disable_steppers() {
 }
 
 static void protocol_do_initiate_cycle() {
-    // log_debug("protocol_do_initiate_cycle " << state_name());
+    log_debug("protocol_do_initiate_cycle " << state_name());
     // Start cycle only if queued motions exist in planner buffer and the motion is not canceled.
     sys.step_control = {};  // Restore step control to normal operation
     plan_block_t* pb;
@@ -648,7 +648,7 @@ static void protocol_do_initiate_cycle() {
     }
 }
 static void protocol_initiate_homing_cycle() {
-    // log_debug("protocol_initiate_homing_cycle " << state_name());
+    log_debug("protocol_initiate_homing_cycle " << state_name());
     sys.step_control                  = {};    // Restore step control to normal operation
     sys.suspend.value                 = 0;     // Break suspend state.
     sys.step_control.executeSysMotion = true;  // Set to execute homing motion and clear existing flags.
@@ -657,7 +657,7 @@ static void protocol_initiate_homing_cycle() {
 }
 
 static void protocol_do_cycle_start() {
-    // log_debug("protocol_do_cycle_start " << state_name());
+    log_debug("protocol_do_cycle_start " << state_name());
     // Execute a cycle start by starting the stepper interrupt to begin executing the blocks in queue.
 
     // Resume door state when parking motion has retracted and door has been closed.
@@ -733,7 +733,7 @@ void protocol_disable_steppers() {
 }
 
 void protocol_do_cycle_stop() {
-    // log_debug("protocol_do_cycle_stop " << state_name());
+    log_debug("protocol_do_cycle_stop " << state_name());
     protocol_disable_steppers();
 
     switch (sys.state) {
@@ -1074,7 +1074,7 @@ static void protocol_do_limit(void* arg) {
         Machine::Homing::limitReached();
         return;
     }
-    log_debug("Limit switch tripped for " << config->_axes->axisName(limit->_axis) << " motor " << limit->_motorNum);
+    //log_debug("Limit switch tripped for " << config->_axes->axisName(limit->_axis) << " motor " << limit->_motorNum);
     if (sys.state == State::Cycle || sys.state == State::Jog) {
         if (limit->isHard() && rtAlarm == ExecAlarm::None) {
             log_debug("Hard limits");
@@ -1341,7 +1341,7 @@ void protocol_send_event(Event* evt, void* arg) {
 void protocol_handle_events() {
     EventItem item;
     while (xQueueReceive(event_queue, &item, 0)) {
-        // log_debug("event");
+        //log_debug("event");
         item.event->run(item.arg);
     }
 }
