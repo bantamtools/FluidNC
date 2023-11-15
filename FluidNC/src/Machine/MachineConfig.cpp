@@ -64,6 +64,7 @@ namespace Machine {
         handler.section("probe", _probe);
         handler.section("macros", _macros);
         handler.section("start", _start);
+        handler.section("extenders", _extenders);
         handler.section("parking", _parking);
 
         handler.section("user_outputs", _userOutputs);
