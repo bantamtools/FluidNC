@@ -109,8 +109,7 @@ namespace WebUI {
 
     static Error getHomed(char* parameter, AuthenticationLevel auth_level, Channel& out) {  // ESP903
         LogStream s(out, "");
-        //TEMP: Always say homed
-        s << 1;//(int)config->_axes->_homed;
+        s << (int)config->_axes->_homed;
         return Error::Ok;
     }
 
