@@ -4,10 +4,10 @@
 #include "diskio_sdmmc.h"
 #include "ff.h"
 #include "sdmmc_cmd.h"
-#include "driver/sdspi_host.h"
+#include "driver/sdmmc_host.h"
 #include "../src/Machine/MachineConfig.h"
 
-#include "Driver/sdspi.h"
+#include "Driver/sdmmc.h"
 #include "src/Config.h"
 
 #define CHECK_EXECUTE_RESULT(err, str)                                                                                                     \
@@ -59,7 +59,7 @@ fail:
     return err;
 }
 
-sdmmc_host_t  host_config = SDSPI_HOST_DEFAULT();
+sdmmc_host_t  host_config = SDMMC_HOST_DEFAULT();
 sdmmc_card_t* card        = NULL;
 const char*   base_path   = "/sd";
 
@@ -71,16 +71,16 @@ static void call_host_deinit(const sdmmc_host_t* host_config) {
     }
 }
 
-bool sd_init_slot(uint32_t freq_hz, int cs_pin, int cd_pin, int wp_pin) {
+bool sd_init_slot(uint32_t freq_hz, int width, int clk_pin, int cmd_pin, int d0_pin, int d1_pin, int d2_pin, int d3_pin, int cd_pin) {
     esp_err_t err;
 
-    // Note: esp_vfs_fat_sdmmc/sdspi_mount is all-in-one convenience functions.
+    // Note: esp_vfs_fat_sdmmc_mount is all-in-one convenience functions.
     // Please check its source code and implement error recovery when developing
     // production applications.
 
     bool host_inited = false;
 
-    sdspi_device_config_t slot_config;
+    sdmmc_slot_config_t slot_config = SDMMC_SLOT_CONFIG_DEFAULT();
 
     host_config.max_freq_khz = freq_hz / 1000;
 
@@ -88,14 +88,21 @@ bool sd_init_slot(uint32_t freq_hz, int cs_pin, int cd_pin, int wp_pin) {
     CHECK_EXECUTE_RESULT(err, "host init failed");
     host_inited = true;
 
-    // Attach a set of GPIOs to the SPI SD card slot
-    slot_config         = SDSPI_DEVICE_CONFIG_DEFAULT();
-    slot_config.host_id = static_cast<spi_host_device_t>(host_config.slot);
-    slot_config.gpio_cs = gpio_num_t(cs_pin);
-    slot_config.gpio_cd = gpio_num_t(cd_pin);
-    slot_config.gpio_wp = gpio_num_t(wp_pin);
+    // Set bus width to use
+    slot_config.width   = width;
 
-    err = sdspi_host_init_device(&slot_config, &(host_config.slot));
+    // Attach a set of GPIOs to the SD card slot
+    slot_config.clk     = gpio_num_t(clk_pin);
+    slot_config.cmd     = gpio_num_t(cmd_pin);
+    slot_config.d0      = gpio_num_t(d0_pin);
+    slot_config.d1      = gpio_num_t(d1_pin);
+    slot_config.d2      = gpio_num_t(d2_pin);
+    slot_config.d3      = gpio_num_t(d3_pin);
+    if (cd_pin > 0) {
+        slot_config.cd  = gpio_num_t(cd_pin);
+    }
+
+    err = sdmmc_host_init_slot(host_config.slot, &slot_config);
     CHECK_EXECUTE_RESULT(err, "slot init failed");
 
     // Empirically it is necessary to set the frequency twice.
@@ -105,7 +112,7 @@ bool sd_init_slot(uint32_t freq_hz, int cs_pin, int cd_pin, int wp_pin) {
     // If you do it only once below, the attempt to change it seems to
     // be ignored, and you get 20 MHz regardless of what you ask for.
     if (freq_hz) {
-        err = sdspi_host_set_card_clk(host_config.slot, freq_hz / 1000);
+        err = sdmmc_host_set_card_clk(host_config.slot, freq_hz / 1000);
         CHECK_EXECUTE_RESULT(err, "set slot clock speed failed");
     }
 
@@ -120,21 +127,6 @@ cleanup:
     }
     return false;
 }
-
-#if 0
-bool init_spi_bus(int mosi_pin, int miso_pin, int clk_pin) {
-    spi_bus_config_t bus_cfg = {
-        .mosi_io_num     = mosi_pin,
-        .miso_io_num     = miso_pin,
-        .sclk_io_num     = clk_pin,
-        .quadwp_io_num   = -1,
-        .quadhd_io_num   = -1,
-        .max_transfer_sz = 4000,
-    };
-    esp_err_t err = spi_bus_initialize(host_config.slot, &bus_cfg, SPI_DMA_CHAN);
-    return err == ESP_OK;
-}
-#endif
 
 // adapted from vfs_fat_sdmmc.c:esp_vfs_fat_sdmmc_mount()
 std::error_code sd_mount(int max_files) {
@@ -204,11 +196,7 @@ void sd_unmount() {
 
 void sd_deinit_slot() {
     // log_debug("Deinit slot");
-    sdspi_host_remove_device(host_config.slot);
     call_host_deinit(&host_config);
-
-    //deinitialize the bus after all devices are removed
-    //    spi_bus_free(HSPI_HOST);
 }
 
 #if 0

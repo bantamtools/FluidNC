@@ -3,21 +3,6 @@
 
 #pragma once
 
-/*
- * Connect the SD card to the following pins:
- *
- * SD Card | ESP32
- *    D2       -
- *    D3       SS
- *    CMD      MOSI
- *    VSS      GND
- *    VDD      3.3V
- *    CLK      SCK
- *    VSS      GND
- *    D0       MISO
- *    D1       -
- */
-
 #include "Configuration/Configurable.h"
 #include "WebUI/Authentication.h"
 #include "Pin.h"
@@ -40,8 +25,8 @@ public:
 
 private:
     State _state;
-    Pin   _cardDetect;
-    Pin   _cs;
+    int   _width = 1;
+    Pin   _clk, _cmd, _d0, _d1, _d2, _d3, _cd;
 
     uint32_t _frequency_hz = 8000000;  // Set to nonzero to override the default
 
@@ -50,8 +35,6 @@ public:
     SDCard(const SDCard&) = delete;
     SDCard& operator=(const SDCard&) = delete;
 
-    void afterParse() override;
-
     const char* filename();
 
     // Initializes pins.
@@ -59,10 +42,21 @@ public:
 
     // Configuration handlers.
     void group(Configuration::HandlerBase& handler) override {
-        handler.item("cs_pin", _cs);
-        handler.item("card_detect_pin", _cardDetect);
-        handler.item("frequency_hz", _frequency_hz, 400000, 20000000);
+
+        handler.item("width", _width);
+
+        handler.item("clk_pin", _clk);
+        handler.item("cmd_pin", _cmd);
+        handler.item("d0_pin", _d0);
+        handler.item("d1_pin", _d1);
+        handler.item("d2_pin", _d2);
+        handler.item("d3_pin", _d3);
+        handler.item("cd_pin", _cd);
+
+        handler.item("frequency_hz", _frequency_hz, 400000, 50000000);
     }
+
+    void validate() override;
 
     ~SDCard();
 };
