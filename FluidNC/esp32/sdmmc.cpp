@@ -95,9 +95,11 @@ bool sd_init_slot(uint32_t freq_hz, int width, int clk_pin, int cmd_pin, int d0_
     slot_config.clk     = gpio_num_t(clk_pin);
     slot_config.cmd     = gpio_num_t(cmd_pin);
     slot_config.d0      = gpio_num_t(d0_pin);
-    slot_config.d1      = gpio_num_t(d1_pin);
-    slot_config.d2      = gpio_num_t(d2_pin);
-    slot_config.d3      = gpio_num_t(d3_pin);
+    if (width == 4) {
+        slot_config.d1      = gpio_num_t(d1_pin);
+        slot_config.d2      = gpio_num_t(d2_pin);
+        slot_config.d3      = gpio_num_t(d3_pin);
+    }
     if (cd_pin > 0) {
         slot_config.cd  = gpio_num_t(cd_pin);
     }
@@ -130,6 +132,9 @@ cleanup:
 
 // adapted from vfs_fat_sdmmc.c:esp_vfs_fat_sdmmc_mount()
 std::error_code sd_mount(int max_files) {
+
+    if (sd_is_mounted) return std::error_code(ESP_OK, std::system_category());
+
     log_info("Mount_sd");
     esp_err_t err;
 
@@ -221,7 +226,7 @@ bool sd_card_is_present() {
     // Otherwise, attempt to mount it and unmount again if found
     } else if (!sd_mount()) {
 
-        sd_unmount();
+        //sd_unmount();
         res = true;
     }
 
@@ -281,7 +286,7 @@ void sd_populate_files_menu() {
         }
         
         // Unmount the SD card
-        sd_unmount();
+        //sd_unmount();
     }
 
     // Refresh the menu
