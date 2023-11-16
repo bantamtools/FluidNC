@@ -25,8 +25,13 @@ public:
 
 private:
     State _state;
+#ifdef USE_SDMMC
     int   _width = 1;
     Pin   _clk, _cmd, _d0, _d1, _d2, _d3, _cd;
+#else
+    Pin   _cardDetect;
+    Pin   _cs;
+#endif
 
     uint32_t _frequency_hz = 8000000;  // Set to nonzero to override the default
 
@@ -40,6 +45,7 @@ public:
     // Initializes pins.
     void init();
 
+#ifdef USE_SDMMC
     // Configuration handlers.
     void group(Configuration::HandlerBase& handler) override {
 
@@ -57,6 +63,14 @@ public:
     }
 
     void validate() override;
+#else
+    // Configuration handlers.
+    void group(Configuration::HandlerBase& handler) override {
+        handler.item("cs_pin", _cs);
+        handler.item("card_detect_pin", _cardDetect);
+        handler.item("frequency_hz", _frequency_hz, 400000, 20000000);
+    }
+#endif
 
     ~SDCard();
 };

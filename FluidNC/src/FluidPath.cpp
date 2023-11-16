@@ -2,7 +2,11 @@
 // Use of this source code is governed by a GPLv3 license that can be found in the LICENSE file.
 
 #include "FluidPath.h"
+#ifdef USE_SDMMC
 #include "Driver/sdmmc.h"
+#else
+#include "Driver/sdspi.h"
+#endif
 #include "Config.h"
 #include "Error.h"
 #include "HashFS.h"
