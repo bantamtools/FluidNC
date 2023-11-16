@@ -92,6 +92,7 @@ bool sd_init_slot(uint32_t freq_hz, int width, int clk_pin, int cmd_pin, int d0_
     slot_config.width   = width;
 
     // Attach a set of GPIOs to the SD card slot
+#ifdef SOC_SDMMC_USE_GPIO_MATRIX
     slot_config.clk     = gpio_num_t(clk_pin);
     slot_config.cmd     = gpio_num_t(cmd_pin);
     slot_config.d0      = gpio_num_t(d0_pin);
@@ -103,6 +104,7 @@ bool sd_init_slot(uint32_t freq_hz, int width, int clk_pin, int cmd_pin, int d0_
     if (cd_pin > 0) {
         slot_config.cd  = gpio_num_t(cd_pin);
     }
+#endif
 
     err = sdmmc_host_init_slot(host_config.slot, &slot_config);
     CHECK_EXECUTE_RESULT(err, "slot init failed");
