@@ -158,11 +158,6 @@ void sd_populate_files_menu() {
     // Clear the file list to start
     config->_oled->_menu->prep_for_sd_update();
 
-    // SD not mounted, attempt to mount
-    if (!sd_is_mounted) {
-        sd_mount();
-    }
-
     // Iterate through files if no errors (i.e. SD not found or corrupt)
     if (sd_is_mounted) {
 
