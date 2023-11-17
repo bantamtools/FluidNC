@@ -20,10 +20,8 @@ namespace Machine {
 
         // Mount/unmount SD card based on card detect value (active-low)
         if (value) {
-            log_info("1!");
             sd_unmount();
         } else {
-            log_info("2!");
             sd_mount();
         }
         
