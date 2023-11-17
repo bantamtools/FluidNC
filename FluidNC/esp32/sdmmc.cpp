@@ -89,19 +89,6 @@ bool sd_init_slot(uint32_t freq_hz, int width, int clk_pin, int cmd_pin, int d0_
         slot_config.cd  = gpio_num_t(cd_pin);
     }
 
-    // TODO: Put this back...
-    //
-    // Empirically it is necessary to set the frequency twice.
-    // If you do it only above, the max frequency will be pinned
-    // at the highest "standard" frequency lower than the requested
-    // one, which is 400 kHz for requested frequencies < 20 MHz.
-    // If you do it only once below, the attempt to change it seems to
-    // be ignored, and you get 20 MHz regardless of what you ask for.
-    //if (freq_hz) {
-    //    err = sdmmc_host_set_card_clk(host_config.slot, freq_hz / 1000);
-    //    CHECK_EXECUTE_RESULT(err, "set slot clock speed failed");
-    //}
-
     // Clear mount flag
     sd_is_mounted = false;
 
@@ -172,9 +159,9 @@ void sd_populate_files_menu() {
     config->_oled->_menu->prep_for_sd_update();
 
     // SD not mounted, attempt to mount
-    //if (!sd_is_mounted) {
-    //    ec = sd_mount();
-    //}
+    if (!sd_is_mounted) {
+        sd_mount();
+    }
 
     // Iterate through files if no errors (i.e. SD not found or corrupt)
     if (sd_is_mounted) {
@@ -207,9 +194,6 @@ void sd_populate_files_menu() {
                 }
             }
         }
-        
-        // Unmount the SD card
-        //sd_unmount();
     }
 
     // Refresh the menu
