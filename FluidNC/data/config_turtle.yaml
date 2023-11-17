@@ -96,21 +96,14 @@ encoder:
   a_pin: gpio.35
   b_pin: gpio.48
 
-# Configure SD card in SPI mode
-spi:
-  miso_pin: gpio.8
-  mosi_pin: gpio.9
-  sck_pin: gpio.10
-
+# Configure SD card in SDMMC mode
 sdcard:
-  cs_pin: gpio.12
-  card_detect_pin: gpio.14
-  frequency_hz: 8000000
-
-# LED (0) and expansion IOs (1-4)
-user_outputs:
-  digital0_pin: gpio.5
-  digital1_pin: gpio.43
-  digital2_pin: gpio.44
-  digital3_pin: gpio.42
-  digital4_pin: gpio.6
+ frequency_hz: 20000000
+ width: 4
+ clk_pin: gpio.10
+ cmd_pin: gpio.9
+ d0_pin: gpio.8
+ d1_pin: gpio.7
+ d2_pin: gpio.13
+ d3_pin: gpio.12
+ cd_pin: gpio.14
