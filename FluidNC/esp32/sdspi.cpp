@@ -10,6 +10,8 @@
 #include "Driver/sdspi.h"
 #include "src/Config.h"
 
+#ifndef USE_SDMMC
+
 #define CHECK_EXECUTE_RESULT(err, str)                                                                                                     \
     do {                                                                                                                                   \
         if ((err) != ESP_OK) {                                                                                                             \
@@ -299,3 +301,4 @@ void sd_populate_files_menu() {
     // Refresh the menu
     config->_oled->refresh_display(true);
 }
+#endif

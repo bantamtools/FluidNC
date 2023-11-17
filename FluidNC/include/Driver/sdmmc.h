@@ -4,12 +4,12 @@
 #include <filesystem>
 #include "fluidnc_gpio.h"
 
-#ifndef USE_SDMMC
+#ifdef USE_SDMMC
 
 // Definitions
 #define SD_NUM_ALLOWED_EXT  3   // Number of allowed file extensions
 
-bool sd_init_slot(uint32_t freq_hz, int cs_pin, int cd_pin = -1, int wp_pin = -1);
+bool sd_init_slot(uint32_t freq_hz, int width = 1, int clk_pin = -1, int cmd_pin = -1, int d0_pin = -1, int d1_pin = -1, int d2_pin = -1, int d3_pin = -1, int cd_pin = -1);
 void sd_unmount();
 void sd_deinit_slot();
 

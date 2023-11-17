@@ -11,8 +11,8 @@ bool i2c_master_init(int bus_number, pinnum_t sda_pin, pinnum_t scl_pin, uint32_
         .mode          = I2C_MODE_MASTER,
         .sda_io_num    = (gpio_num_t)sda_pin,
         .scl_io_num    = (gpio_num_t)scl_pin,
-        .sda_pullup_en = GPIO_PULLUP_ENABLE,
-        .scl_pullup_en = GPIO_PULLUP_ENABLE,
+        .sda_pullup_en = GPIO_PULLUP_DISABLE,
+        .scl_pullup_en = GPIO_PULLUP_DISABLE,
         .master        = { .clk_speed = frequency },
     };
 

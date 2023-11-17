@@ -17,6 +17,13 @@ namespace Machine {
     }
 
     void CardDetectPin::update(bool value) {
+
+        // Mount/unmount SD card based on card detect value (active-low)
+        if (value) {
+            sd_unmount();
+        } else {
+            sd_mount();
+        }
         
         // Update the files menu based on SD listing
         sd_populate_files_menu();

@@ -12,7 +12,11 @@
 #include "Config.h"
 #include "WebUI/Authentication.h"
 #include "InputFile.h"
+#ifdef USE_SDMMC
+#include "Driver/sdmmc.h"
+#else
 #include "Driver/sdspi.h"
+#endif
 
 // Line buffer size from the serial input stream to be executed.Also, governs the size of
 // each of the startup blocks, as they are each stored as a string of this size.
