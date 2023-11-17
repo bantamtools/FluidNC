@@ -62,6 +62,7 @@ fail:
 }
 
 sdmmc_host_t  host_config = SDMMC_HOST_DEFAULT();
+sdmmc_slot_config_t slot_config = SDMMC_SLOT_CONFIG_DEFAULT();
 sdmmc_card_t* card        = NULL;
 const char*   base_path   = "/sd";
 
@@ -80,15 +81,15 @@ bool sd_init_slot(uint32_t freq_hz, int width, int clk_pin, int cmd_pin, int d0_
     // Please check its source code and implement error recovery when developing
     // production applications.
 
-    bool host_inited = false;
+    //bool host_inited = false;
 
-    sdmmc_slot_config_t slot_config = SDMMC_SLOT_CONFIG_DEFAULT();
+    //sdmmc_slot_config_t slot_config = SDMMC_SLOT_CONFIG_DEFAULT();
 
     host_config.max_freq_khz = freq_hz / 1000;
 
-    err = host_config.init();
-    CHECK_EXECUTE_RESULT(err, "host init failed");
-    host_inited = true;
+    //err = host_config.init();
+    //CHECK_EXECUTE_RESULT(err, "host init failed");
+    //host_inited = true;
 
     // Set bus width to use
     slot_config.width   = width;
@@ -106,8 +107,8 @@ bool sd_init_slot(uint32_t freq_hz, int width, int clk_pin, int cmd_pin, int d0_
         slot_config.cd  = gpio_num_t(cd_pin);
     }
 
-    err = sdmmc_host_init_slot(host_config.slot, &slot_config);
-    CHECK_EXECUTE_RESULT(err, "slot init failed");
+    //err = sdmmc_host_init_slot(host_config.slot, &slot_config);
+    //CHECK_EXECUTE_RESULT(err, "slot init failed");
 
     // Empirically it is necessary to set the frequency twice.
     // If you do it only above, the max frequency will be pinned
@@ -115,21 +116,21 @@ bool sd_init_slot(uint32_t freq_hz, int width, int clk_pin, int cmd_pin, int d0_
     // one, which is 400 kHz for requested frequencies < 20 MHz.
     // If you do it only once below, the attempt to change it seems to
     // be ignored, and you get 20 MHz regardless of what you ask for.
-    if (freq_hz) {
-        err = sdmmc_host_set_card_clk(host_config.slot, freq_hz / 1000);
-        CHECK_EXECUTE_RESULT(err, "set slot clock speed failed");
-    }
+    //if (freq_hz) {
+    //    err = sdmmc_host_set_card_clk(host_config.slot, freq_hz / 1000);
+    //    CHECK_EXECUTE_RESULT(err, "set slot clock speed failed");
+    //}
 
     // Clear mount flag
     sd_is_mounted = false;
 
     return true;
 
-cleanup:
-    if (host_inited) {
-        call_host_deinit(&host_config);
-    }
-    return false;
+///cleanup:
+//    if (host_inited) {
+ //       call_host_deinit(&host_config);
+//    }
+ //   return false;
 }
 
 // adapted from vfs_fat_sdmmc.c:esp_vfs_fat_sdmmc_mount()
@@ -139,7 +140,20 @@ std::error_code sd_mount(int max_files) {
 
     log_info("Mount_sd");
     esp_err_t err;
+    esp_vfs_fat_sdmmc_mount_config_t mount_config = {
+        .format_if_mount_failed = false,
+        .max_files = max_files,
+        .allocation_unit_size = 64 * 1024
+    };
 
+    err = esp_vfs_fat_sdmmc_mount(base_path, &host_config, &slot_config, &mount_config, &card);
+
+    CHECK_EXECUTE_RESULT(err, "sd_mount failed");
+
+    sd_is_mounted = true;
+
+
+/*
     // mount_prepare_mem() ... minus the strdup of base_path
     // Search for a free drive slot
     BYTE pdrv = FF_DRV_NOT_USED;
@@ -170,16 +184,34 @@ std::error_code sd_mount(int max_files) {
 
     // set flag
     sd_is_mounted = true;
+*/
+
 
     return {};
 cleanup:
-    free(card);
-    card = NULL;
+ //   free(card);
+ //   card = NULL;
     return std::error_code(err, std::system_category());
 }
 
 void sd_unmount() {
+
+    esp_err_t err;
+
     log_info("Unmount_sd");
+
+    // Unmount SD card if previously mounted
+    if (sd_is_mounted) {
+
+        err = esp_vfs_fat_sdcard_unmount(base_path, card);
+        CHECK_EXECUTE_RESULT(err, "sd_unmount failed");
+        
+        sd_is_mounted = false;
+    }
+cleanup:
+    return;
+
+    /*
     BYTE pdrv = ff_diskio_get_pdrv_card(card);
     if (pdrv == 0xff) {
         return;
@@ -199,40 +231,18 @@ void sd_unmount() {
 
     // clear flag
     sd_is_mounted = false;
+    */
 }
 
+/*
 void sd_deinit_slot() {
     // log_debug("Deinit slot");
     call_host_deinit(&host_config);
-}
-
-#if 0
-static esp_err_t unmount_card_core(const char* base_path, sdmmc_card_t* card) {
-    return err;
-}
-
-unmount2() {
-    char drv[3] = { (char)('0' + pdrv), ':', 0 };
-    f_mount(NULL, drv, 0);
-}
-#endif
+}*/
 
 bool sd_card_is_present() {
 
-    bool res = false;
-
-    // SD card already mounted
-    if (sd_is_mounted) {
-        res = true;
-
-    // Otherwise, attempt to mount it and unmount again if found
-    } else if (!sd_mount()) {
-
-        //sd_unmount();
-        res = true;
-    }
-
-    return res;
+    return sd_is_mounted;
 }
 
 void sd_populate_files_menu() {
@@ -251,12 +261,12 @@ void sd_populate_files_menu() {
     config->_oled->_menu->prep_for_sd_update();
 
     // SD not mounted, attempt to mount
-    if (!sd_is_mounted) {
-        ec = sd_mount();
-    }
+    //if (!sd_is_mounted) {
+    //    ec = sd_mount();
+    //}
 
     // Iterate through files if no errors (i.e. SD not found or corrupt)
-    if (!ec) {
+    if (sd_is_mounted) {
 
         // Iterate through the top level directory
         auto iter = std::filesystem::recursive_directory_iterator { fpath, ec };
