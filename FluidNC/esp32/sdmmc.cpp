@@ -107,13 +107,12 @@ std::error_code sd_mount(int max_files) {
     // Bail if already mounted
     if (sd_is_mounted) return std::error_code(ESP_OK, std::system_category());
 
-    log_info("Mount_sd");
-
     // Mount SD card
     err = esp_vfs_fat_sdmmc_mount(base_path, &host_config, &slot_config, &mount_config, &card);
 
     // Set flag if mounted
     if (err == ESP_OK) {
+        log_info("Mount_sd");
         sd_is_mounted = true;
     }
 
@@ -124,8 +123,6 @@ void sd_unmount() {
 
     esp_err_t err;
 
-    log_info("Unmount_sd");
-
     // Unmount SD card if previously mounted
     if (sd_is_mounted) {
 
@@ -133,6 +130,7 @@ void sd_unmount() {
         
         // Clear flag if unmounted
         if (err == ESP_OK) {
+            log_info("Unmount_sd");
             sd_is_mounted = false;
         }
     }
