@@ -71,7 +71,7 @@ axes:
         use_enable: true
         direction_pin: gpio.14:low
         step_pin: gpio.21
-        disable_pin: pinext0.0:low
+        disable_pin: pinext0.0
     motor1:
       pulloff_mm: 10
       tmc_2209:
@@ -91,7 +91,7 @@ axes:
         use_enable: true
         direction_pin: gpio.15:low
         step_pin: gpio.26
-        disable_pin: pinext0.1:low
+        disable_pin: pinext0.1
 
   y:
     steps_per_mm: 56.83
@@ -127,7 +127,7 @@ axes:
         use_enable: true
         direction_pin: gpio.17
         step_pin: gpio.47
-        disable_pin: pinext0.2:low
+        disable_pin: pinext0.2
     motor1:
         null_motor:
 
@@ -164,7 +164,7 @@ axes:
         use_enable: true
         direction_pin: gpio.34:low
         step_pin: gpio.33
-        disable_pin: pinext0.7:low
+        disable_pin: pinext0.7
     motor1:
         null_motor:
 
@@ -206,3 +206,15 @@ extenders:
       device: tca6408
       device_id: 0
       interrupt: gpio.35
+
+# User Outputs
+user_outputs:
+  # Expansion IOs 0-4
+  digital0_pin: gpio.48
+  digital1_pin: gpio.45
+  digital2_pin: pinext0.3
+  digital3_pin: gpio.46
+  digital4_pin: pinext0.6
+  # LEDs 0-1
+  digital5_pin: pinext0.4:low
+  digital6_pin: pinext0.5:low
