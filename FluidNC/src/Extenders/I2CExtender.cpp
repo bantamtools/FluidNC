@@ -188,7 +188,7 @@ namespace Extenders {
                 uint8_t currentRegister = _outputReg;
                 uint8_t address         = _address;
 
-                bool handleInvertSoftware = (_invertReg == 0xFF);
+                bool handleInvertSoftware = _invert_outputs_in_fw | (_invertReg == 0xFF);
 
                 auto toWrite = _dirtyWrite.exchange(0);
                 for (int i = 0; i < claimedValues; ++i) {
@@ -343,6 +343,7 @@ namespace Extenders {
                 _outputReg    = 2;
                 _invertReg    = 4;
                 _operationReg = 6;
+                _invert_outputs_in_fw = false;
                 break;
 
             case I2CExtenderDevice::PCA9555:
@@ -353,6 +354,7 @@ namespace Extenders {
                 _outputReg    = 2;
                 _invertReg    = 4;
                 _operationReg = 6;
+                _invert_outputs_in_fw = false;
                 break;
 
             case I2CExtenderDevice::TCA6408:
@@ -362,6 +364,7 @@ namespace Extenders {
                 _outputReg    = 1;
                 _invertReg    = 2;
                 _operationReg = 3;
+                _invert_outputs_in_fw = true;  // TCA6408 only inverts inputs with reg
                 break;
 
             default:
