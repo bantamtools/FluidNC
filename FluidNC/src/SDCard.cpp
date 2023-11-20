@@ -90,21 +90,20 @@ void SDCard::init() {
 
 #ifdef USE_SDMMC
 void SDCard::validate() {
-    if (!_clk.defined() || !_cmd.defined() ) {
+    if (_clk.defined() || _cmd.defined() || _d0.defined()) {
         Assert(_clk.defined(), "CLK pin should be configured once");
         Assert(_cmd.defined(), "CMD pin should be configured once");
+        Assert(_d0.defined(), "D0 pin should be configured once"); 
     }
-    if (_width != 1 && _width != 4) {
-       Assert((_width == 1 || _width == 4), "WIDTH should be configured to 1 or 4"); 
-    }
-    if (_width == 1 && !_d0.defined()) {
-       Assert(_d0.defined(), "D0 pin should be configured once"); 
-    }
-    if (_width == 4 && (!_d0.defined() || !_d1.defined() || !_d2.defined() || !_d3.defined())) {
-       Assert(_d0.defined(), "D0 pin should be configured once"); 
-       Assert(_d1.defined(), "D1 pin should be configured once"); 
-       Assert(_d2.defined(), "D2 pin should be configured once"); 
-       Assert(_d3.defined(), "D3 pin should be configured once"); 
+
+    Assert((_width == 1 || _width == 4), "WIDTH should be configured to 1 or 4"); 
+
+    if (_width == 4) {
+        if (_d1.defined() || _d2.defined() || _d3.defined()) {
+            Assert(_d1.defined(), "D1 pin should be configured once"); 
+            Assert(_d2.defined(), "D2 pin should be configured once"); 
+            Assert(_d3.defined(), "D3 pin should be configured once"); 
+        }
     }
 }
 #endif
