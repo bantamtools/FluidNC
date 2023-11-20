@@ -110,6 +110,7 @@ namespace Machine {
         }
 
         if (_sdCard == nullptr) {
+            log_info("sdCard: using defaults (MVP 1-bit SDMMC)");
             _sdCard = new SDCard();
         }
 

@@ -101,11 +101,17 @@ void setup() {
             }
             if (config->_spi) {
                 config->_spi->init();
-
+#ifndef USE_SDMMC
                 if (config->_sdCard != nullptr) {
                     config->_sdCard->init();
                 }
+#endif
             }
+#ifdef USE_SDMMC
+            if (config->_sdCard != nullptr) {
+                config->_sdCard->init();
+            }
+#endif
             for (size_t i = 0; i < MAX_N_I2C; i++) {
                 if (config->_i2c[i]) {
                     config->_i2c[i]->init();
