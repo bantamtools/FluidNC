@@ -33,9 +33,10 @@ void Encoder::init() {
 
 	pcnt_config_t pcnt_config;
 
-    // Check if encoder pins configured
-    if (!_a_pin.defined() || !_b_pin.defined()) {
-        return;
+    // Encoder not configured, use MVP as fail-safe default
+    if (!_a_pin.defined() && !_b_pin.defined()) {
+        _a_pin = Pin::create("gpio.35");
+        _b_pin = Pin::create("gpio.48");
     }
 
     // Set up encoder A/B pins
@@ -96,7 +97,12 @@ int16_t Encoder::get_difference() {
 }
 
 // Configurable functions
-void Encoder::validate() {}
+void Encoder::validate() {
+    if (_a_pin.defined() || _b_pin.defined()) {
+        Assert(_a_pin.defined(), "A pin should be configured once");
+        Assert(_b_pin.defined(), "B pin should be configured once");
+    }
+}
 
 void Encoder::group(Configuration::HandlerBase& handler) {
 

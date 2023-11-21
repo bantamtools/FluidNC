@@ -61,7 +61,7 @@ private:
     uint32_t    _run_start_time = 0;
     uint32_t    _prev_run_time = 0;
 
-    int _radio_delay = 0;
+    int _radio_delay = 2000;
 
     uint8_t _i2c_num = 0;
 
@@ -134,8 +134,8 @@ public:
     // Configurable
 
     uint8_t _address = 0x3c;
-    int     _width   = 64;
-    int     _height  = 48;
+    int     _width   = 128;
+    int     _height  = 64;
 
     // Channel method overrides
 

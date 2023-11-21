@@ -141,6 +141,11 @@ namespace Machine {
             _spindles.push_back(new Spindles::Null());
         }
 
+        if (_encoder == nullptr) {
+            log_info("Encoder: using defaults (MVP)");
+            _encoder = new Encoder();
+        }
+
         // Precaution in case the full spindle initialization does not happen
         // due to a configuration error
         spindle = _spindles[0];
