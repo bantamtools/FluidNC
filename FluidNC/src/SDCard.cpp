@@ -26,14 +26,8 @@ void SDCard::init() {
 
     init_message = false;
 
-    // SD card configured
-    if (_clk.defined() || _cmd.defined() || _d0.defined()) {
-
-        // Do nothing...
-
-    // Otherwise, use MVP 1-bit SDMMC as fail-safe default
-    } else {
-
+    // SD card not configured, use MVP 1-bit SDMMC as fail-safe default
+    if (!_clk.defined() && !_cmd.defined() && !_d0.defined()) {
         _clk = Pin::create("gpio.10");
         _cmd = Pin::create("gpio.9");
         _d0 = Pin::create("gpio.8");
