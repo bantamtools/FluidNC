@@ -21,12 +21,24 @@ SDCard::SDCard() : _state(State::Idle) {}
 
 void SDCard::init() {
 #ifdef USE_SDMMC
-    pinnum_t clkPin = -1, cmdPin = -1, d0Pin = -1, d1Pin = -1, d2Pin = -1, d3Pin = -1, cdPin = -1;
+    pinnum_t clkPin = -1, cmdPin = -1, d0Pin = -1, d1Pin = -1, d2Pin = -1, d3Pin = -1, cdPin = -1;  // Using MVP 1-bit SDMMC by default
     static bool init_message = true;  // used to show messages only once.
 
-    log_info("SD Card: freq = " << _frequency_hz << ", width = " << _width << ", clk = " << _clk.name() << ", cmd = " << _cmd.name() <<
-             ", d0 = " << _d0.name() << ", d1 = " << _d1.name() << ", d2 = " << _d2.name() << ", d3 = " << _d3.name() << ", cd = " << _cd.name());
     init_message = false;
+
+    // SD card configured
+    if (_clk.defined() || _cmd.defined() || _d0.defined()) {
+
+        // Do nothing...
+
+    // Otherwise, use MVP 1-bit SDMMC as fail-safe default
+    } else {
+
+        _clk = Pin::create("gpio.10");
+        _cmd = Pin::create("gpio.9");
+        _d0 = Pin::create("gpio.8");
+        _cd = Pin::create("gpio.14");
+    }
 
     // Configure the SDMMC clock/data pins
     _clk.setAttr(Pin::Attr::Output);
@@ -45,6 +57,9 @@ void SDCard::init() {
     if (_d2.defined()) d2Pin = _d2.getNative(Pin::Capabilities::Input | Pin::Capabilities::Output | Pin::Capabilities::Native);
     if (_d3.defined()) d3Pin = _d3.getNative(Pin::Capabilities::Input | Pin::Capabilities::Output | Pin::Capabilities::Native);
     if (_cd.defined()) cdPin = _cd.getNative(Pin::Capabilities::Input | Pin::Capabilities::Native);
+
+    log_info("SD Card: freq = " << _frequency_hz << ", width = " << _width << ", clk = " << _clk.name() << ", cmd = " << _cmd.name() <<
+            ", d0 = " << _d0.name() << ", d1 = " << _d1.name() << ", d2 = " << _d2.name() << ", d3 = " << _d3.name() << ", cd = " << _cd.name());
 
     // Initialize the slot
     sd_init_slot(_frequency_hz, _width, clkPin, cmdPin, d0Pin, d1Pin, d2Pin, d3Pin, cdPin);
