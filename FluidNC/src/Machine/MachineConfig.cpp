@@ -126,6 +126,7 @@ namespace Machine {
         // Only if an i2so section is present will config->_i2so be non-null
 
         if (_control == nullptr) {
+            log_info("Control: using defaults (MVP)");
             _control = new Control();
         }
 

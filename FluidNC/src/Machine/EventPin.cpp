@@ -20,7 +20,13 @@ namespace Machine {
 
     void EventPin::init() {
         if (_pin->undefined()) {
-            return;
+
+            // Encoder button not configured, use MVP as fail-safe default
+            if (_legend.compare("enter_pin") == 0) {
+                *_pin = Pin::create("gpio.36");
+            } else {
+                return;
+            }
         }
 
         _pin->report(_legend);
