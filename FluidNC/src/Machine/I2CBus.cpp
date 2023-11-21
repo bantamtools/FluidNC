@@ -21,46 +21,45 @@ namespace Machine {
     }
 
     void I2CBus::init() {
+        
+        pinnum_t sdaPin, sclPin;
         _error      = false;
-
-        // I2C0 not configured, default to LFP as fail-safe and test
+        
+        // I2C0 not configured, set fail-safe based on I2C detection
         if (_busNumber == 0 && !_sda.defined() && !_scl.defined()) {
 
-            // Start with LFP config and set flag
-            _sda = Pin::create("gpio.40");
-            _scl = Pin::create("gpio.41");
             _fail_safe = true;
-        }
-
-        auto sdaPin = _sda.getNative(Pin::Capabilities::Native | Pin::Capabilities::Input | Pin::Capabilities::Output);
-        auto sclPin = _scl.getNative(Pin::Capabilities::Native | Pin::Capabilities::Input | Pin::Capabilities::Output);
-
-        _error = i2c_master_init(_busNumber, sdaPin, sclPin, _frequency);
-        if (_error) {
-            log_error("I2C init failed");
-        }
-
-        // Check fail-safe, swtich to MVP if I2C extender doesn't exist (LFP only)
-        uint8_t data = 0x00;
-        if (_fail_safe && (write(0x20, &data, 1) < 0)) {
-
-            // Uninitialize I2C0
-            i2c_master_deinit(_busNumber);
-
-            // Update the I2C pins for MVP fail-safe
-            delete(&_scl);
-            delete(&_sda);
-
-            _sda = Pin::create("gpio.41");
-            _scl = Pin::create("gpio.40");
-
-            sdaPin = _sda.getNative(Pin::Capabilities::Native | Pin::Capabilities::Input | Pin::Capabilities::Output);
-            sclPin = _scl.getNative(Pin::Capabilities::Native | Pin::Capabilities::Input | Pin::Capabilities::Output);
             
+            // Start with LFP fail-safe config
+            auto sdaPin = 40;
+            auto sclPin = 41;
+
+            // Check fail-safe, switch to MVP if I2C extender (LFP only) doesn't exist
             _error = i2c_master_init(_busNumber, sdaPin, sclPin, _frequency);
             if (_error) {
                 log_error("I2C init failed");
             }
+
+            uint8_t data = 0x00;
+            if (write(0x20, &data, 1) < 0) {    // MVP
+                _sda = Pin::create("gpio.41");
+                _scl = Pin::create("gpio.40");
+
+            } else {                            // LFP
+                _sda = Pin::create("gpio.40");
+                _scl = Pin::create("gpio.41");
+            }
+            
+            // Uninitialize I2C0
+            i2c_master_deinit(_busNumber);
+        }
+
+        sdaPin = _sda.getNative(Pin::Capabilities::Native | Pin::Capabilities::Input | Pin::Capabilities::Output);
+        sclPin = _scl.getNative(Pin::Capabilities::Native | Pin::Capabilities::Input | Pin::Capabilities::Output);
+
+        _error = i2c_master_init(_busNumber, sdaPin, sclPin, _frequency);
+        if (_error) {
+            log_error("I2C init failed");
         }
 
         // Set the MVP flag in I2C config for use in the system
