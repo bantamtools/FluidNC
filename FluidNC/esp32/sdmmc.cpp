@@ -14,6 +14,7 @@
 
 static const String allowed_file_ext[SD_NUM_ALLOWED_EXT] = {".gcode", ".nc", ".txt"};
 static bool sd_is_mounted = false;
+static uint32_t _freq_hz = 20000000;
 
 static esp_err_t mount_to_vfs_fat(int max_files, sdmmc_card_t* card, uint8_t pdrv, const char* base_path) {
     FATFS*    fs = NULL;
@@ -71,7 +72,8 @@ bool sd_init_slot(uint32_t freq_hz, int width, int clk_pin, int cmd_pin, int d0_
     esp_err_t err;
 
     // Set host frequency
-    host_config.max_freq_khz = freq_hz / 1000;
+    _freq_hz = freq_hz;
+    host_config.max_freq_khz = _freq_hz / 1000;
 
     // Set bus width to use
     slot_config.width   = width;
@@ -109,6 +111,16 @@ std::error_code sd_mount(int max_files) {
 
     // Mount SD card
     err = esp_vfs_fat_sdmmc_mount(base_path, &host_config, &slot_config, &mount_config, &card);
+
+    // Empirically it is necessary to set the frequency twice.
+    // If you do it only above, the max frequency will be pinned
+    // at the highest "standard" frequency lower than the requested
+    // one, which is 400 kHz for requested frequencies < 20 MHz.
+    // If you do it only once below, the attempt to change it seems to
+    // be ignored, and you get 20 MHz regardless of what you ask for.
+    if (_freq_hz && (err == ESP_OK)) {
+        err = sdmmc_host_set_card_clk(host_config.slot, _freq_hz / 1000);
+    }
 
     // Set flag if mounted
     if (err == ESP_OK) {
