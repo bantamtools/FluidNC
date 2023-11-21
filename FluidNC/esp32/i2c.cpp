@@ -36,6 +36,10 @@ bool i2c_master_init(int bus_number, pinnum_t sda_pin, pinnum_t scl_pin, uint32_
     return false;
 }
 
+void i2c_master_deinit(int bus_number) {
+    i2c_driver_delete((i2c_port_t)bus_number);
+}
+
 int i2c_write(int bus_number, uint8_t address, const uint8_t* data, size_t count) {
 #if 0
         esp_err_t        ret = ESP_FAIL;

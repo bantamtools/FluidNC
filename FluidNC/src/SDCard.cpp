@@ -26,12 +26,20 @@ void SDCard::init() {
 
     init_message = false;
 
-    // SD card not configured, use MVP 1-bit SDMMC as fail-safe default
+    // SD card not configured, use 1-bit SDMMC as fail-safe default
     if (!_clk.defined() && !_cmd.defined() && !_d0.defined()) {
-        _clk = Pin::create("gpio.10");
-        _cmd = Pin::create("gpio.9");
-        _d0 = Pin::create("gpio.8");
-        _cd = Pin::create("gpio.14");
+
+        if (config->_i2c[0]->_is_mvp) {     // MVP config
+            _clk = Pin::create("gpio.10");
+            _cmd = Pin::create("gpio.9");
+            _d0 = Pin::create("gpio.8");
+            _cd = Pin::create("gpio.14");
+        } else {                            // LFP config
+            _clk = Pin::create("gpio.5");
+            _cmd = Pin::create("gpio.6");
+            _d0 = Pin::create("gpio.2");
+            _cd = Pin::create("gpio.12");
+        }
     }
 
     // Configure the SDMMC clock/data pins

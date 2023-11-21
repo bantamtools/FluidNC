@@ -21,6 +21,8 @@ namespace Machine {
         Pin      _sda;
         Pin      _scl;
         uint32_t _frequency = 100000;
+        bool     _is_mvp;
+        bool     _fail_safe = false;
 
         void init();
         void validate() override;

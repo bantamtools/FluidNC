@@ -33,10 +33,16 @@ void Encoder::init() {
 
 	pcnt_config_t pcnt_config;
 
-    // Encoder not configured, use MVP as fail-safe default
+    // Encoder not configured, use fail-safe default
     if (!_a_pin.defined() && !_b_pin.defined()) {
-        _a_pin = Pin::create("gpio.35");
-        _b_pin = Pin::create("gpio.48");
+
+        if (config->_i2c[0]->_is_mvp) {         // MVP config
+            _a_pin = Pin::create("gpio.35");
+            _b_pin = Pin::create("gpio.48");
+        } else {                                // LFP config
+            _a_pin = Pin::create("gpio.36");
+            _b_pin = Pin::create("gpio.37");
+        }
     }
 
     // Set up encoder A/B pins

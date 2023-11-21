@@ -3,6 +3,7 @@
 #include "src/Report.h"    // addPinReport
 #include "src/Protocol.h"  // event_queue
 #include "src/System.h"    // sys
+#include "MachineConfig.h"
 
 #include "Driver/fluidnc_gpio.h"
 
@@ -21,9 +22,14 @@ namespace Machine {
     void EventPin::init() {
         if (_pin->undefined()) {
 
-            // Encoder button not configured, use MVP as fail-safe default
+            // Encoder button not configured, use fail-safe default
             if (_legend.compare("enter_pin") == 0) {
-                *_pin = Pin::create("gpio.36");
+                
+                if (config->_i2c[0]->_is_mvp) {     // MVP config
+                    *_pin = Pin::create("gpio.36");
+                } else {                            // LFP config
+                    *_pin = Pin::create("gpio.38");
+                }
                 _fail_safe = true;
             } else {
                 return;
@@ -38,7 +44,7 @@ namespace Machine {
         gpio_set_action(_gpio, gpioAction, (void*)this, _pin->getAttr().has(Pin::Attr::ActiveLow));
         
         // Lock out event pins in fail-safe mode
-        _locked = _fail_safe;
+        _locked =  _fail_safe;
     }
 
     bool EventPin::locked() {

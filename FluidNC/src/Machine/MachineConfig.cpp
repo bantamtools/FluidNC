@@ -93,6 +93,12 @@ namespace Machine {
             _axes = new Axes();
         }
 
+        if (_i2c[0] == nullptr) {
+            log_info("I2C0: using defaults");
+            _i2c[0] = new I2CBus(0);
+        }
+        
+
         if (_coolant == nullptr) {
             _coolant = new CoolantControl();
         }
@@ -110,7 +116,6 @@ namespace Machine {
         }
 
         if (_sdCard == nullptr) {
-            log_info("sdCard: using defaults (MVP 1-bit SDMMC)");
             _sdCard = new SDCard();
         }
 
@@ -126,7 +131,6 @@ namespace Machine {
         // Only if an i2so section is present will config->_i2so be non-null
 
         if (_control == nullptr) {
-            log_info("Control: using defaults (MVP)");
             _control = new Control();
         }
 
@@ -142,19 +146,11 @@ namespace Machine {
             _spindles.push_back(new Spindles::Null());
         }
 
-        if (_i2c[0] == nullptr) {
-            log_info("I2C0: using defaults (MVP)");
-            _i2c[0] = new I2CBus(0);
-        }
-
         if (_oled == nullptr) {
-            log_info("OLED: using defaults (MVP)");
             _oled = new OLED();
-            _oled->_fail_safe = true;
         }
 
         if (_encoder == nullptr) {
-            log_info("Encoder: using defaults (MVP)");
             _encoder = new Encoder();
         }
 

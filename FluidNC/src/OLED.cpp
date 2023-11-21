@@ -284,7 +284,7 @@ void OLED::show_menu() {
     int menu_max_active_entries;
 
     // Fail-safe, show error and lock out controls
-    if (_fail_safe) {
+    if (config->_i2c[0]->_fail_safe) {
 
         _enc_scroll_lockout = true;
         show_error("Invalid config file");
@@ -464,13 +464,13 @@ void OLED::show_radio_info() {
     _oled->setColor(WHITE);
 
     if (_width == 128) {
-        if (_state == "Alarm" && !_fail_safe) {
+        if (_state == "Alarm" && !config->_i2c[0]->_fail_safe) {
             show_error("Press button to CLEAR");
         } else if (_state != "Run") {
             show(radioAddrLayout, _radio_addr);
         }
     } else {
-        if (_state == "Alarm" && !_fail_safe) {
+        if (_state == "Alarm" && !config->_i2c[0]->_fail_safe) {
             show_error("Press button to CLEAR");
         }
     }
@@ -494,7 +494,7 @@ void OLED::show_all(float *axes, bool isMpos, bool *limits) {
     show_state();
     show_file();
     show_menu();
-    if (!_fail_safe && ((sys.state != State::Jog) || (jog_state == JogState::Idle))) {  // Don't update dro when jogging to position using the encoder
+    if (!config->_i2c[0]->_fail_safe && ((sys.state != State::Jog) || (jog_state == JogState::Idle))) {  // Don't update dro when jogging to position using the encoder
         show_dro(axes, isMpos, limits);
     }
     show_radio_info();
