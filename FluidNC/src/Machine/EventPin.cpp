@@ -25,10 +25,13 @@ namespace Machine {
             // Encoder button not configured, use fail-safe default
             if (_legend.compare("enter_pin") == 0) {
                 
-                if (config->_i2c[0]->_is_mvp) {     // MVP config
-                    *_pin = Pin::create("gpio.36");
-                } else {                            // LFP config
-                    *_pin = Pin::create("gpio.38");
+                // MVP config
+                if (config->_i2c[0]->_is_mvp) {
+                    *_pin = Pin::create(MachineConfig::FAILSAFE_MVP_ENC_ENTER);
+                
+                // LFP config
+                } else {
+                    *_pin = Pin::create(MachineConfig::FAILSAFE_LFP_ENC_ENTER);
                 }
                 _fail_safe = true;
             } else {

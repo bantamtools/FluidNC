@@ -29,16 +29,19 @@ void SDCard::init() {
     // SD card not configured, use 1-bit SDMMC as fail-safe default
     if (!_clk.defined() && !_cmd.defined() && !_d0.defined()) {
 
-        if (config->_i2c[0]->_is_mvp) {     // MVP config
-            _clk = Pin::create("gpio.10");
-            _cmd = Pin::create("gpio.9");
-            _d0 = Pin::create("gpio.8");
-            _cd = Pin::create("gpio.14");
-        } else {                            // LFP config
-            _clk = Pin::create("gpio.5");
-            _cmd = Pin::create("gpio.6");
-            _d0 = Pin::create("gpio.2");
-            _cd = Pin::create("gpio.12");
+        // MVP config
+        if (config->_i2c[0]->_is_mvp) {
+            _clk = Pin::create(MachineConfig::FAILSAFE_MVP_SDMMC_CLK);
+            _cmd = Pin::create(MachineConfig::FAILSAFE_MVP_SDMMC_CMD);
+            _d0  = Pin::create(MachineConfig::FAILSAFE_MVP_SDMMC_D0);
+            _cd  = Pin::create(MachineConfig::FAILSAFE_MVP_SDMMC_CD);
+            
+        // LFP config
+        } else {
+            _clk = Pin::create(MachineConfig::FAILSAFE_LFP_SDMMC_CLK);
+            _cmd = Pin::create(MachineConfig::FAILSAFE_LFP_SDMMC_CMD);
+            _d0  = Pin::create(MachineConfig::FAILSAFE_LFP_SDMMC_D0);
+            _cd  = Pin::create(MachineConfig::FAILSAFE_LFP_SDMMC_CD);
         }
     }
 

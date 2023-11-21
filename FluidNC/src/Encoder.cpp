@@ -36,12 +36,15 @@ void Encoder::init() {
     // Encoder not configured, use fail-safe default
     if (!_a_pin.defined() && !_b_pin.defined()) {
 
-        if (config->_i2c[0]->_is_mvp) {         // MVP config
-            _a_pin = Pin::create("gpio.35");
-            _b_pin = Pin::create("gpio.48");
-        } else {                                // LFP config
-            _a_pin = Pin::create("gpio.36");
-            _b_pin = Pin::create("gpio.37");
+        // MVP config
+        if (config->_i2c[0]->_is_mvp) {
+            _a_pin = Pin::create(MachineConfig::FAILSAFE_MVP_ENC_A);
+            _b_pin = Pin::create(MachineConfig::FAILSAFE_MVP_ENC_B);
+
+        // LFP config
+        } else {
+            _a_pin = Pin::create(MachineConfig::FAILSAFE_LFP_ENC_A);
+            _b_pin = Pin::create(MachineConfig::FAILSAFE_LFP_ENC_B);
         }
     }
 

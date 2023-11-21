@@ -3,6 +3,7 @@
 
 #include "I2CBus.h"
 #include "Driver/fluidnc_i2c.h"
+#include "MachineConfig.h"
 
 namespace Machine {
     I2CBus::I2CBus(int busNumber) : _busNumber(busNumber) {}
@@ -31,8 +32,8 @@ namespace Machine {
             _fail_safe = true;
             
             // Start with LFP fail-safe config
-            auto sdaPin = 40;
-            auto sclPin = 41;
+            auto sdaPin = MachineConfig::FAILSAFE_LFP_I2C0_SDA_PIN;
+            auto sclPin = MachineConfig::FAILSAFE_LFP_I2C0_SCL_PIN;
 
             // Check fail-safe, switch to MVP if I2C extender (LFP only) doesn't exist
             _error = i2c_master_init(_busNumber, sdaPin, sclPin, _frequency);
@@ -40,14 +41,16 @@ namespace Machine {
                 log_error("I2C init failed");
             }
 
+            // MVP config
             uint8_t data = 0x00;
-            if (write(0x20, &data, 1) < 0) {    // MVP
-                _sda = Pin::create("gpio.41");
-                _scl = Pin::create("gpio.40");
-
-            } else {                            // LFP
-                _sda = Pin::create("gpio.40");
-                _scl = Pin::create("gpio.41");
+            if (write(0x20, &data, 1) < 0) {
+                _sda = Pin::create(MachineConfig::FAILSAFE_MVP_I2C0_SDA);
+                _scl = Pin::create(MachineConfig::FAILSAFE_MVP_I2C0_SCL);
+            
+            // LFP config
+            } else {
+                _sda = Pin::create(MachineConfig::FAILSAFE_LFP_I2C0_SDA);
+                _scl = Pin::create(MachineConfig::FAILSAFE_LFP_I2C0_SCL);
             }
             
             // Uninitialize I2C0
@@ -63,7 +66,7 @@ namespace Machine {
         }
 
         // Set the MVP flag in I2C config for use in the system
-        if (sdaPin == 41 && sclPin == 40) {
+        if (sdaPin == MachineConfig::FAILSAFE_MVP_I2C0_SDA_PIN && sclPin == MachineConfig::FAILSAFE_MVP_I2C0_SCL_PIN) {
             _is_mvp = true;
             log_info("I2C0: using MVP configuration");   
         } else {

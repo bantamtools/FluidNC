@@ -111,6 +111,33 @@ namespace Machine {
         }
 #endif
 
+        // Fail-safe defaults, used by display, encoder and SD card to initialize GPIOs when
+        // bad or no config file is used.  A set of fail-safes is available for MVP and LFP
+        // based on the I2C bus scan.
+        static constexpr std::string_view   FAILSAFE_MVP_I2C0_SDA       = "gpio.41";
+        static constexpr std::string_view   FAILSAFE_MVP_I2C0_SCL       = "gpio.40";
+        static constexpr pinnum_t           FAILSAFE_MVP_I2C0_SDA_PIN   = 41;
+        static constexpr pinnum_t           FAILSAFE_MVP_I2C0_SCL_PIN   = 40;
+        static constexpr std::string_view   FAILSAFE_MVP_ENC_A          = "gpio.35";
+        static constexpr std::string_view   FAILSAFE_MVP_ENC_B          = "gpio.48";
+        static constexpr std::string_view   FAILSAFE_MVP_ENC_ENTER      = "gpio.36";
+        static constexpr std::string_view   FAILSAFE_MVP_SDMMC_CLK      = "gpio.10";
+        static constexpr std::string_view   FAILSAFE_MVP_SDMMC_CMD      = "gpio.9";
+        static constexpr std::string_view   FAILSAFE_MVP_SDMMC_D0       = "gpio.8";
+        static constexpr std::string_view   FAILSAFE_MVP_SDMMC_CD       = "gpio.14";
+
+        static constexpr std::string_view   FAILSAFE_LFP_I2C0_SDA       = "gpio.40";
+        static constexpr std::string_view   FAILSAFE_LFP_I2C0_SCL       = "gpio.41";
+        static constexpr pinnum_t           FAILSAFE_LFP_I2C0_SDA_PIN   = 40;
+        static constexpr pinnum_t           FAILSAFE_LFP_I2C0_SCL_PIN   = 41;
+        static constexpr std::string_view   FAILSAFE_LFP_ENC_A          = "gpio.36";
+        static constexpr std::string_view   FAILSAFE_LFP_ENC_B          = "gpio.37";
+        static constexpr std::string_view   FAILSAFE_LFP_ENC_ENTER      = "gpio.38";
+        static constexpr std::string_view   FAILSAFE_LFP_SDMMC_CLK      = "gpio.5";
+        static constexpr std::string_view   FAILSAFE_LFP_SDMMC_CMD      = "gpio.6";
+        static constexpr std::string_view   FAILSAFE_LFP_SDMMC_D0       = "gpio.2";
+        static constexpr std::string_view   FAILSAFE_LFP_SDMMC_CD       = "gpio.12";
+
         void afterParse() override;
         void group(Configuration::HandlerBase& handler) override;
 
