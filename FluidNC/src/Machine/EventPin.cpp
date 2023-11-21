@@ -24,6 +24,7 @@ namespace Machine {
             // Encoder button not configured, use MVP as fail-safe default
             if (_legend.compare("enter_pin") == 0) {
                 *_pin = Pin::create("gpio.36");
+                _fail_safe = true;
             } else {
                 return;
             }
@@ -35,7 +36,9 @@ namespace Machine {
         _pin->setAttr(attr);
         _gpio = _pin->getNative(Pin::Capabilities::Input);
         gpio_set_action(_gpio, gpioAction, (void*)this, _pin->getAttr().has(Pin::Attr::ActiveLow));
-        _locked = false;
+        
+        // Lock out event pins in fail-safe mode
+        _locked = _fail_safe;
     }
 
     bool EventPin::locked() {

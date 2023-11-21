@@ -283,50 +283,59 @@ void OLED::show_menu() {
     int16_t menu_height;
     int menu_max_active_entries;
 
-    // Don't show menu during Alarm, Run or Hold states
-    if (_state == "Alarm" || _state == "Run" || _state == "Hold:0" || _state == "Hold:1" || _download_mode || _file_job_running || _popup) {
-        return;
+    // Fail-safe, show error and lock out controls
+    if (_fail_safe) {
+
+        _enc_scroll_lockout = true;
+        show_error("Invalid config file");
+
+    } else {
+
+        // Don't show menu during Alarm, Run or Hold states
+        if (_state == "Alarm" || _state == "Run" || _state == "Hold:0" || _state == "Hold:1" || _download_mode || _file_job_running || _popup) {
+            return;
+        }
+
+        _oled->setTextAlignment(TEXT_ALIGN_LEFT);
+
+        // Set up font and menu window
+        _oled->setFont(DejaVu_Sans_10);
+        menu_height = 12;
+        (_menu->is_full_width()) ? menu_width = 128 : menu_width = 64;
+        menu_max_active_entries = 4;
+
+        // Clear any highlighting left in menu area
+        _oled->setColor(BLACK);
+        _oled->fillRect(0, _header_height, menu_width, _height);
+        _oled->setColor(WHITE);
+
+        // Update the menu selection if not jogging
+        if (jog_state == JogState::Idle) {
+
+            _menu->update_selection(menu_max_active_entries, _enc_diff);
+            _enc_diff = 0; // Reset to prevent multiple scrolls
+        }
+
+        // Traverse the list and print out each menu entry name
+        ListNodeType *entry = _menu->get_active_head(); // Start at the beginning of the active window
+        int i = 0;
+        while (entry && entry->display_name && i < menu_max_active_entries) {
+
+            // Highlight selected entry
+            (entry->selected) ? _oled->setColor(WHITE) : _oled->setColor(BLACK);
+            _oled->fillRect(0, _header_height + (menu_height * i) + 1, menu_width, menu_height);
+            (entry->selected) ? _oled->setColor(BLACK) : _oled->setColor(WHITE);
+
+            // Write out the entry name, bolding updated ones
+            truncated_draw_string(_header_height + (menu_height * i), entry->display_name, (entry->updated ? DejaVu_Sans_Bold_10 : DejaVu_Sans_10));
+
+            // Advance the line and pointer
+            entry = entry->next;
+            i++;
+        }
+        _oled->display();
+        _enc_scroll_lockout = false;  // Unlock scrolling to use menu (if needed)
     }
-
-    _oled->setTextAlignment(TEXT_ALIGN_LEFT);
-
-    // Set up font and menu window
-    _oled->setFont(DejaVu_Sans_10);
-    menu_height = 12;
-    (_menu->is_full_width()) ? menu_width = 128 : menu_width = 64;
-    menu_max_active_entries = 4;
-
-    // Clear any highlighting left in menu area
-    _oled->setColor(BLACK);
-    _oled->fillRect(0, _header_height, menu_width, _height);
-    _oled->setColor(WHITE);
-
-    // Update the menu selection if not jogging
-    if (jog_state == JogState::Idle) {
-
-        _menu->update_selection(menu_max_active_entries, _enc_diff);
-        _enc_diff = 0; // Reset to prevent multiple scrolls
-    }
-
-    // Traverse the list and print out each menu entry name
-    ListNodeType *entry = _menu->get_active_head(); // Start at the beginning of the active window
-    int i = 0;
-    while (entry && entry->display_name && i < menu_max_active_entries) {
-
-        // Highlight selected entry
-        (entry->selected) ? _oled->setColor(WHITE) : _oled->setColor(BLACK);
-        _oled->fillRect(0, _header_height + (menu_height * i) + 1, menu_width, menu_height);
-        (entry->selected) ? _oled->setColor(BLACK) : _oled->setColor(WHITE);
-
-        // Write out the entry name, bolding updated ones
-        truncated_draw_string(_header_height + (menu_height * i), entry->display_name, (entry->updated ? DejaVu_Sans_Bold_10 : DejaVu_Sans_10));
-
-        // Advance the line and pointer
-        entry = entry->next;
-        i++;
-    }
-    _oled->display();
-    _enc_scroll_lockout = false;  // Unlock scrolling to use menu (if needed)
 }
 
 void OLED::show_file() {
@@ -455,13 +464,13 @@ void OLED::show_radio_info() {
     _oled->setColor(WHITE);
 
     if (_width == 128) {
-        if (_state == "Alarm") {
+        if (_state == "Alarm" && !_fail_safe) {
             show_error("Press button to CLEAR");
         } else if (_state != "Run") {
             show(radioAddrLayout, _radio_addr);
         }
     } else {
-        if (_state == "Alarm") {
+        if (_state == "Alarm" && !_fail_safe) {
             show_error("Press button to CLEAR");
         }
     }
@@ -485,7 +494,7 @@ void OLED::show_all(float *axes, bool isMpos, bool *limits) {
     show_state();
     show_file();
     show_menu();
-    if (((sys.state != State::Jog)) || (jog_state == JogState::Idle)) {  // Don't update dro when jogging to position using the encoder
+    if (!_fail_safe && ((sys.state != State::Jog) || (jog_state == JogState::Idle))) {  // Don't update dro when jogging to position using the encoder
         show_dro(axes, isMpos, limits);
     }
     show_radio_info();

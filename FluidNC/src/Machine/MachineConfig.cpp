@@ -150,6 +150,7 @@ namespace Machine {
         if (_oled == nullptr) {
             log_info("OLED: using defaults (MVP)");
             _oled = new OLED();
+            _oled->_fail_safe = true;
         }
 
         if (_encoder == nullptr) {

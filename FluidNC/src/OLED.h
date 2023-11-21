@@ -130,6 +130,7 @@ public:
 
     OLEDDisplay* _oled;
     Menu* _menu = new Menu();
+    bool _fail_safe = false;
 
     // Configurable
 
