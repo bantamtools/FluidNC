@@ -141,6 +141,16 @@ namespace Machine {
             _spindles.push_back(new Spindles::Null());
         }
 
+        if (_i2c[0] == nullptr) {
+            log_info("I2C0: using defaults (MVP)");
+            _i2c[0] = new I2CBus(0);
+        }
+
+        if (_oled == nullptr) {
+            log_info("OLED: using defaults (MVP)");
+            _oled = new OLED();
+        }
+
         if (_encoder == nullptr) {
             log_info("Encoder: using defaults (MVP)");
             _encoder = new Encoder();

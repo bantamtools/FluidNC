@@ -22,6 +22,13 @@ namespace Machine {
 
     void I2CBus::init() {
         _error      = false;
+
+        // I2C0 not configured, use MVP as fail-safe default
+        if (_busNumber == 0 && !_sda.defined() && !_scl.defined()) {
+            _sda = Pin::create("gpio.41");
+            _scl = Pin::create("gpio.40");
+        }
+
         auto sdaPin = _sda.getNative(Pin::Capabilities::Native | Pin::Capabilities::Input | Pin::Capabilities::Output);
         auto sclPin = _scl.getNative(Pin::Capabilities::Native | Pin::Capabilities::Input | Pin::Capabilities::Output);
 
