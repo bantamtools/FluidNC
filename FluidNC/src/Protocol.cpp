@@ -1191,6 +1191,16 @@ static void protocol_do_enter() {
                         }
                     }
 
+                // Factory Reset command
+                } else if (strcmp(config->_oled->_menu->get_selected()->display_name, "Reset Factory Settings") == 0) {
+
+                    // Restore settings to defaults
+                    settings_restore(SettingsRestore::Wifi | SettingsRestore::Defaults | SettingsRestore::StartupLines | SettingsRestore::Parameters);
+
+                    // Restart when done
+                    ESP.restart();
+                    while (1) {}
+
                 // Back button
                 } else if ((strcmp(config->_oled->_menu->get_selected()->display_name, "< Back") == 0) || long_press) {
                     config->_oled->_menu->exit_submenu();

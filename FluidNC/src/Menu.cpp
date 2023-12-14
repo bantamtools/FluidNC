@@ -189,7 +189,8 @@ void Menu::build(void) {
     add_entry(_settings_menu, NULL, NULL, "< Back");
     //add_entry(_settings_menu, NULL, NULL, "Update");  // WebUI already includes OTA functionality
     add_entry(_settings_menu, _version_menu, NULL, "Version");
-
+    add_entry(_settings_menu, NULL, NULL, "Reset Factory Settings");
+    
     // Version Menu
     char bantam_ver_str[LIST_NAME_MAX_STR] = {"Version: "};
     strncat(bantam_ver_str, git_info_short, LIST_NAME_MAX_STR - 10);
@@ -245,5 +246,6 @@ void Menu::update_selection(int max_active_entries, int enc_diff) {
 
 // Returns true if the menu occupies the full width of the screen
 bool Menu::is_full_width() {
-    return (_current_menu == _files_menu || _current_menu == _rss_menu || _current_menu == _version_menu);
+    return (_current_menu == _files_menu || _current_menu == _rss_menu || 
+            _current_menu == _settings_menu ||_current_menu == _version_menu);
 }
