@@ -1208,17 +1208,25 @@ static void protocol_do_enter() {
                 // Run file command if files menu
                 } else if (config->_oled->_menu->is_files_menu()) {
 
-                    // Display homing error if try to run unhomed
-                    if (!config->_axes->_homed) {
+                    ListNodeType *selected_entry = config->_oled->_menu->get_selected();
 
-                        // Display error
-                        config->_oled->popup_msg("Machine not homed");
-
+                    // Check if the selected entry is a folder (has a child submenu)
+                    if (selected_entry->child != NULL) {
+                        // It's a folder, enter the submenu
+                        config->_oled->_menu->enter_submenu();
                     } else {
+                        // It's a file, execute the file
 
-                        InputFile *infile = new InputFile("sd", config->_oled->_menu->get_selected()->path, WebUI::AuthenticationLevel::LEVEL_ADMIN, allChannels);
-                        allChannels.registration(infile);
+                        // Display homing error if try to run unhomed
+                        if (!config->_axes->_homed) {
+                            // Display error
+                            config->_oled->popup_msg("Machine not homed");
+                        } else {
+                            InputFile *infile = new InputFile("sd", selected_entry->path, WebUI::AuthenticationLevel::LEVEL_ADMIN, allChannels);
+                            allChannels.registration(infile);
+                        }
                     }
+
 
                 // Download file command if RSS menu
                 } else if (config->_oled->_menu->is_rss_menu()) {

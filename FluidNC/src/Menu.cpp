@@ -154,13 +154,11 @@ struct ListNodeType *Menu::get_active_tail(ListType *menu, int max_active_entrie
 
 // Helper function to add directory to files menu
 ListType* Menu::add_directory(char *path) {
-    // Create a copy of the path because strtok modifies the original string
     char *path_copy = strdup(path);
     char *token = strtok(path_copy, "/");
     ListType *current_menu = _files_menu;
 
     while (token != NULL) {
-        // Check if this part of the path is already in the menu
         bool found = false;
         for (ListNodeType *entry = current_menu->head; entry != NULL; entry = entry->next) {
             if (strcmp(entry->display_name, token) == 0 && entry->child != NULL) {
@@ -170,10 +168,11 @@ ListType* Menu::add_directory(char *path) {
             }
         }
 
-        // If not found, create a new submenu
         if (!found) {
             ListType *new_menu = new ListType;
             init(new_menu, current_menu);
+            // Add a "Back" button at the start of each new submenu
+            add_entry(new_menu, current_menu, NULL, "< Back");
             add_entry(current_menu, new_menu, NULL, token);
             current_menu = new_menu;
         }
@@ -184,6 +183,7 @@ ListType* Menu::add_directory(char *path) {
     free(path_copy);
     return current_menu;
 }
+
 
 
 
