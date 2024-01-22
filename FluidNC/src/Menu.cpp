@@ -152,14 +152,51 @@ struct ListNodeType *Menu::get_active_tail(ListType *menu, int max_active_entrie
     return entry;
 }
 
-// Helper function to add SD file to files menu
+// Helper function to add directory to files menu
+ListType* Menu::add_directory(char *path) {
+    // Create a copy of the path because strtok modifies the original string
+    char *path_copy = strdup(path);
+    char *token = strtok(path_copy, "/");
+    ListType *current_menu = _files_menu;
+
+    while (token != NULL) {
+        // Check if this part of the path is already in the menu
+        bool found = false;
+        for (ListNodeType *entry = current_menu->head; entry != NULL; entry = entry->next) {
+            if (strcmp(entry->display_name, token) == 0 && entry->child != NULL) {
+                current_menu = entry->child;
+                found = true;
+                break;
+            }
+        }
+
+        // If not found, create a new submenu
+        if (!found) {
+            ListType *new_menu = new ListType;
+            init(new_menu, current_menu);
+            add_entry(current_menu, new_menu, NULL, token);
+            current_menu = new_menu;
+        }
+
+        token = strtok(NULL, "/");
+    }
+
+    free(path_copy);
+    return current_menu;
+}
+
+
+
+// Updated function to add SD file to files menu with directory structure
 void Menu::add_sd_file(char *path) {
+    // Create directory structure in the menu
+    ListType *file_menu = add_directory(path);
 
     // Extract the display name from the full path
     char *filename = strrchr(path, '/') + 1;
-        
-    // Initialize the files menu and attach nodes
-    add_entry(_files_menu, NULL, path, filename);
+
+    // Add the file to the correct submenu
+    add_entry(file_menu, NULL, path, filename);
 }
 
 // Helper function to prep for updated SD file list

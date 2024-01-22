@@ -27,6 +27,7 @@ public:
     struct ListNodeType *get_selected();
     void enter_submenu();
     void exit_submenu();
+    ListType* add_directory(char *path);
     void add_sd_file(char *path);
     void prep_for_sd_update();
     void update_selection(int max_active_entries, int enc_diff);
