@@ -1209,9 +1209,11 @@ static void protocol_do_enter() {
                 } else if (config->_oled->_menu->is_files_menu()) {
 
                     ListNodeType *selected_entry = config->_oled->_menu->get_selected();
+                    char *name_copy = strdup(selected_entry->display_name);
 
                     // Check if the selected entry is a folder (has a child submenu)
-                    if (selected_entry->child != NULL) {
+                //    if (selected_entry->child != NULL) {
+                    if (strstr(name_copy, ".gcode") == NULL) { // name does not end in .gcode, probably is a folder
                         // It's a folder, enter the submenu
                         config->_oled->_menu->enter_submenu();
                     } else {
@@ -1219,9 +1221,11 @@ static void protocol_do_enter() {
 
                         // Display homing error if try to run unhomed
                         if (!config->_axes->_homed) {
+                            log_info("Debug path during unhomed: " << selected_entry->path);
                             // Display error
                             config->_oled->popup_msg("Machine not homed");
                         } else {
+                            log_info("Passing path to InputFile: " << selected_entry->path);
                             InputFile *infile = new InputFile("sd", selected_entry->path, WebUI::AuthenticationLevel::LEVEL_ADMIN, allChannels);
                             allChannels.registration(infile);
                         }
@@ -1235,7 +1239,33 @@ static void protocol_do_enter() {
 #endif
                 // Otherwise, enter the submenu if it exists
                 } else {
-                    config->_oled->_menu->enter_submenu();
+                    //config->_oled->_menu->enter_submenu();
+
+                    // temp hack treat this as files_menu because it might be a subfolder
+
+
+                    ListNodeType *selected_entry = config->_oled->_menu->get_selected();
+                    char *name_copy = strdup(selected_entry->display_name);
+
+                    // Check if the selected entry is a folder (has a child submenu)
+                //    if (selected_entry->child != NULL) {
+                    if (strstr(name_copy, ".gcode") == NULL) { // name does not end in .gcode, probably is a folder
+                        // It's a folder, enter the submenu
+                        config->_oled->_menu->enter_submenu();
+                    } else {
+                        // It's a file, execute the file
+
+                        // Display homing error if try to run unhomed
+                        if (!config->_axes->_homed) {
+                            log_info("Debug path during unhomed: " << selected_entry->path);
+                            // Display error
+                            config->_oled->popup_msg("Machine not homed");
+                        } else {
+                            log_info("Passing path to InputFile: " << selected_entry->path);
+                            InputFile *infile = new InputFile("sd", selected_entry->path, WebUI::AuthenticationLevel::LEVEL_ADMIN, allChannels);
+                            allChannels.registration(infile);
+                        }
+                    }
                 }
             }
             break;

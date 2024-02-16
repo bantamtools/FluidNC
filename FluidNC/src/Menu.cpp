@@ -154,8 +154,8 @@ struct ListNodeType *Menu::get_active_tail(ListType *menu, int max_active_entrie
 
 // Helper function to add directory to files menu
 ListType* Menu::add_directory(char *path) {
-    char *path_copy = strdup(path);
-    char *token = strtok(path_copy, "/");
+    //char *path_copy = strdup(path);
+    char *token = strtok(path, "/");
     ListType *current_menu = _files_menu;
 
     while (token != NULL) {
@@ -168,11 +168,12 @@ ListType* Menu::add_directory(char *path) {
             }
         }
 
-        if (!found) {
+        if (!found && strstr(token, ".gcode") == NULL) { // only make new menu if we're not at the .gcode file at the end
             ListType *new_menu = new ListType;
             init(new_menu, current_menu);
             // Add a "Back" button at the start of each new submenu
-            add_entry(new_menu, current_menu, NULL, "< Back");
+        //    add_entry(new_menu, current_menu, NULL, "< Back");
+            prep(new_menu);
             add_entry(current_menu, new_menu, NULL, token);
             current_menu = new_menu;
         }
@@ -180,23 +181,26 @@ ListType* Menu::add_directory(char *path) {
         token = strtok(NULL, "/");
     }
 
-    free(path_copy);
+    //free(path_copy);
     return current_menu;
 }
 
 
-
-
 // Updated function to add SD file to files menu with directory structure
 void Menu::add_sd_file(char *path) {
+//    log_info("add_sd_file initial path: " << path);
     // Create directory structure in the menu
-    ListType *file_menu = add_directory(path);
+    char *path_copy = strdup(path);
+    ListType *file_menu = add_directory(path_copy);
+    free(path_copy);
 
     // Extract the display name from the full path
     char *filename = strrchr(path, '/') + 1;
 
+    log_info("add_sd_file before add_entry path: " << path);
     // Add the file to the correct submenu
     add_entry(file_menu, NULL, path, filename);
+//    add_entry(_files_menu, NULL, path, filename);
 }
 
 // Helper function to prep for updated SD file list
@@ -283,6 +287,7 @@ void Menu::update_selection(int max_active_entries, int enc_diff) {
 
 // Returns true if the menu occupies the full width of the screen
 bool Menu::is_full_width() {
-    return (_current_menu == _files_menu || _current_menu == _rss_menu || 
-            _current_menu == _settings_menu ||_current_menu == _version_menu);
+//    return (_current_menu == _files_menu || _current_menu == _rss_menu || 
+//            _current_menu == _settings_menu ||_current_menu == _version_menu);
+    return !(_current_menu == _main_menu || _current_menu == _jogging_menu);
 }
