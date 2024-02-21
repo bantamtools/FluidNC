@@ -168,17 +168,24 @@ ListType* Menu::add_directory(char *path) {
             }
         }
 
-        if (!found && strstr(token, ".gcode") == NULL) { // only make new menu if we're not at the .gcode file at the end
+        char *token_copy = strdup(token);
+        // advance token here so we can test whether we're looking at the final (file) token
+        token = strtok(NULL, "/");
+
+        //if (!found && strstr(token, ".gcode") == NULL) { // only make new menu if we're not at the .gcode file at the end
+        if (!found && token != NULL) { // only make new menu if we're not at the file at the end
             ListType *new_menu = new ListType;
             init(new_menu, current_menu);
             // Add a "Back" button at the start of each new submenu
         //    add_entry(new_menu, current_menu, NULL, "< Back");
             prep(new_menu);
-            add_entry(current_menu, new_menu, NULL, token);
+            log_info("Adding menu entry for folder: " << token_copy);
+            add_entry(current_menu, new_menu, NULL, token_copy);
             current_menu = new_menu;
         }
 
-        token = strtok(NULL, "/");
+        free(token_copy);
+        //token = strtok(NULL, "/");
     }
 
     //free(path_copy);
@@ -197,7 +204,7 @@ void Menu::add_sd_file(char *path) {
     // Extract the display name from the full path
     char *filename = strrchr(path, '/') + 1;
 
-    log_info("add_sd_file before add_entry path: " << path);
+    log_info("Adding menu entry for filepath: " << path);
     // Add the file to the correct submenu
     add_entry(file_menu, NULL, path, filename);
 //    add_entry(_files_menu, NULL, path, filename);

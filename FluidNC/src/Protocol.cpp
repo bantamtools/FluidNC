@@ -1212,9 +1212,10 @@ static void protocol_do_enter() {
                     char *name_copy = strdup(selected_entry->display_name);
 
                     // Check if the selected entry is a folder (has a child submenu)
-                //    if (selected_entry->child != NULL) {
-                    if (strstr(name_copy, ".gcode") == NULL) { // name does not end in .gcode, probably is a folder
+                    if (selected_entry->child != NULL) { // this works now after setup fixes
+                //    if (strstr(name_copy, ".gcode") == NULL) { // name does not end in .gcode, probably is a folder
                         // It's a folder, enter the submenu
+                        log_info("Entering submenu");
                         config->_oled->_menu->enter_submenu();
                     } else {
                         // It's a file, execute the file
@@ -1241,16 +1242,14 @@ static void protocol_do_enter() {
                 } else {
                     //config->_oled->_menu->enter_submenu();
 
-                    // temp hack treat this as files_menu because it might be a subfolder
-
-
+                    // actually, currently treating this as files_menu because it might be a subfolder
                     ListNodeType *selected_entry = config->_oled->_menu->get_selected();
                     char *name_copy = strdup(selected_entry->display_name);
 
                     // Check if the selected entry is a folder (has a child submenu)
-                //    if (selected_entry->child != NULL) {
-                    if (strstr(name_copy, ".gcode") == NULL) { // name does not end in .gcode, probably is a folder
+                    if (selected_entry->child != NULL) {
                         // It's a folder, enter the submenu
+                        log_info("Entering submenu");
                         config->_oled->_menu->enter_submenu();
                     } else {
                         // It's a file, execute the file
