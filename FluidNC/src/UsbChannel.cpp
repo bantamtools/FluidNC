@@ -75,12 +75,13 @@ bool UsbChannel::lineComplete(char* line, char c) {
     return false;
 }
 
-Channel* UsbChannel::pollLine(char* line) {
+Error UsbChannel::pollLine(char* line) {
     if (_lineedit == nullptr) {
-        return nullptr;
+        return Error::NoData;
     }
-    return Channel::pollLine(line);
+    return Channel::pollLine(line); 
 }
+
 
 int UsbChannel::read() {
     return _usb->read();

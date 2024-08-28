@@ -36,7 +36,8 @@ public:
     size_t   timedReadBytes(uint8_t* buffer, size_t length, TickType_t timeout) { return timedReadBytes((char*)buffer, length, timeout); };
     bool     realtimeOkay(char c) override;
     bool     lineComplete(char* line, char c) override;
-    Channel* pollLine(char* line) override;
+    Error pollLine(char* line) override;
+
 
     // Configuration methods
     void group(Configuration::HandlerBase& handler) override { handler.item("usb_num", _usb_num); }

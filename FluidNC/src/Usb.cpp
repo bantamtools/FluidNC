@@ -7,6 +7,8 @@
  */
 
 #include "Usb.h"
+#include <Arduino.h>
+
 
 Usb::Usb() : _usb_num(0) {}
 

@@ -8,8 +8,7 @@
 #include <esp32-hal.h>  // millis()
 
 namespace Pins {
-<<<<<<< HEAD
-=======
+
     inline void WriteSerial(const char* format, ...) {
         char    buf[50];
         va_list arg;
@@ -25,7 +24,7 @@ namespace Pins {
 #endif
         va_end(arg);
     }
->>>>>>> c851b464 (Initial USB Serial JTAG console support added)
+
 
     // I/O:
     void DebugPinDetail::write(int high) {
