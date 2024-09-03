@@ -11,9 +11,8 @@
 class UsbChannel : public Channel, public Configuration::Configurable {
 private:
     Lineedit* _lineedit;
-    Usb*     _usb;
-
-    int _usb_num = 0;
+    Usb*      _usb;
+    int       _usb_num = 0;
 
 public:
     UsbChannel(bool addCR = false);
@@ -30,19 +29,19 @@ public:
     int read() override;
 
     // Channel methods
-    int      rx_buffer_available() override;
-    void     flushRx() override;
-    size_t   timedReadBytes(char* buffer, size_t length, TickType_t timeout);
-    size_t   timedReadBytes(uint8_t* buffer, size_t length, TickType_t timeout) { return timedReadBytes((char*)buffer, length, timeout); };
-    bool     realtimeOkay(char c) override;
-    bool     lineComplete(char* line, char c) override;
+    int rx_buffer_available() override;
+    void flushRx() override;
+    size_t timedReadBytes(char* buffer, size_t length, TickType_t timeout);
+    size_t timedReadBytes(uint8_t* buffer, size_t length, TickType_t timeout) { return timedReadBytes((char*)buffer, length, timeout); }
+    bool realtimeOkay(char c) override;
+    bool lineComplete(char* line, char c) override;
     Error pollLine(char* line) override;
-
 
     // Configuration methods
     void group(Configuration::HandlerBase& handler) override { handler.item("usb_num", _usb_num); }
 };
 
+// Extern declaration for the global UsbChannel object
 extern UsbChannel Usb0;
 
 extern void usbInit();
