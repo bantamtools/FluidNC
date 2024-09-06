@@ -1,4 +1,5 @@
 import serial
+import serial.tools.list_ports
 import time
 import logging
 from xmodem import XMODEM
@@ -20,7 +21,7 @@ need_new_timestamp = True
 class XMODEMExtended(XMODEM):
     """Subclass XMODEM to log the full output of blocks including CRC and control bytes."""
     
-    def send(self, stream, retry=16, quiet=False, block_size=128):
+    def send(self, stream, retry=16, quiet=False):
         """Overridden send method to log block contents, including CRC and control bytes."""
         def handle_block(data, block_num):
             block_num_mod = block_num % 0x100
@@ -30,19 +31,29 @@ class XMODEMExtended(XMODEM):
             logging.debug(f"Sending block {block_num}: {block.hex()} (data: {data}, crc: {crc.hex()})")
             return block
 
-        super().send(stream, retry=retry, quiet=quiet, block_size=block_size)
+        super().send(stream, retry=retry, quiet=quiet)
 
     def calc_crc(self, data):
-        """Calculate the CRC16-CCITT for the data."""
-        crc = 0
+        """Calculate the CRC16-CCITT for the data, and ensure the result fits in 2 bytes."""
+        logging.debug(f"Calculating CRC for data: {data.hex()}")
+        logging.debug(f"Data type: {type(data)}")
+        
+        crc = 0x0000
         for byte in data:
-            crc = crc ^ (byte << 8)
+            logging.debug(f"Processing byte: {byte} (type: {type(byte)})")
+            crc ^= byte << 8  # Each byte is already an integer in 'bytes' object
+            logging.debug(f"CRC after XOR with {byte}: {crc:04X}")
             for _ in range(8):
                 if crc & 0x8000:
                     crc = (crc << 1) ^ 0x1021
                 else:
                     crc <<= 1
-        return crc.to_bytes(2, 'big')
+                crc &= 0xFFFF  # Ensure crc is always 16 bits
+                logging.debug(f"CRC after shift: {crc:04X}")
+        logging.debug(f"Final CRC: {crc:04X}")
+        crc_bytes = crc.to_bytes(2, 'big')
+        logging.debug(f"Final CRC in bytes: {crc_bytes.hex()}")
+        return crc_bytes
 
 # Function to get serial port list
 def list_serial_ports():
