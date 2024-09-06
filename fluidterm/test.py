@@ -28,22 +28,28 @@ def print_data(data, data_type):
     global last_data_type, need_new_timestamp
     timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     
+    # Decode the data to a string
+    decoded_data = data.decode('ascii', errors='ignore')
+    
+    # Check if the data is a XMODEM or system response (contains 'ERROR' or 'DEBUG')
+    if "ERROR" in decoded_data or "DEBUG" in decoded_data:
+        # If it's an XMODEM message, ensure there's a blank line before the message
+        if last_data_type != "log":  # Ensure only one blank line between logs and data
+            print()  # Add a new line before system messages
+        print(f"{COLOR_WHITE}{decoded_data}{COLOR_RESET}", flush=True)
+        last_data_type = "log"  # Treat this as a log message type
+        need_new_timestamp = True  # Force a new timestamp for next sent/received data
+        return  # Don't treat XMODEM messages as regular sent/received data
+    
     # If the data type has changed, we need to print a new timestamp
     if last_data_type != data_type:
         print()  # Create a new line when switching between sent and received
         last_data_type = data_type
         need_new_timestamp = True  # A new timestamp is needed after switch
     
-    # Check if the data is a XMODEM or system response (contains 'ERROR' or 'DEBUG')
-    decoded_data = data.decode('ascii', errors='ignore')
-    if "ERROR" in decoded_data or "DEBUG" in decoded_data:
-        color = COLOR_WHITE  # System messages are in white
-    else:
-        # Color the data based on whether it's sent or received
-        color = COLOR_GREEN if data_type == "sent" else COLOR_RED
-
     # Print a new timestamp if required (on switch or after newline)
     if need_new_timestamp:
+        color = COLOR_GREEN if data_type == "sent" else COLOR_RED
         print(f"{timestamp} {color}[{data_type.upper()}]: ", end="", flush=True)
         need_new_timestamp = False  # Disable new timestamp until the next trigger
     
