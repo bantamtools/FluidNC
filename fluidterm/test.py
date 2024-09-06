@@ -28,10 +28,16 @@ class XMODEMExtended(XMODEM):
             block = bytes([1, block_num_mod, 255 - block_num_mod]) + data
             crc = self.calc_crc(data)
             block += crc
-            logging.debug(f"Sending block {block_num}: {block.hex()} (data: {data}, crc: {crc.hex()})")
+            logging.debug(f"Prepared block {block_num} for transmission: {block.hex()}")
             return block
 
-        super().send(stream, retry=retry, quiet=quiet)
+        # Wrap the super().send() with debugging
+        logging.debug(f"Sending XMODEM data with retry={retry}, quiet={quiet}")
+        try:
+            super().send(stream, retry=retry, quiet=quiet)
+        except Exception as e:
+            logging.error(f"Error during XMODEM send: {e}")
+            raise
 
     def calc_crc(self, data):
         """Calculate the CRC16-CCITT for the data, and ensure the result fits in 2 bytes."""
@@ -106,8 +112,17 @@ def getc(size, timeout=1):
 
 # Function to send a byte to the serial port (sent data)
 def putc(data, timeout=1):
-    print_data(data, "sent")
-    return serial_port.write(data)
+    logging.debug(f"Attempting to send data: {data} (type: {type(data)})")
+    if isinstance(data, bytes):
+        logging.debug(f"Data in hex: {data.hex()}")
+    else:
+        logging.error(f"Unexpected data type in putc: {type(data)}")
+    try:
+        print_data(data, "sent")
+        return serial_port.write(data)
+    except Exception as e:
+        logging.error(f"Error in putc while sending data: {e}")
+        raise
 
 # List available serial ports
 available_ports = list_serial_ports()
