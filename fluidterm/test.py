@@ -2,7 +2,6 @@ import serial
 import time
 import logging
 from xmodem import XMODEM
-import serial.tools.list_ports
 from datetime import datetime
 
 # Set up logging for debugging
@@ -17,6 +16,33 @@ COLOR_WHITE = "\033[97m"  # White for system messages (like XMODEM responses)
 # Track the last data type (sent or received) and the need for a new timestamp
 last_data_type = None
 need_new_timestamp = True
+
+class XMODEMExtended(XMODEM):
+    """Subclass XMODEM to log the full output of blocks including CRC and control bytes."""
+    
+    def send(self, stream, retry=16, quiet=False, block_size=128):
+        """Overridden send method to log block contents, including CRC and control bytes."""
+        def handle_block(data, block_num):
+            block_num_mod = block_num % 0x100
+            block = bytes([1, block_num_mod, 255 - block_num_mod]) + data
+            crc = self.calc_crc(data)
+            block += crc
+            logging.debug(f"Sending block {block_num}: {block.hex()} (data: {data}, crc: {crc.hex()})")
+            return block
+
+        super().send(stream, retry=retry, quiet=quiet, block_size=block_size)
+
+    def calc_crc(self, data):
+        """Calculate the CRC16-CCITT for the data."""
+        crc = 0
+        for byte in data:
+            crc = crc ^ (byte << 8)
+            for _ in range(8):
+                if crc & 0x8000:
+                    crc = (crc << 1) ^ 0x1021
+                else:
+                    crc <<= 1
+        return crc.to_bytes(2, 'big')
 
 # Function to get serial port list
 def list_serial_ports():
@@ -114,7 +140,7 @@ try:
         logging.debug(f"Opened file: {file_path}")
         
         # Set up Xmodem with 128-byte blocks (no 1K blocks)
-        modem = XMODEM(getc, putc)
+        modem = XMODEMExtended(getc, putc)
         modem.send(f, retry=16, quiet=False)
         
         logging.debug("Transmission complete.")
