@@ -33,23 +33,31 @@
  */
 
 #include "xmodem.h"
+#include <stdio.h>
+#include <string>  // For std::string
+#include "Logging.h"  // Include the log header for logging support
 
 static Channel* serialPort;
 static Print*   file;
 
+
+// Replace the old debug buffer function with log_debug, log_error, etc.
 static int _inbyte(uint16_t timeout) {
     uint8_t data;
-    auto    res = serialPort->timedReadBytes(&data, 1, timeout);
+    auto res = serialPort->timedReadBytes(&data, 1, timeout);
     return res != 1 ? -1 : data;
 }
+
 static void _outbyte(int c) {
     serialPort->write((uint8_t)c);
 }
+
 static void _outbytes(uint8_t* buf, size_t len) {
     serialPort->write(buf, len);
 }
 
-/* CRC16 implementation acording to CCITT standards */
+
+/* CRC16 implementation according to CCITT standards */
 
 static const uint16_t crc16tab[256] = {
     0x0000, 0x1021, 0x2042, 0x3063, 0x4084, 0x50a5, 0x60c6, 0x70e7, 0x8108, 0x9129, 0xa14a, 0xb16b, 0xc18c, 0xd1ad, 0xe1ce, 0xf1ef,
@@ -111,20 +119,12 @@ static int check(int crc, const uint8_t* buf, int sz) {
 
 static void flushinput(void) {
     while (_inbyte(((DLY_1S)*3) >> 1) >= 0)
-        ;
+        ; // Read to clear input buffer
+    delay(10);  // Small delay after flushing
 }
 
 // We delay writing each packet until the next one arrives
-// so that we can remove trailing control-Z's in only the
-// last one.  The Xmodem protocol has no good way to denote
-// the actual size of the file in bytes as opposed to packets.
-// Instead it pads the final packet with control-Z.  By removing
-// those trailing control-Z's before writing to the file, it
-// is possible to handle files of any length.  This heuristic
-// fails with binary files that are supposed to have trailing
-// control-Z's.  Doing the control-Z removal only on the final
-// packet avoids removing interior control-Z's that happen to
-// land at the end of a packet.
+// so that we can remove trailing control-Z's in only the last one.
 static uint8_t held_packet[1024];
 static size_t  held_packet_len;
 static void    flush_packet(size_t packet_len, size_t& total_len) {
@@ -141,6 +141,7 @@ static void    flush_packet(size_t packet_len, size_t& total_len) {
         held_packet_len = 0;
     }
 }
+
 static void write_packet(uint8_t* buf, size_t packet_len, size_t& total_len) {
     if (held_packet_len > 0) {
         file->write(held_packet, held_packet_len);
@@ -150,6 +151,15 @@ static void write_packet(uint8_t* buf, size_t packet_len, size_t& total_len) {
     memcpy(held_packet, buf, packet_len);
     held_packet_len = packet_len;
 }
+
+
+
+
+
+
+/* CRC16 implementation according to CCITT standards */
+// Existing CRC16 and Xmodem constants and logic here...
+
 int xmodemReceive(Channel* serial, FileStream* out) {
     serialPort      = serial;
     file            = out;
@@ -162,7 +172,6 @@ int xmodemReceive(Channel* serial, FileStream* out) {
     uint8_t  packetno = 1;
     int      i, c           = 0;
     int      retry, retrans = MAXRETRANS;
-
     size_t len = 0;
 
     for (;;) {
@@ -181,11 +190,13 @@ int xmodemReceive(Channel* serial, FileStream* out) {
                         flush_packet(bufsz, len);
                         _outbyte(ACK);
                         flushinput();
+                        log_debug("Xmodem receive: Transfer completed successfully.");
                         return len; /* normal end */
                     case CAN:
                         if ((c = _inbyte(DLY_1S)) == CAN) {
                             flushinput();
                             _outbyte(ACK);
+                            log_error("Xmodem receive: Transfer canceled by the remote.");
                             return -1; /* canceled by remote */
                         }
                         break;
@@ -202,6 +213,7 @@ int xmodemReceive(Channel* serial, FileStream* out) {
         _outbyte(CAN);
         _outbyte(CAN);
         _outbyte(CAN);
+        log_error("Xmodem receive: Sync error after retries.");
         return -2; /* sync error */
 
     start_recv:
@@ -211,8 +223,10 @@ int xmodemReceive(Channel* serial, FileStream* out) {
         p       = xbuff;
         *p++    = c;
         for (i = 0; i < (bufsz + (crc ? 1 : 0) + 3); ++i) {
-            if ((c = _inbyte(DLY_1S)) < 0)
+            if ((c = _inbyte(DLY_1S)) < 0) {
+                log_error("Xmodem receive: Timeout or transmission error while receiving block.");
                 goto reject;
+            }
             *p++ = c;
         }
 
@@ -227,6 +241,7 @@ int xmodemReceive(Channel* serial, FileStream* out) {
                 _outbyte(CAN);
                 _outbyte(CAN);
                 _outbyte(CAN);
+                log_error("Xmodem receive: Too many retries, transfer failed.");
                 return -3; /* too many retry error */
             }
             _outbyte(ACK);
@@ -235,6 +250,7 @@ int xmodemReceive(Channel* serial, FileStream* out) {
     reject:
         flushinput();
         _outbyte(NAK);
+        log_error("Xmodem receive: Packet check failed, retransmitting block.");
     }
 }
 
@@ -262,6 +278,7 @@ int xmodemTransmit(Channel* serial, FileStream* infile) {
                         if ((c = _inbyte(DLY_1S)) == CAN) {
                             _outbyte(ACK);
                             flushinput();
+                            log_error("Xmodem transmit: Transfer canceled by remote.");
                             return -1; /* canceled by remote */
                         }
                         break;
@@ -274,6 +291,7 @@ int xmodemTransmit(Channel* serial, FileStream* infile) {
         _outbyte(CAN);
         _outbyte(CAN);
         flushinput();
+        log_error("Xmodem transmit: No sync, receiver not responding.");
         return -2; /* no sync */
 
         for (;;) {
@@ -317,10 +335,12 @@ int xmodemTransmit(Channel* serial, FileStream* infile) {
                                 if ((c = _inbyte(DLY_1S)) == CAN) {
                                     _outbyte(ACK);
                                     flushinput();
+                                    log_error("Xmodem transmit: Transfer canceled by remote during transmission.");
                                     return -1; /* canceled by remote */
                                 }
                                 break;
                             case NAK:
+                                log_debug("Xmodem transmit: NAK received, retrying transmission.");
                             default:
                                 break;
                         }
@@ -330,6 +350,7 @@ int xmodemTransmit(Channel* serial, FileStream* infile) {
                 _outbyte(CAN);
                 _outbyte(CAN);
                 flushinput();
+                log_error("Xmodem transmit: Transmission error, retries exhausted.");
                 return -4; /* xmit error */
             } else {
                 for (retry = 0; retry < 10; ++retry) {
@@ -338,11 +359,15 @@ int xmodemTransmit(Channel* serial, FileStream* infile) {
                         break;
                 }
                 flushinput();
+                log_debug("Xmodem transmit: End of transmission, file sent successfully.");
                 return (c == ACK) ? len : -5;
             }
         }
     }
 }
+
+
+
 
 #ifdef TEST_XMODEM_RECEIVE
 int main(void) {
@@ -350,9 +375,9 @@ int main(void) {
 
     printf("Send data using the xmodem protocol from your terminal emulator now...\n");
     /* the following should be changed for your environment:
-	   0x30000 is the download address,
-	   65536 is the maximum size to be written at this address
-	 */
+       0x30000 is the download address,
+       65536 is the maximum size to be written at this address
+     */
     st = xmodemReceive((char*)0x30000, 65536);
     if (st < 0) {
         printf("Xmodem receive error: status: %d\n", st);
@@ -369,9 +394,9 @@ int main(void) {
 
     printf("Prepare your terminal emulator to receive data now...\n");
     /* the following should be changed for your environment:
-	   0x30000 is the download address,
-	   12000 is the maximum size to be send from this address
-	 */
+       0x30000 is the download address,
+       12000 is the maximum size to be send from this address
+     */
     st = xmodemTransmit((char*)0x30000, 12000);
     if (st < 0) {
         printf("Xmodem transmit error: status: %d\n", st);

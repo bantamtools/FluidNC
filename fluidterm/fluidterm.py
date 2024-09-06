@@ -38,8 +38,8 @@ from serial.tools import hexlify_codec
 
 from xmodem import XMODEM
 
-# Uncomment this line to debug XModem
-# logging.basicConfig(level=logging.DEBUG)
+# Enable debug logging for XModem
+logging.basicConfig(level=logging.DEBUG)
 
 # pylint: disable=wrong-import-order,wrong-import-position
 
@@ -437,7 +437,7 @@ class FluidNC(Transform):
                 rx_lines[0] = self.cyan_color + rx_lines[0] + self.white_color + '='
                 rx_lines[1] = self.yellow_color + rx_lines[1] + self.input_color
                 return rx_lines[0] + rx_lines[1]
-			
+            
         text = text.replace('MSG:ERR',  self.error_color + 'MSG:ERR' + self.input_color)
         text = text.replace('MSG:INFO',  self.good_color + 'MSG:INFO' + self.input_color)
         text = text.replace('MSG:WARN',  self.warn_color + 'MSG:WARN' + self.input_color)
@@ -819,17 +819,15 @@ class Miniterm(object):
             gdata = self._pushback
             self._pushback = None
             return gdata
-        # try:
-        #    gdata = q.get(timeout=timeout)
-        # except:
-        #    gdata = None
         self.serial.timeout = timeout
         gdata = self.serial.read(length)
+        if len(gdata) == 0:
+            logging.debug("Received no data (timeout or error).")
+        else:
+            logging.debug("Received data: {}".format(gdata))
         return gdata or None
 
     def flush_getc(self, limit):
-        # while q.qsize() > limit:
-        #    dummy = q.get()
         self.serial.timeout = 0.01
         while True:
             gdata = self.serial.read(1)
@@ -838,7 +836,7 @@ class Miniterm(object):
 
     def putc(self, data, timeout=1):
         pbytes = self.serial.write(data)
-        # print(f'write {pbytes}')
+        logging.debug("Sent data: {}".format(data))
         return pbytes or None
 
     def progress(self, packets, good, bad):
@@ -885,7 +883,6 @@ class Miniterm(object):
 
     def file_dialog(self, initial):
         if platform.system() == 'Darwin':
-            # pathname = raw_input('--- Enter file name to send: ')
             pathname = self.mac_file_dialog(initial)
             print(pathname)
             destname = self.mac_askstring(os.path.split(pathname)[1])
@@ -929,13 +926,10 @@ class Miniterm(object):
             if filename:
                 try:
                     self._xmodem_stream = open(filename, 'rb')
-                    #show what is happening in the console.
                     self.console.write(f'--- Sending file {filename} as {destname} ---\n')
-                    #send the command to put FluidNC in receive mode
                     self.serial.write(self.tx_encoder.encode(f'$Xmodem/Receive={destname}\n'))
                 except IOError as e:
                     sys.stderr.write(f'--- ERROR opening file {filename}: {e} ---\n')
-        # self._uploading = False
 
     def upload_file(self, name="config.flnc"):
         """Ask user for filename and send its contents"""
@@ -952,13 +946,11 @@ class Miniterm(object):
                             if not block:
                                 break
                             self.serial.write(block)
-                            # Wait for output buffer to drain.
                             self.serial.flush()
-                            sys.stderr.write('.')   # Progress indicator.
+                            sys.stderr.write('.')
                     sys.stderr.write(f'\n--- File {filename} sent ---\n')
                 except IOError as e:
                     sys.stderr.write(f'--- ERROR opening file {filename}: {e} ---\n')
-        # self._uploading = False
 
     def change_filter(self):
         """change the i/o transformations"""
@@ -1019,13 +1011,10 @@ class Miniterm(object):
             except KeyboardInterrupt:
                 port = None
         if port and port != self.serial.port:
-            # reader thread needs to be shut down
             self._stop_reader()
-            # save settings
             settings = self.serial.getSettingsDict()
             try:
                 new_serial = serial.serial_for_url(port, do_not_open=True)
-                # restore settings and open
                 new_serial.applySettingsDict(settings)
                 new_serial.rts = self.serial.rts
                 new_serial.dtr = self.serial.dtr
@@ -1038,7 +1027,6 @@ class Miniterm(object):
                 self.serial.close()
                 self.serial = new_serial
                 sys.stderr.write('--- Port changed to: {} ---\n'.format(self.serial.port))
-            # and restart the reader thread
             self._start_reader()
 
     def suspend_port(self):
@@ -1046,7 +1034,6 @@ class Miniterm(object):
         open port temporarily, allow reconnect, exit and port change to get
         out of the loop
         """
-        # reader thread needs to be shut down
         self._stop_reader()
         self.serial.close()
         sys.stderr.write('\n--- Port closed: {} ---\n'.format(self.serial.port))
@@ -1056,7 +1043,7 @@ class Miniterm(object):
                 exit=key_description(self.exit_character)))
             k = self.console.getkey()
             if k == self.exit_character or c == self.exit_character2:
-                self.stop()             # exit app
+                self.stop()
                 break
             elif k in 'pP':
                 do_change_port = True
@@ -1068,13 +1055,11 @@ class Miniterm(object):
         if do_change_port:
             self.change_port()
         else:
-            # and restart the reader thread
             self._start_reader()
             sys.stderr.write('--- Port opened: {} ---\n'.format(self.serial.port))
 
     def get_help_text(self):
         """return the help text"""
-        # help text, starts with blank line!
         return """
 --- pySerial ({version}) - Fluidterm 1.1 (miniterm) - help
 ---
@@ -1101,9 +1086,9 @@ class Miniterm(object):
 ---    x X        disable/enable software flow control
 ---    r R        disable/enable hardware flow control
 """.format(version=getattr(serial, 'VERSION', 'unknown version'),
-           exit=key_description(self.exit_character),
-           exit2=key_description(self.exit_character2),
-           menu=key_description(self.menu_character),
+           exit=key_description(miniterm.exit_character),
+           exit2=key_description(miniterm.exit_character2),
+           menu=key_description(miniterm.menu_character),
            rts=key_description('\x12'),
            dtr=key_description('\x04'),
            brk=key_description('\x02'),
@@ -1116,9 +1101,7 @@ class Miniterm(object):
            eol=key_description('\x0c'))
 
 
-# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-# default args can be used to override when calling main() from an other script
-# e.g to create a miniterm-my-device.py
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 def main(default_port=None, default_baudrate=115200, default_rts=None, default_dtr=None, serial_instance=None):
     """Command line tool, entry point"""
 

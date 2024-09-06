@@ -598,7 +598,7 @@ static Error xmodem_receive(const char* value, AuthenticationLevel auth_level, C
     try {
         outfile = new FileStream(value, "w");
     } catch (...) {
-        delay_ms(1000);   // Delay for FluidTerm to handle command echoing
+        delay_ms(10000);   // Delay for FluidTerm to handle command echoing
         out.write(0x04);  // Cancel xmodem transfer with EOT
         log_info("Cannot open " << value);
         return Error::UploadFailed;
