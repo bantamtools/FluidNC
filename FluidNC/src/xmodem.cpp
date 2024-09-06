@@ -96,7 +96,7 @@ uint16_t crc16_ccitt(const uint8_t* buf, size_t len) {
 
 #define DLY_1S 1000
 #define MAXRETRANS 25
-#define TRANSMIT_XMODEM_1K
+//#define TRANSMIT_XMODEM_1K
 
 static int check(int crc, const uint8_t* buf, int sz) {
     if (crc) {
@@ -154,12 +154,6 @@ static void write_packet(uint8_t* buf, size_t packet_len, size_t& total_len) {
 
 
 
-
-
-
-/* CRC16 implementation according to CCITT standards */
-// Existing CRC16 and Xmodem constants and logic here...
-
 int xmodemReceive(Channel* serial, FileStream* out) {
     serialPort      = serial;
     file            = out;
@@ -182,9 +176,11 @@ int xmodemReceive(Channel* serial, FileStream* out) {
                 switch (c) {
                     case SOH:
                         bufsz = 128;
+                        log_debug("Xmodem receive: buffer128");
                         goto start_recv;
                     case STX:
                         bufsz = 1024;
+                        log_debug("Xmodem receive: buffer1024");
                         goto start_recv;
                     case EOT:
                         flush_packet(bufsz, len);
