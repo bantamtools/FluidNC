@@ -19,6 +19,7 @@ import sys
 import threading
 import logging
 import platform
+import struct
 
 if platform.system() == 'Darwin':
     import subprocess
@@ -36,7 +37,8 @@ import serial
 from serial.tools.list_ports import comports
 from serial.tools import hexlify_codec
 
-from xmodem import XMODEM
+# Remove XModem dependency
+# from xmodem import XMODEM
 
 # Uncomment this line to debug XModem
 # logging.basicConfig(level=logging.DEBUG)
@@ -51,6 +53,58 @@ except NameError:
     # pylint: disable=redefined-builtin,invalid-name
     raw_input = input   # in python3 it's "raw"
     unichr = chr
+
+# TFTP specific definitions
+TFTP_RRQ   = 1  # Read request
+TFTP_WRQ   = 2  # Write request
+TFTP_DATA  = 3  # Data packet
+TFTP_ACK   = 4  # Acknowledgment
+TFTP_ERROR = 5  # Error
+
+TFTP_BLOCK_SIZE = 512
+TFTP_TIMEOUT = 3  # seconds
+
+# TFTP helper functions
+def send_tftp_packet(serial, opcode, block=0, data=None):
+    """Build and send a TFTP packet"""
+    # Create packet header (opcode + block number)
+    packet = struct.pack(">HH", opcode, block)
+    
+    # Add data if provided
+    if data:
+        packet += data
+        
+    # Send packet
+    serial.write(packet)
+    return len(packet)
+
+def receive_tftp_packet(serial, timeout=TFTP_TIMEOUT):
+    """Receive a TFTP packet with timeout"""
+    # Save original timeout and set new one for receiving
+    original_timeout = serial.timeout
+    serial.timeout = timeout
+    
+    # Read header (4 bytes: opcode + block number)
+    header = serial.read(4)
+    if len(header) < 4:
+        serial.timeout = original_timeout
+        return None, 0, None  # Timeout
+    
+    # Parse header
+    opcode, block = struct.unpack(">HH", header)
+    
+    # Read data if it's a DATA packet
+    data = None
+    if opcode == TFTP_DATA:
+        data = serial.read(TFTP_BLOCK_SIZE)
+    elif opcode == TFTP_ERROR:
+        # Read error message (variable length)
+        data = serial.read(100)  # Arbitrary length to capture error message
+    
+    # Restore original timeout
+    serial.timeout = original_timeout
+    
+    return opcode, block, data
 
 
 def key_description(character):
@@ -669,8 +723,7 @@ class Miniterm(object):
             raise       # XXX handle instead of re-raise?
 
     def writer(self):
-        """\
-        Loop and copy console->serial until self.exit_character character is
+        """Loop and copy console->serial until self.exit_character character is
         found. When self.menu_character is found, interpret the next key
         locally.
         """
@@ -694,8 +747,10 @@ class Miniterm(object):
                         break
                     if c == '\x17':     # CTRL+W -> clear screen
                         self.console.clear_screen()
-                    if c == '\x15':     # CTRL+U -> upload file with XModem
-                        self.upload_xmodem()
+                    if c == '\x15':     # CTRL+U -> upload file with TFTP
+                        self.upload_tftp()
+                    elif c == '\x13':   # CTRL+S -> stream file line by line
+                        self.stream_file()
                     elif c == '\x12':   # CTRL+R -> reset FluidNC
                         self.reset_fluidnc()
                     elif c in [self.exit_character, self.exit_character2, unichr(3)]:
@@ -722,12 +777,11 @@ class Miniterm(object):
             self.serial.write(self.tx_encoder.encode(c))
             if self.echo:
                 self.console.write(c)
-        elif c == '\x18':                       # CTRL+X -> upload xmodem
-            self.upload_xmodem()
+        elif c == '\x18':                       # CTRL+X -> upload tftp
+            self.upload_tftp()
         elif c == '\x15':                       # CTRL+U -> upload file
             self.upload_file()
         elif c in '\x08hH?':                    # CTRL+H, h, H, ? -> Show help
-
             sys.stderr.write(self.get_help_text())
         elif c == '\x12':                   # CTRL+R -> Toggle RTS
             self.serial.rts = not self.serial.rts
@@ -813,97 +867,6 @@ class Miniterm(object):
         sys.stderr.write(f'--- EOL: {self.eol.upper()} ---\n')
         self.update_transformations()
             
-    # Support functions for XModem file upload
-    def getc(self, length, timeout=1):
-        if self._pushback:
-            gdata = self._pushback
-            self._pushback = None
-            return gdata
-        # try:
-        #    gdata = q.get(timeout=timeout)
-        # except:
-        #    gdata = None
-        self.serial.timeout = timeout
-        gdata = self.serial.read(length)
-        return gdata or None
-
-    def flush_getc(self, limit):
-        # while q.qsize() > limit:
-        #    dummy = q.get()
-        self.serial.timeout = 0.01
-        while True:
-            gdata = self.serial.read(1)
-            if not len(gdata):
-                break
-
-    def putc(self, data, timeout=1):
-        pbytes = self.serial.write(data)
-        # print(f'write {pbytes}')
-        return pbytes or None
-
-    def progress(self, packets, good, bad):
-        print(packets, end='\r')
-
-    if platform.system() == 'Darwin':
-        def mac_askstring(self, initial):
-            ascript = '''
-            -- iname - default file name
-            on run argv
-                set iname to item 1 of argv
-                try
-                    set theResponse to display dialog "Destination name" default answer iname with icon note buttons {"Cancel", "Continue"} default button "Continue"
-                   return text returned of theResponse as text
-                on error number -128
-                    return "" as text
-                end try
-            end run
-            '''
-            try:
-               proc = subprocess.check_output(['osascript', '-e', ascript, initial])
-               return proc.decode('utf-8').strip()
-            except subprocess.CalledProcessError as e:
-                print('Python error: [%d]\n' % e.returncode)
-
-        def mac_file_dialog(self, initial):
-            ascript = '''
-            -- apath - default path for dialogs to open to
-            on run argv
-                set apath to POSIX file (item 1 of argv)
-                try
-                    set fpath to POSIX path of (choose file with prompt "File to Upload" without invisibles)
-                    return fpath as text
-                on error number -128
-                    return "" as text
-                end try
-            end run
-            '''
-            try:
-               proc = subprocess.check_output(['osascript', '-e', ascript, initial])
-               return proc.decode('utf-8').strip()
-            except subprocess.CalledProcessError as e:
-                print('Python error: [%d]\n' % e.returncode)
-
-    def file_dialog(self, initial):
-        if platform.system() == 'Darwin':
-            # pathname = raw_input('--- Enter file name to send: ')
-            pathname = self.mac_file_dialog(initial)
-            print(pathname)
-            destname = self.mac_askstring(os.path.split(pathname)[1])
-            return pathname, destname
-        else:
-            try:
-                window = Tk()
-            except:
-                pathname = raw_input("Local file to send: ")
-                destname = raw_input("File on FluidNC: ")
-                return pathname, destname
-            else:
-                pathname = filedialog.askopenfilename(title="File to Upload", initialfile=initial, filetypes=[("FluidNC Config", "*.yaml *.flnc *.txt"), ("All files", "*")])
-                print("path",pathname)
-                destname = simpledialog.askstring("Uploader", "Destination Filename", initialvalue=os.path.split(pathname)[1])
-                window.destroy()
-                return pathname, destname
-
     def enable_fluid_echo(self):
         right_arrow = '\x1b[C'
         self.serial.write(self.tx_encoder.encode(right_arrow))
@@ -922,20 +885,84 @@ class Miniterm(object):
         time.sleep(1)
         self.enable_fluid_echo()
 
-    def upload_xmodem(self):
-        """Ask user for filename and send its contents"""
+    def upload_tftp(self):
+        """Upload a file using TFTP protocol"""
         with self.console:
             (filename, destname) = self.file_dialog("config.flnc")
-            if filename:
-                try:
-                    self._xmodem_stream = open(filename, 'rb')
-                    #show what is happening in the console.
-                    self.console.write(f'--- Sending file {filename} as {destname} ---\n')
-                    #send the command to put FluidNC in receive mode
-                    self.serial.write(self.tx_encoder.encode(f'$Xmodem/Receive={destname}\n'))
-                except IOError as e:
-                    sys.stderr.write(f'--- ERROR opening file {filename}: {e} ---\n')
-        # self._uploading = False
+            if not filename:
+                return
+                
+            try:
+                with open(filename, 'rb') as f:
+                    self.console.write(f'--- Sending file {filename} as {destname} via TFTP ---\n')
+                    
+                    # Send command to FluidNC to start TFTP receive
+                    self.serial.write(self.tx_encoder.encode(f'$TFTP/Receive={destname}\n'))
+                    
+                    # Wait for FluidNC to be ready (it will send an ACK packet with block 0)
+                    time.sleep(1)  # Give FluidNC time to prepare
+                    
+                    # Save original timeout and set new one for TFTP transfer
+                    original_timeout = self.serial.timeout
+                    self.serial.timeout = TFTP_TIMEOUT
+                    
+                    # Wait for initial ACK from FluidNC
+                    opcode, block, _ = receive_tftp_packet(self.serial)
+                    if opcode != TFTP_ACK or block != 0:
+                        self.console.write("Failed to receive initial ACK from FluidNC\n")
+                        self.serial.timeout = original_timeout
+                        return
+                    
+                    # Start sending data packets
+                    block_number = 1
+                    total_bytes = 0
+                    retries = 0
+                    
+                    while True:
+                        # Read a block of data from the file
+                        data = f.read(TFTP_BLOCK_SIZE)
+                        if not data and block_number == 1:
+                            self.console.write("Error: File is empty\n")
+                            break
+                        
+                        # Send DATA packet
+                        send_tftp_packet(self.serial, TFTP_DATA, block_number, data)
+                        total_bytes += len(data)
+                        
+                        # Display progress
+                        if block_number % 10 == 0:
+                            self.console.write(f"\rSent {total_bytes} bytes...")
+                        
+                        # Wait for ACK
+                        opcode, ack_block, _ = receive_tftp_packet(self.serial)
+                        
+                        if opcode == TFTP_ERROR:
+                            self.console.write(f"\nError during transfer: {_}\n")
+                            break
+                        
+                        if opcode != TFTP_ACK or ack_block != block_number:
+                            retries += 1
+                            if retries > 5:
+                                self.console.write("\nToo many retries, transfer failed\n")
+                                break
+                            continue
+                        
+                        # Reset retries counter on successful ACK
+                        retries = 0
+                        
+                        # Check if this was the last packet
+                        if len(data) < TFTP_BLOCK_SIZE:
+                            self.console.write(f"\nTransfer complete: {total_bytes} bytes sent\n")
+                            break
+                        
+                        # Increment block number for next packet
+                        block_number += 1
+                    
+                    # Restore original timeout
+                    self.serial.timeout = original_timeout
+                    
+            except IOError as e:
+                sys.stderr.write(f'--- ERROR opening file {filename}: {e} ---\n')
 
     def upload_file(self, name="config.flnc"):
         """Ask user for filename and send its contents"""
@@ -1052,10 +1079,11 @@ class Miniterm(object):
         sys.stderr.write('\n--- Port closed: {} ---\n'.format(self.serial.port))
         do_change_port = False
         while not self.serial.is_open:
-            sys.stderr.write('--- Quit: {exit} | p: port change | any other key to reconnect ---\n'.format(
-                exit=key_description(self.exit_character)))
+            sys.stderr.write('--- Quit: {} or {} | p: port change | any other key to reconnect ---\n'.format(
+                key_description(self.exit_character),
+                key_description(self.exit_character2)))
             k = self.console.getkey()
-            if k == self.exit_character or c == self.exit_character2:
+            if k == self.exit_character or k == self.exit_character2:
                 self.stop()             # exit app
                 break
             elif k in 'pP':
@@ -1085,7 +1113,7 @@ class Miniterm(object):
 ---    {exit:7} Send the exit character itself to remote
 ---    {info:7} Show info
 ---    {upload:7} Upload file (prompt will be shown)
----    {xmodem:7} Upload file via XMODEM (prompt will be shown)
+---    {tftp:7} Upload file via TFTP (prompt will be shown)
 ---    {repr:7} encoding
 ---    {filter:7} edit filters
 --- Toggles:
@@ -1110,11 +1138,148 @@ class Miniterm(object):
            echo=key_description('\x05'),
            info=key_description('\x09'),
            upload=key_description('\x15'),
-           xmodem=key_description('\x18'),
+           tftp=key_description('\x18'),
            repr=key_description('\x01'),
            filter=key_description('\x06'),
            eol=key_description('\x0c'))
 
+    def stream_file(self):
+        """Stream a gcode/text file line by line to FluidNC"""
+        with self.console:
+            (filename, _) = self.file_dialog("program.gcode")
+            if not filename:
+                return
+                
+            try:
+                with open(filename, 'r') as f:
+                    self.console.write(f'--- Streaming file {filename} ---\n')
+                    
+                    # Save original timeout and set new one for streaming
+                    original_timeout = self.serial.timeout
+                    self.serial.timeout = 0.1
+                    
+                    line_count = 0
+                    error_count = 0
+                    
+                    # Use FluidNC's streaming protocol
+                    # Each line is sent, then we wait for an 'ok' or 'error' response
+                    for line in f:
+                        # Skip empty lines and comments
+                        line = line.strip()
+                        if not line or line.startswith(';') or line.startswith('('):
+                            continue
+                            
+                        # Remove inline comments
+                        if ';' in line:
+                            line = line[:line.find(';')].strip()
+                        if '(' in line and ')' in line:
+                            line = line.replace(line[line.find('('):line.find(')')+1], '').strip()
+                            
+                        if not line:
+                            continue
+                            
+                        # Send the line with a newline
+                        line_to_send = line + '\n'
+                        self.serial.write(self.tx_encoder.encode(line_to_send))
+                        
+                        # Wait for acknowledgment (ok or error)
+                        response = ""
+                        acknowledged = False
+                        while not acknowledged:
+                            # Read one character at a time
+                            char = self.serial.read(1)
+                            if char:
+                                response += char.decode(self.output_encoding, errors='replace')
+                                # Check if we've received an acknowledgment
+                                if 'ok' in response or 'error' in response:
+                                    acknowledged = True
+                                    if 'error' in response:
+                                        error_count += 1
+                                        # Display the error
+                                        self.console.write(f'Error at line {line_count+1}: {line}\n')
+                            else:
+                                # If we didn't get a character, maybe FluidNC is busy
+                                # We could peek at the status to see if it's still running
+                                self.serial.write(self.tx_encoder.encode('?'))
+                                # Small delay before trying again
+                                time.sleep(0.1)
+                        
+                        line_count += 1
+                        
+                        # Provide some feedback on progress every 10 lines
+                        if line_count % 10 == 0:
+                            self.console.write(f'Sent {line_count} lines\r')
+                    
+                    # Restore original timeout
+                    self.serial.timeout = original_timeout
+                    
+                    # Final status message
+                    self.console.write(f'\n--- Streaming complete: {line_count} lines sent, {error_count} errors ---\n')
+                    
+            except IOError as e:
+                sys.stderr.write(f'--- ERROR opening/reading file {filename}: {e} ---\n')
+            except Exception as e:
+                sys.stderr.write(f'--- ERROR during streaming: {e} ---\n')
+
+    if platform.system() == 'Darwin':
+        def mac_askstring(self, initial):
+            ascript = '''
+            -- iname - default file name
+            on run argv
+                set iname to item 1 of argv
+                try
+                    set theResponse to display dialog "Destination name" default answer iname with icon note buttons {"Cancel", "Continue"} default button "Continue"
+                   return text returned of theResponse as text
+                on error number -128
+                    return "" as text
+                end try
+            end run
+            '''
+            try:
+               proc = subprocess.check_output(['osascript', '-e', ascript, initial])
+               return proc.decode('utf-8').strip()
+            except subprocess.CalledProcessError as e:
+                print('Python error: [%d]\n' % e.returncode)
+
+        def mac_file_dialog(self, initial):
+            ascript = '''
+            -- apath - default path for dialogs to open to
+            on run argv
+                set apath to POSIX file (item 1 of argv)
+                try
+                    set fpath to POSIX path of (choose file with prompt "File to Upload" without invisibles)
+                    return fpath as text
+                on error number -128
+                    return "" as text
+                end try
+            end run
+            '''
+            try:
+               proc = subprocess.check_output(['osascript', '-e', ascript, initial])
+               return proc.decode('utf-8').strip()
+            except subprocess.CalledProcessError as e:
+                print('Python error: [%d]\n' % e.returncode)
+
+        def file_dialog(self, initial):
+            if platform.system() == 'Darwin':
+                # pathname = raw_input('--- Enter file name to send: ')
+                pathname = self.mac_file_dialog(initial)
+                print(pathname)
+                destname = self.mac_askstring(os.path.split(pathname)[1])
+                return pathname, destname
+            else:
+                try:
+                    window = Tk()
+                except:
+                    pathname = raw_input("Local file to send: ")
+                    destname = raw_input("File on FluidNC: ")
+                    return pathname, destname
+                else:
+                    pathname = filedialog.askopenfilename(title="File to Upload", initialfile=initial, filetypes=[("FluidNC Config", "*.yaml *.flnc *.txt"), ("All files", "*")])
+                    print("path",pathname)
+                    destname = simpledialog.askstring("Uploader", "Destination Filename", initialvalue=os.path.split(pathname)[1])
+                    window.destroy()
+                    return pathname, destname
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 # default args can be used to override when calling main() from an other script
@@ -1330,10 +1495,11 @@ def main(default_port=None, default_baudrate=115200, default_rts=None, default_d
     if not args.quiet:
         sys.stderr.write('--- FluidTerm ' + VERSION + ' on {p.name}  {p.baudrate},{p.bytesize},{p.parity},{p.stopbits} ---\n'.format(
             p=miniterm.serial))
-        sys.stderr.write('--- Quit: {} or {} | Upload: {} | Reset: {} | ClearScreen: Ctrl+W ---\n'.format(
+        sys.stderr.write('--- Quit: {} or {} | Upload: {} | Stream: {} | Reset: {} | ClearScreen: Ctrl+W ---\n'.format(
             key_description(miniterm.exit_character),
             key_description(miniterm.exit_character2),
             key_description('\x15'),
+            key_description('\x13'),
             key_description('\x12')))
 
     miniterm.start()
