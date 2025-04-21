@@ -381,6 +381,8 @@ namespace WebUI {
         if ((err = openFile(fs, parameter, auth_level, out, theFile)) != Error::Ok) {
             return err;
         }
+        // for unclear reasons, setting menu var here crashes. Setting from InputFile object instead.
+        //config->_oled->_menu->set_completed_file(parameter); // store run file path
 
         allChannels.registration(theFile);
 

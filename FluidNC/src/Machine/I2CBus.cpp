@@ -18,7 +18,7 @@ namespace Machine {
     void I2CBus::group(Configuration::HandlerBase& handler) {
         handler.item("sda_pin", _sda);
         handler.item("scl_pin", _scl);
-        handler.item("frequency", _frequency);
+        // handler.item("frequency", _frequency); // Dont set display frequency from config.yaml.
     }
 
     void I2CBus::init() {

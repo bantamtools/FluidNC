@@ -46,6 +46,7 @@ protected:
     State      _lastState;
     MotorMask  _lastLimits;
     bool       _lastProbe;
+//    char       _lastComment[maxLine];
 
     bool       _reportWco = true;
     CoordIndex _reportNgc = CoordIndex::End;

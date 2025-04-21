@@ -10,6 +10,7 @@
 #include "Config.h"
 #include "Error.h"
 #include "HashFS.h"
+#include "Machine/MachineConfig.h"
 
 int FluidPath::_refcnt = 0;
 
@@ -70,6 +71,6 @@ FluidPath& FluidPath::operator=(FluidPath&& o) {
 FluidPath::~FluidPath() {
     // log_debug("~ refcnt " << _isSD << " " << _refcnt);
     if (_isSD && (_refcnt && --_refcnt == 0)) {
-        sd_populate_files_menu();
+        config->_oled->_menu->print_current_menu();
     }
 }

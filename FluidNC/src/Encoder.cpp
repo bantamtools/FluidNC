@@ -7,7 +7,6 @@ static const char *TAG = "encoder";
 
 // Encoder constructor
 Encoder::Encoder() {
-
 	_pcnt_unit = PCNT_UNIT_0;
     _difference = 0;
 }
@@ -30,12 +29,12 @@ void IRAM_ATTR Encoder::encoder_read_cb(void *args) {
 
 // Initializes the encoder subsystem
 void Encoder::init() {
+    // log_info("Encoder::init()");
 
 	pcnt_config_t pcnt_config;
 
     // Encoder not configured, use fail-safe default
     if (!_a_pin.defined() && !_b_pin.defined()) {
-
         // MVP config
         if (config->_i2c[0]->_is_mvp) {
             _a_pin = Pin::create(MachineConfig::FAILSAFE_MVP_ENC_A);
@@ -43,6 +42,7 @@ void Encoder::init() {
 
         // LFP config
         } else {
+            // log_info("    Initializing LFP failsafe pins");
             _a_pin = Pin::create(MachineConfig::FAILSAFE_LFP_ENC_A);
             _b_pin = Pin::create(MachineConfig::FAILSAFE_LFP_ENC_B);
         }
@@ -117,4 +117,5 @@ void Encoder::group(Configuration::HandlerBase& handler) {
 
     handler.item("a_pin", _a_pin);
     handler.item("b_pin", _b_pin);
+    handler.item("old_scroll_behavior", _old_scroll_behavior);
 }

@@ -307,7 +307,7 @@ namespace Machine {
     }
 
     void Homing::done() {
-        log_debug("Homing done");
+        log_info("Homing done");
 
         if (sys.abort) {
             return;  // Did not complete. Alarm state set by mc_alarm.
@@ -326,6 +326,8 @@ namespace Machine {
         }
 
         // Set homed flag
+        // Does setting low latency make a difference?
+        // config->_stepping->beginLowLatency();
         config->_axes->_homed = true;
     }
 
@@ -339,6 +341,7 @@ namespace Machine {
         }
         if (_remainingCycles.empty()) {
             done();
+            log_info("Cycles Exhausted, Homed: TRUE");
             return;
         }
         _cycleAxes = _remainingCycles.front();
@@ -472,9 +475,12 @@ namespace Machine {
 
         if (_remainingCycles.empty()) {
             log_error("No homing cycles defined");
-            sys.state = State::Alarm;
+            config->_axes->_homed = true;
+            // sys.state = State::Alarm;
+            
             return;
         }
+
         config->_stepping->beginLowLatency();
 
         sys.state = State::Homing;

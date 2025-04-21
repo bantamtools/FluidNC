@@ -98,6 +98,11 @@ void Channel::autoReportGCodeState() {
         _lastSpindleSpeed = gc_state.spindle_speed;
         _lastFeedRate     = gc_state.feed_rate;
     }
+/*    if (strncmp(_lastComment, gc_comment, maxLine)) {
+        //log_info("Debug copying GCode Comment in Channel..." << gc_comment);
+        report_gcode_comment(*this);
+        strncpy(_lastComment, gc_comment, maxLine);
+    } */
 }
 void Channel::autoReport() {
     if (_reportInterval) {

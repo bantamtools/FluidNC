@@ -19,7 +19,7 @@ Some features should not be changed. See notes below.
 */
 
 // DEBUG: Enable memory printouts
-//#define DEBUG_MEMORY
+// #define DEBUG_MEMORY
 #ifdef DEBUG_MEMORY
 #define DEBUG_MEMORY_WATERMARKS
 #ifdef DEBUG_MEMORY_WATERMARKS
@@ -35,6 +35,8 @@ Some features should not be changed. See notes below.
 const int MAX_N_AXIS = 6;
 
 const int MAX_MESSAGE_LINE = 256;
+
+#define configUSE_CORE_AFFINITY 1
 
 // Axis array index values. Must start with 0 and be continuous.
 // Note: You set the number of axes used by changing MAX_N_AXIS.
@@ -54,6 +56,7 @@ const int B2_AXIS = (B_AXIS + MAX_N_AXIS);
 const int C2_AXIS = (C_AXIS + MAX_N_AXIS);
 
 const int SUPPORT_TASK_CORE = 0;  // Reference: CONFIG_ARDUINO_RUNNING_CORE = 1
+const int SECONDARY_TASK_CORE = 1;
 
 // Serial baud rate
 // OK to change, but the ESP32 boot text is 115200, so you will not see that is your
@@ -150,7 +153,7 @@ const int REPORT_WCO_REFRESH_IDLE_COUNT = 10;  // (2-255) Must be less than or e
 // NOTE: Changing this value also changes the execution time of a segment in the step segment buffer.
 // When increasing this value, this stores less overall time in the segment buffer and vice versa. Make
 // certain the step segment buffer is increased/decreased to account for these changes.
-const int ACCELERATION_TICKS_PER_SECOND = 100;
+const int ACCELERATION_TICKS_PER_SECOND = 400; //100;
 
 // Sets which axis the tool length offset is applied. Assumes the spindle is always parallel with
 // the selected axis with the tool oriented toward the negative direction. In other words, a positive
@@ -163,7 +166,7 @@ const int TOOL_LENGTH_OFFSET_AXIS = Z_AXIS;  // Default z-axis. Valid values are
 // limits or angle between neighboring block line move directions. This is useful for machines that can't
 // tolerate the tool dwelling for a split second, i.e. 3d printers or laser cutters. If used, this value
 // should not be much greater than zero or to the minimum value necessary for the machine to work.
-const float MINIMUM_JUNCTION_SPEED = 0.0f;  // (mm/min)
+const float MINIMUM_JUNCTION_SPEED = 5.0f;  // (mm/min)
 
 // Sets the minimum feed rate the planner will allow. Any value below it will be set to this minimum
 // value. This also ensures that a planned motion always completes and accounts for any floating-point

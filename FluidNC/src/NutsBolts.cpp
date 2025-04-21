@@ -147,6 +147,7 @@ void scale_vector(float* v, float scale, size_t n) {
     }
 }
 
+// Transforms vector v to unit vector, returns original magnitude of vector in mm
 float convert_delta_vector_to_unit_vector(float* v) {
     auto  n_axis    = config->_axes->_numberAxis;
     float magnitude = vector_length(v, n_axis);
@@ -158,14 +159,19 @@ const float secPerMinSq = 60.0 * 60.0;  // Seconds Per Minute Squared, for accel
 
 float limit_acceleration_by_axis_maximum(float* unit_vec, bool is_rapid) {
     float limit_value = SOME_LARGE_VALUE;
-    auto  n_axis      = config->_axes->_numberAxis;
+    auto n_axis      = config->_axes->_numberAxis;
     for (size_t idx = 0; idx < n_axis; idx++) {
         auto axisSetting = config->_axes->_axis[idx];
         if (unit_vec[idx] != 0) {  // Avoid divide by zero.
             if (is_rapid) {
                 limit_value = MIN(limit_value, fabsf(axisSetting->_rapid_acceleration / unit_vec[idx]));
             } else {
-                limit_value = MIN(limit_value, fabsf(axisSetting->_acceleration / unit_vec[idx]));
+                limit_value = MIN(limit_value, fabsf(axisSetting->_acceleration));
+                // Removing the division by unit vector normalizes the feedrate
+                // to the axis limit along the diagonal. Meaning the toolhead while
+                // writing will not accelerate faster than the maximum specified.
+                // This should provide more consistent line quality regardless of line angle.
+                // limit_value = MIN(limit_value, axisSetting->_acceleration); // AIDAN.
             }
         }
     }

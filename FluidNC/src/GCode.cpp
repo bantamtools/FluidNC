@@ -34,12 +34,17 @@ static const int32_t MaxLineNumber = 10000000;
 // Declare gc extern struct
 parser_state_t gc_state;
 parser_block_t gc_block;
+// char gc_comment[maxLine];
+bool gc_saw_program_end; // for detecting premature file end
+
+std::string comment_msg;
 
 #define FAIL(status) return (status);
 
 void gc_init() {
     // Reset parser state:
     memset(&gc_state, 0, sizeof(parser_state_t));
+    gc_saw_program_end = false;
 
     // Load default G54 coordinate system.
     gc_state.modal.coord_select = CoordIndex::G54;
@@ -57,6 +62,53 @@ static void gcode_comment_msg(char* comment) {
     char         msg[80];
     const size_t offset = 4;  // ignore "MSG_" part of comment
     size_t       index  = offset;
+
+    // our (Bantam) tool change comment do not have MSG, store entire string for display
+    //log_info("Saving GCode Comment..." << comment);
+    //strncpy(gc_comment, comment, maxLine);
+    // On second thought, passing strings rapidly via log channels seemed to run into race conditions and
+    //  hang the FW sometimes, so we're just gonna send the needed ones straight to OLED instead of using channels.
+    if (strstr(comment, "Tool") || strstr(comment, "CLEAR")) { // only send ones we care about
+        comment_msg = "[GCCMT:";
+        comment_msg += comment;
+        comment_msg += "]";
+        config->_oled->parse_gcode_comment_report(comment_msg);
+    }
+    // Also using comments to set some config vars dynamically
+    if (strstr(comment, "Install Height")) {
+        std::string cmt(comment);
+        size_t pos     = 0;
+        size_t nextpos = cmt.find_first_of(":", pos);
+        pos = nextpos + 1; // past label
+        cmt = cmt.substr(pos); // trim label
+        log_info("-- parsed Install Height contents: " << cmt);
+        config->_parking->_target_mpos = std::stof(cmt);
+        log_info("--- set config->_parking->_target_mpos to " << std::stof(cmt));
+    }
+    if (strstr(comment, "Accel")) {
+        std::string cmt(comment);
+        size_t pos     = 0;
+        size_t nextpos = cmt.find_first_of(":", pos);
+        pos = nextpos + 1; // past label
+        cmt = cmt.substr(pos); // trim label
+        log_info("-- parsed Accel contents: " << cmt);
+        float accel = std::stof(cmt);
+        if (accel >= 10 && accel < 4000) { // limit for our motors
+            // assuming X and Y are axes 0 and 1; set normal acceleration for either or both
+            if (strstr(comment, "AccelX")) {
+                config->_axes->_axis[0]->_acceleration = accel;
+                log_info("--- config->_axes->_axis[0]->_acceleration to " << accel);
+            } else if (strstr(comment, "AccelY")) {
+                config->_axes->_axis[1]->_acceleration = accel;
+                log_info("--- config->_axes->_axis[1]->_acceleration to " << accel);
+            } else {
+                config->_axes->_axis[0]->_acceleration = accel;
+                config->_axes->_axis[1]->_acceleration = accel;
+                log_info("--- config->_axes->_axis[0/1]->_acceleration to " << accel);
+            }
+        }
+    }
+
     if (strstr(comment, "MSG")) {
         while (index < strlen(comment)) {
             msg[index - offset] = comment[index];
@@ -497,11 +549,13 @@ Error gc_execute_line(char* line) {
                         // M2 - Stop
                         gc_block.modal.program_flow = ProgramFlow::CompletedM2;
                         mg_word_bit                 = ModalGroup::MM4;
+                        gc_saw_program_end = true;
                         break;
                     case 30:
                         // M30 - End
                         gc_block.modal.program_flow = ProgramFlow::CompletedM30;
                         mg_word_bit                 = ModalGroup::MM4;
+                        gc_saw_program_end = true;
                         break;
                     case 3:
                     case 4:
@@ -1206,7 +1260,17 @@ Error gc_execute_line(char* line) {
                         // than d. If so, the sqrt of a negative number is complex and error out.
                         float h_x2_div_d = 4.0f * gc_block.values.r * gc_block.values.r - x * x - y * y;
                         if (h_x2_div_d < 0) {
-                            FAIL(Error::GcodeArcRadiusError);  // [Arc radius error]
+                            float d = hypot_f(x, y);
+                            float r_min = d * 0.5f;
+
+                            if(gc_block.values.r < r_min){ // Correct for too small arcs.
+                                gc_block.values.r = r_min;
+                                h_x2_div_d = 4.0f * gc_block.values.r * gc_block.values.r - x * x - y * y;
+                            }
+
+                            if(h_x2_div_d < 0){ // If somehow still too small, fail with arc radius error.
+                                FAIL(Error::GcodeArcRadiusError);
+                            }
                         }
                         // Finish computing h_x2_div_d.
                         h_x2_div_d = -sqrt(h_x2_div_d) / hypot_f(x, y);  // == -(h * 2 / d)

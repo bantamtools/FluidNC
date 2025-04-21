@@ -1,14 +1,18 @@
-name: "Serama Rooster"
+name: "ArtFrame1824"
 board: "Serama Rooster"
+meta: "1.0.0"
 
-planner_blocks: 32
+planner_blocks: 10
 
 start:
  must_home: false
 
 control:
  enter_pin: gpio.38:low
- long_press_ms: 1000
+ long_press_ms: 400
+
+#Junction deviation used for cornering calculations. Default 0.01
+# junction_deviation_mm: 0.01
 
 # Stepper UART
 uart1:
@@ -20,101 +24,113 @@ uart1:
 stepping:
  engine: TIMED
  idle_ms: 255
- dir_delay_us: 1
  pulse_us: 4
+ dir_delay_us: 1
  disable_delay_us: 1
-
-# parking:
-#   enable: true
-#   axis: Z
-#   pullout_distance_mm: 0
-#   pullout_rate_mm_per_min: 1000
-#   target_mpos_mm: 0
-#   rate_mm_per_min: 1000
-#   park_on_feedhold: true
+ segments: 120
 
 axes:
   shared_stepper_disable_pin: NO_PIN
   shared_stepper_reset_pin: NO_PIN
 
   x:
-    steps_per_mm: 40
-    max_rate_mm_per_min: 7000
-    acceleration_mm_per_sec2: 500
-    rapid_acceleration_mm_per_sec2: 500
-    max_travel_mm: 914.4
-    soft_limits: false
+    steps_per_mm: 80
+    max_rate_mm_per_min: 40000
+    acceleration_mm_per_sec2: 2000
+    rapid_acceleration_mm_per_sec2: 3000
+    max_travel_mm: 458
+    soft_limits: true
     homing:
-      cycle: 2
+      cycle: 3
       mpos_mm: 0
       positive_direction: false
-      feed_mm_per_min: 2000
-      seek_mm_per_min: 2000
+      feed_mm_per_min: 4000
+      seek_mm_per_min: 4000
     
     motor0:
       limit_neg_pin: gpio.8:high
-      pulloff_mm: 2
+      pulloff_mm: 4
       tmc_2209:
         uart_num: 1
         addr: 0
         r_sense_ohms: 0.100
-        run_amps: 0.700
-        hold_amps: 0.500
-        microsteps: 8
+        run_amps: 1.000
+        hold_amps: 0.600
+        microsteps: 16
         stallguard: 0
         stallguard_debug: false
         toff_disable: 0
         toff_stealthchop: 5
         toff_coolstep: 3
-        run_mode: StealthChop
+        run_mode: CoolStep
         homing_mode: StealthChop
         use_enable: true
-        direction_pin: gpio.14:high
+        direction_pin: gpio.14:low
         step_pin: gpio.21
-        disable_pin: pinext0.0
+        disable_pin: NO_PIN
     motor1:
-      pulloff_mm: 2
+      null_motor:
+
+  y:
+    steps_per_mm: 80
+    max_rate_mm_per_min: 40000
+    acceleration_mm_per_sec2: 2000
+    rapid_acceleration_mm_per_sec2: 3000
+    max_travel_mm: 610
+    soft_limits: true
+    homing:
+      cycle: 2
+      mpos_mm: 0
+      positive_direction: false
+      feed_mm_per_min: 4000
+      seek_mm_per_min: 4000
+    
+    motor0:
+      limit_neg_pin: gpio.7:high
+      pulloff_mm: 4
       tmc_2209:
         uart_num: 1
         addr: 1
         r_sense_ohms: 0.100
-        run_amps: 0.700
+        run_amps: 0.900
         hold_amps: 0.500
-        microsteps: 8
+        microsteps: 16
         stallguard: 0
         stallguard_debug: false
         toff_disable: 0
         toff_stealthchop: 5
         toff_coolstep: 3
-        run_mode: StealthChop
+        run_mode: CoolStep
         homing_mode: StealthChop
         use_enable: true
         direction_pin: gpio.15:low
         step_pin: gpio.26
-        disable_pin: pinext0.1
+        disable_pin: NO_PIN
+    motor1:
+        null_motor:
 
-  y:
+  z:
     steps_per_mm: 40
-    max_rate_mm_per_min: 7000
-    acceleration_mm_per_sec2: 500
-    rapid_acceleration_mm_per_sec2: 500
-    max_travel_mm: 609.6
-    soft_limits: false
+    max_rate_mm_per_min: 50000
+    acceleration_mm_per_sec2: 10000
+    rapid_acceleration_mm_per_sec2: 10000
+    max_travel_mm: 60
+    soft_limits: true
     homing:
-      cycle: 3
-      mpos_mm: -609.6
-      positive_direction: false
-      feed_mm_per_min: 2000
-      seek_mm_per_min: 2000
-    
+      cycle: 1
+      mpos_mm: 60
+      positive_direction: true
+      feed_mm_per_min: 1600
+      seek_mm_per_min: 1600
+
     motor0:
-      limit_neg_pin: gpio.7:high
+      limit_pos_pin: gpio.4:high
       pulloff_mm: 2
       tmc_2209:
         uart_num: 1
         addr: 2
         r_sense_ohms: 0.100
-        run_amps: 0.700
+        run_amps: 0.900
         hold_amps: 0.500
         microsteps: 8
         stallguard: 0
@@ -122,57 +138,30 @@ axes:
         toff_disable: 0
         toff_stealthchop: 5
         toff_coolstep: 3
-        run_mode: StealthChop
+        run_mode: CoolStep
         homing_mode: StealthChop
         use_enable: true
-        direction_pin: gpio.17:low
+        direction_pin: gpio.17:high
         step_pin: gpio.47
-        disable_pin: pinext0.2
+        disable_pin: NO_PIN
     motor1:
         null_motor:
 
-  z:
-    steps_per_mm: 28
-    max_rate_mm_per_min: 1000
-    acceleration_mm_per_sec2: 500
-    rapid_acceleration_mm_per_sec2: 500
-    max_travel_mm: 75
-    soft_limits: false
-    homing:
-      cycle: 1
-      mpos_mm: 0
-      positive_direction: true
-      feed_mm_per_min: 500
-      seek_mm_per_min: 500
-
-    motor0:
-      limit_neg_pin: gpio.3:high
-      tmc_2209:
-        uart_num: 1
-        addr: 3
-        r_sense_ohms: 0.100
-        run_amps: 0.700
-        hold_amps: 0.500
-        microsteps: 8
-        stallguard: 0
-        stallguard_debug: false
-        toff_disable: 0
-        toff_stealthchop: 5
-        toff_coolstep: 3
-        run_mode: StealthChop
-        homing_mode: StealthChop
-        use_enable: true
-        direction_pin: gpio.34:high
-        step_pin: gpio.33
-        disable_pin: pinext0.7
-    motor1:
-        null_motor:
+# Toolchange behavior
+parking:
+  enable: true
+  axis: Z
+  pullout_distance_mm: 3.000
+  pullout_rate_mm_per_min: 10000
+  target_mpos_mm: 60.000
+  rate_mm_per_min: 10000
+  park_on_feedhold: true
 
 # OLED
 i2c0:
    sda_pin: gpio.40
    scl_pin: gpio.41
-   frequency: 100000
+   frequency: 800000
         
 oled:
   i2c_num: 0
@@ -188,7 +177,7 @@ encoder:
 
 # Configure SD card in SDMMC mode
 sdcard:
- frequency_hz: 3500000
+ frequency_hz: 5000000
  width: 4
  clk_pin: gpio.5
  cmd_pin: gpio.6

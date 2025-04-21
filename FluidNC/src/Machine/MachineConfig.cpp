@@ -4,6 +4,7 @@
 
 #include "MachineConfig.h"
 
+#include "DefaultConfig.h"
 #include "../Kinematics/Kinematics.h"
 
 #include "../Motors/MotorDriver.h"
@@ -79,7 +80,7 @@ namespace Machine {
 
         // TODO: Consider putting these under a gcode: hierarchy level? Or motion control?
         handler.item("arc_tolerance_mm", _arcTolerance, 0.001, 1.0);
-        handler.item("junction_deviation_mm", _junctionDeviation, 0.01, 1.0);
+        handler.item("junction_deviation_mm", _junctionDeviation, 0.001, 1.0);
         handler.item("verbose_errors", _verboseErrors);
         handler.item("report_inches", _reportInches);
         handler.item("enable_parking_override_control", _enableParkingOverrideControl);
@@ -170,7 +171,7 @@ namespace Machine {
         }
     }
 
-    const char defaultConfig[] = "name: Default (Test Drive)\nboard: None\n";
+    // const char defaultConfig[] = "name: Default (Test Drive)\nboard: None\n";
 
     bool MachineConfig::load() {
         bool configOkay;
@@ -203,7 +204,6 @@ namespace Machine {
         } else {
             configOkay = load_file(config_filename->get());
         }
-
         if (!configOkay) {
             log_info("Using default configuration");
             configOkay = load_yaml(defaultConfig);
@@ -239,6 +239,8 @@ namespace Machine {
     }
 
     bool MachineConfig::load_yaml(std::string_view input) {
+        log_info("Load Yaml from\n" << input);
+
         bool successful = false;
         try {
             Configuration::Parser        parser(input);

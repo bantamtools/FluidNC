@@ -44,6 +44,7 @@ void mem_task( void * pvParameters ) {
 
 void setup() {
     disableCore0WDT();
+    vTaskDelay(pdMS_TO_TICKS(1000));
     try {
     	timing_init();
 #ifdef ARDUINO_USB_CDC_ON_BOOT
@@ -52,8 +53,7 @@ void setup() {
 #else
         uartInit();       // Setup serial port
         Uart0.println();  // create some white space after ESP32 boot info
-#endif
-
+#endif 
         // Setup input polling loop after loading the configuration,
         // because the polling may depend on the config
         allChannels.init();
@@ -146,6 +146,8 @@ void setup() {
             config->_control->init();
 
             config->_kinematics->init();
+        } else { // Things we want to initialize even if no config.
+            // config->_encoder->init();
         }
 
         // Initialize system state.
@@ -185,8 +187,11 @@ void setup() {
         sys.state = State::ConfigAlarm;
     }
 
-    // Try Bluetooth first so its memory can be released if it is disabled
+    // Try Bluetooth first so its memory can be released if it is disabled 
     if (!WebUI::bt_config.begin()) {
+        if(!config->_wifiOnLaunch){
+            WebUI::wifi_mode->setStringValue((char*)"Off");
+        }
         WebUI::wifi_config.begin();
     }
 

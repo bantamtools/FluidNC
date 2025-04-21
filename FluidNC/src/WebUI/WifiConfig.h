@@ -36,13 +36,11 @@ namespace WebUI {
 namespace WebUI {
     extern StringSetting* wifi_hostname;
 
-    // TODO: Clean these constants up. Some of them don't belong here.
-
     static const int DHCP_MODE   = 0;
     static const int STATIC_MODE = 1;
 
     //defaults values
-    static const char* DEFAULT_HOSTNAME   = "bantam";
+    static const char* DEFAULT_HOSTNAME   = "BantamArtFrame"; // note max 32 char // TODO: better build integration to set this per machine type?
     static const char* DEFAULT_STA_SSID   = "";
     static const char* DEFAULT_STA_PWD    = "";
     static const char* DEFAULT_STA_IP     = "0.0.0.0";
@@ -86,6 +84,7 @@ namespace WebUI {
         static bool isHostnameValid(const char* hostname);
 
         static std::string Hostname() { return _hostname; }
+        static std::string Hostname_Setting() { return wifi_hostname->get(); }
 
         static char*   mac2str(uint8_t mac[8]);
         static bool    StartAP();

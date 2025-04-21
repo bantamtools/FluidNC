@@ -589,6 +589,7 @@ namespace WebUI {
     bool WiFiConfig::StartSTA() {
         //stop active service
         wifi_services.end();
+        esp_wifi_start();
         //Sanity check
         if ((WiFi.getMode() == WIFI_STA) || (WiFi.getMode() == WIFI_AP_STA)) {
             WiFi.disconnect();
@@ -648,6 +649,7 @@ namespace WebUI {
 
     bool WiFiConfig::StartAP() {
         //Sanity check
+        esp_wifi_start();
         if ((WiFi.getMode() == WIFI_STA) || (WiFi.getMode() == WIFI_AP_STA)) {
             WiFi.disconnect();
         }

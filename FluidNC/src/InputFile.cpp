@@ -8,6 +8,7 @@
 InputFile::InputFile(const char* defaultFs, const char* path, WebUI::AuthenticationLevel auth_level, Channel& out) :
     FileStream(path, "r", defaultFs), _auth_level(auth_level), _out(out), _line_num(0)  {
     log_info("Run file opened");  // Used by OLED for elapsed time
+    gc_saw_program_end = false; // clear flag for truncated file checking
 }
 /*
   Read a line from the file
@@ -40,6 +41,10 @@ float InputFile::percent_complete() {
     return (float)position() / (float)size() * 100.0f;
 }
 
+#include <sstream>
+#include <iomanip>
+#include "Machine/MachineConfig.h"
+
 void InputFile::ack(Error status) {
     if (status != Error::Ok) {
         log_error(static_cast<int>(status) << " (" << errorString(status) << ") in " << path() << " at line " << getLineNumber());
@@ -47,6 +52,7 @@ void InputFile::ack(Error status) {
             // Do not stop on unsupported commands because most senders do not
             // Stop the file job on other errors
             _notifyf("File job error", "Error:%d in %s at line: %d", status, path(), getLineNumber());
+            config->_oled->_menu->set_last_file_succeeded(false);
             allChannels.kill(this);
             return;
         }
@@ -55,9 +61,6 @@ void InputFile::ack(Error status) {
 }
 
 std::string InputFile::_progress = "";
-
-#include <sstream>
-#include <iomanip>
 
 Channel* InputFile::pollLine(char* line) {
     // File input never returns realtime characters, so we do nothing
@@ -76,11 +79,16 @@ Channel* InputFile::pollLine(char* line) {
             _progress = "";
             _notifyf("File job done", "%s file job succeeded", path());
             log_msg(path() << " file job succeeded");
+            config->_oled->_menu->set_completed_file(path().c_str());
+            config->_oled->_menu->set_last_file_succeeded(true);
+            if (gc_saw_program_end == false) { config->_oled->show_persistent_msg("Warning: Program ended unexpectedly"); }
             allChannels.kill(this);
             return nullptr;
         default:
             _progress = "";
             log_error(static_cast<int>(err) << " (" << errorString(err) << ") in " << path() << " at line " << getLineNumber());
+            config->_oled->_menu->set_completed_file(path().c_str());
+            config->_oled->_menu->set_last_file_succeeded(false);
             allChannels.kill(this);
             return nullptr;
     }
@@ -90,10 +98,18 @@ void InputFile::stopJob() {
     //Report print stopped
     _notifyf("File print canceled", "Reset during file job at line: %d", getLineNumber());
     log_info("Reset during file job at line: " << getLineNumber());
+    config->_oled->_menu->set_completed_file(path().c_str());
+    config->_oled->_menu->set_last_file_succeeded(false);
     allChannels.kill(this);
 }
 
 InputFile::~InputFile() {
-    _progress = "";
     log_info("Run file closed");  // Used by OLED for elapsed time
+    _progress = "";
+
+    if(config->_oled){
+        config->_oled->set_file_job_running(false);
+        config->_oled->_menu->go_to_postrun_menu();
+        // config->_oled->refresh_display();  // Makes sure we clear the elapsed time display
+    }
 }

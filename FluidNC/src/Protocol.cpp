@@ -8,8 +8,12 @@
 */
 
 #include "Protocol.h"
+#include "Config.h"
 #include "Event.h"
+#include "Menu.h"
 
+#include "Flashing.h"
+#include "Logging.h"
 #include "Machine/MachineConfig.h"
 #include "Machine/Homing.h"
 #include "Report.h"         // report_feedback_message
@@ -18,7 +22,12 @@
 #include "MotionControl.h"  // PARKING_MOTION_LINE_NUMBER
 #include "Settings.h"       // settings_execute_startup
 #include "Machine/LimitPin.h"
+#include "System.h"
 #include "WebUI/RSSReader.h"
+#include "WebUI/WifiConfig.h"
+
+#include <sstream>
+#include <string>
 
 volatile ExecAlarm rtAlarm;  // Global realtime executor bitflag variable for setting various alarms.
 
@@ -51,6 +60,8 @@ static char comment[LINE_BUFFER_SIZE];  // Line to be executed. Zero-terminated.
 // static uint8_t line_flags           = 0;
 // static uint8_t char_counter         = 0;
 // static uint8_t comment_char_counter = 0;
+
+static volatile bool eggZCalib = false;
 
 // Spindle stop override control states.
 struct SpindleStopBits {
@@ -225,16 +236,102 @@ void polling_loop(void* unused) {
     }
 }
 
+// #define CORE0_WDT
+#ifdef CORE0_WDT
+
+// Shared variable to indicate task status
+volatile uint32_t core0_task_heartbeat = 0; // Increment this every second from the main task.
+
+void core1_watchdog_task(void* pvParameters) {
+    uint32_t last_heartbeat = core0_task_heartbeat;
+    const TickType_t xDelay = pdMS_TO_TICKS(5000);
+
+    for (;;) {
+        vTaskDelay(xDelay);
+
+        if (core0_task_heartbeat == last_heartbeat) {
+            // No heartbeat update, task on core 0 might be stuck
+            // ESP_LOGE(TAG, "Core 0 task unresponsive! Taking corrective action.");
+            // Take corrective action, e.g., reset the system
+            // esp_restart();
+            // config->_oled->refresh_display();
+            log_warn("Timeout detected in core1_watchdog_task")
+            // if(config->_control->enter_locked()){
+            //     log_warn("    Enter Locked in Timeout");
+            // } else {
+            //     log_warn("    Enter Unlocked in Timeout");
+            // }
+        } else {
+            // Heartbeat updated, task is alive
+            last_heartbeat = core0_task_heartbeat;
+            log_debug("Core1 Watchdog, from core: " << xPortGetCoreID());
+            log_debug("\t" << config->_oled->_state);
+        }
+    }
+}
+
+void do_heartbeat() {
+    static int64_t last_heartbeat = 0;
+    int64_t heartbeat_difference;
+    int64_t current_time = esp_timer_get_time();
+    static int hb_10ms_timer = 0;
+    static int hb_100ms_timer = 0;
+    static int hb_1sec_timer = 0;
+    static int64_t n_heartbeats = 0;
+    
+
+    if (last_heartbeat == 0) {
+        last_heartbeat = current_time;
+        return; // Skip processing on the first call
+    }
+
+    heartbeat_difference = current_time - last_heartbeat;
+    
+    // Process elapsed time in increments of 10ms (10,000 microseconds)
+    while (heartbeat_difference >= 10000) { // 10ms intervals
+        heartbeat_difference -= 10000;
+        last_heartbeat += 10000;
+        hb_10ms_timer++;
+
+        // Every 100ms
+        if (hb_10ms_timer >= 10) {
+            hb_10ms_timer = 0;
+            hb_100ms_timer++;
+
+            // Every 1 second
+            if (hb_100ms_timer >= 10) {
+                hb_100ms_timer = 0;
+                hb_1sec_timer++;
+                core0_task_heartbeat++; // Increment for core1 WDT
+                // config->_oled->refresh_display(); // Force screen refresh every second?
+
+                // Every 10 seconds
+                if (hb_1sec_timer >= 10) {
+                    hb_1sec_timer = 0;
+                    n_heartbeats++;
+
+                    // Trigger heartbeat action here
+                    log_debug("Heartbeat from core " << xPortGetCoreID() << ": " << std::to_string(n_heartbeats));
+                }
+            }
+        }
+    }
+}
+#endif
+
 void stop_polling() {
     if (pollingTask) {
         vTaskSuspend(pollingTask);
     }
 }
 
+// Use this to spinup various support tasks.
+// For example, polling, logging and WDT monitoring
 void start_polling() {
     if (pollingTask) {
         vTaskResume(pollingTask);
     } else {
+        // log_debug("Start Polling Task");
         xTaskCreatePinnedToCore(polling_loop,      // task
                                 "poller",          // name for task
                                 6144,              // size of task stack
@@ -252,6 +349,16 @@ void start_polling() {
                                 &outputTask,       // task handle
                                 SUPPORT_TASK_CORE  // core
         );
+#ifdef CORE0_WDT
+        xTaskCreatePinnedToCore(core1_watchdog_task,    // Task
+                                "WatchdogTask",         // Name
+                                2048,                   // Stack Size
+                                NULL,                   // Parameters
+                                1,                      // Priority
+                                nullptr,                // Task Handle (nullptr)
+                                SUPPORT_TASK_CORE     // Which core to run on
+        );
+#endif
     }
 }
 
@@ -287,6 +394,7 @@ const uint32_t heapWarnThreshold = 15000;
 uint32_t heapLowWater = UINT_MAX;
 
 void protocol_main_loop() {
+    log_debug("Running task from core:" << xPortGetCoreID());
     check_startup_state();
     start_polling();
 
@@ -298,7 +406,11 @@ void protocol_main_loop() {
     // Primary loop! Upon a system abort, this exits back to main() to reset the system.
     // This is also where the system idles while waiting for something to do.
     // ---------------------------------------------------------------------------------
+
     for (;; vTaskDelay(0)) {
+#ifdef CORE0_WDT
+        do_heartbeat();
+#endif
         if (activeChannel) {
             // The input polling task has collected a line of input
 #ifdef DEBUG_REPORT_ECHO_RAW_LINE_RECEIVED
@@ -376,6 +488,7 @@ void protocol_buffer_synchronize() {
 // is finished, single commands), a command that needs to wait for the motions in the buffer to
 // execute calls a buffer sync, or the planner buffer is full and ready to go.
 void protocol_auto_cycle_start() {
+    // log_info("Protocol auto cycle start");
     if (plan_get_current_block() != NULL && sys.state != State::Cycle &&
         sys.state != State::Hold) {             // Check if there are any blocks in the buffer.
         protocol_send_event(&cycleStartEvent);  // If so, execute them
@@ -418,7 +531,12 @@ static void protocol_do_alarm() {
     sys.state = State::Alarm;  // Set system alarm state
     alarm_msg(rtAlarm);
     if (rtAlarm == ExecAlarm::HardLimit || rtAlarm == ExecAlarm::SoftLimit) {
-        report_error_message(Message::CriticalEvent);
+        if(rtAlarm == ExecAlarm::SoftLimit){
+          report_error_message(Message::SoftLimitLock);
+        } else {
+          report_error_message(Message::CriticalEvent);
+        }
+        
         protocol_disable_steppers();
         rtReset = false;  // Disable any existing reset
         do {
@@ -455,7 +573,7 @@ static void protocol_hold_complete() {
 }
 
 static void protocol_do_motion_cancel() {
-    log_debug("protocol_do_motion_cancel " << state_name());
+    // log_debug("protocol_do_motion_cancel " << state_name());
     // Execute and flag a motion cancel with deceleration and return to idle. Used primarily by probing cycle
     // to halt and cancel the remainder of the motion.
 
@@ -505,7 +623,7 @@ static void protocol_do_feedhold(void *arg) {
         runLimitLoop = false;  // Hack to stop show_limits()
         return;
     }
-    log_debug("protocol_do_feedhold " << state_name());
+    // log_debug("protocol_do_feedhold " << state_name());
     // Execute a feed hold with deceleration, if required. Then, suspend system.
     switch (sys.state) {
         case State::ConfigAlarm:
@@ -517,7 +635,7 @@ static void protocol_do_feedhold(void *arg) {
 
         case State::Homing:
             // XXX maybe feedhold should stop homing
-            log_info("Feedhold ignored while homing; use Reset instead");
+            // log_info("Feedhold ignored while homing; use Reset instead");
             return;
         case State::Hold:
             break;
@@ -539,7 +657,7 @@ static void protocol_do_feedhold(void *arg) {
 }
 
 static void protocol_do_safety_door() {
-    log_debug("protocol_do_safety_door " << int(sys.state));
+    // log_debug("protocol_do_safety_door " << int(sys.state));
     // Execute a safety door stop with a feed hold and disable spindle/coolant.
     // NOTE: Safety door differs from feed holds by stopping everything no matter state, disables powered
     // devices (spindle/coolant), and blocks resuming until switch is re-engaged.
@@ -598,7 +716,7 @@ static void protocol_do_safety_door() {
 }
 
 static void protocol_do_sleep() {
-    log_debug("protocol_do_sleep " << state_name());
+    // log_debug("protocol_do_sleep " << state_name());
     switch (sys.state) {
         case State::ConfigAlarm:
         case State::Alarm:
@@ -632,7 +750,7 @@ void protocol_cancel_disable_steppers() {
 }
 
 static void protocol_do_initiate_cycle() {
-    log_debug("protocol_do_initiate_cycle " << state_name());
+    // log_debug("protocol_do_initiate_cycle " << state_name());
     // Start cycle only if queued motions exist in planner buffer and the motion is not canceled.
     sys.step_control = {};  // Restore step control to normal operation
     plan_block_t* pb;
@@ -648,7 +766,7 @@ static void protocol_do_initiate_cycle() {
     }
 }
 static void protocol_initiate_homing_cycle() {
-    log_debug("protocol_initiate_homing_cycle " << state_name());
+    // log_debug("protocol_initiate_homing_cycle " << state_name());
     sys.step_control                  = {};    // Restore step control to normal operation
     sys.suspend.value                 = 0;     // Break suspend state.
     sys.step_control.executeSysMotion = true;  // Set to execute homing motion and clear existing flags.
@@ -657,7 +775,7 @@ static void protocol_initiate_homing_cycle() {
 }
 
 static void protocol_do_cycle_start() {
-    log_debug("protocol_do_cycle_start " << state_name());
+    // log_debug("protocol_do_cycle_start " << state_name());
     // Execute a cycle start by starting the stepper interrupt to begin executing the blocks in queue.
 
     // Resume door state when parking motion has retracted and door has been closed.
@@ -733,7 +851,7 @@ void protocol_disable_steppers() {
 }
 
 void protocol_do_cycle_stop() {
-    log_debug("protocol_do_cycle_stop " << state_name());
+    // log_debug("protocol_do_cycle_stop " << state_name());
     protocol_disable_steppers();
 
     switch (sys.state) {
@@ -785,6 +903,9 @@ void protocol_do_cycle_stop() {
             Machine::Homing::cycleStop();
             break;
     }
+
+    // log_debug("End Cycle Stop");
+    config->_oled->refresh_display(); // AIDAN
 }
 
 static void update_velocities() {
@@ -1091,11 +1212,16 @@ static void protocol_do_card_detect(void* arg) {
 }
 
 static void protocol_do_enter() {
+    log_info("Protocol Do Enter");
 
+    // config->_oled->_menu->print_current_menu();
     bool long_press = false;
 
     // Bail if enter button locked out
-    if (config->_control->enter_locked()) return;
+    if (config->_control->enter_locked()) {
+        log_info("Enter Locked, exiting protocol");
+        return;
+    }
 
     // Measure enter press and flag if long press
     enterStartTime = millis();
@@ -1123,8 +1249,10 @@ static void protocol_do_enter() {
 
             // Long press, cancel job
             if (long_press) {
+                config->_axes->set_unhomed();
+                // config->_oled->_menu->print_current_menu();
                 protocol_send_event(&resetEvent);
-
+                log_info("Long press in do_enter_cycle");
             // Click / short press, feedhold job
             } else {
                 config->_control->lock_enter();
@@ -1142,6 +1270,7 @@ static void protocol_do_enter() {
                 if (long_press) {
                     protocol_send_event(&resetEvent);
                 } else {
+                    // log_info("Short press in do_enter_hold");
                     config->_control->lock_enter();
                     protocol_send_event(&cycleStartEvent);
                     protocol_execute_realtime();
@@ -1154,19 +1283,53 @@ static void protocol_do_enter() {
 
         // Clear alarm when in ALARM state
         case State::Alarm:
-
+            config->_control->lock_enter();
+            // log_debug("Alarm State in do_enter");
             sys.state = State::Idle;
+            
+            protocol_send_event(&resetEvent);
+            if (config->_control->enter_locked()) {
+                config->_control->unlock_enter();
+            }
+            // config->_oled->refresh_display();
+
             break;
 
         // Run selected operation when IDLE
         case State::Idle:
+            // log_debug("Idle State in do_enter");
 
             // Be sure display is enabled
             if (config->_oled) {
+
+                // Double-check to make sure we are not currently in the middle of running a file.
+                // This shouldn't normally happen, but we've seen the system state flash to "IDLE" in
+                //  between Run and Hold when transitioning to and from a paused state.
+                // We don't want to be trying to do anything with menu entries during file run, so bail.
+                if (config->_oled->is_file_job_running()) {
+                    log_debug("do_enter saw Idle state with file running - bailing.");
+                    break;
+                }
+
+                if (config->_oled->showing_popup()) {
+                    // click while popup is displayed -> clear popup, don't do anything else
+                    config->_oled->clear_popup();
+                    break;
+                }
             
                 // Home command
                 if (strcmp(config->_oled->_menu->get_selected()->display_name, "Home") == 0) {
-                    Machine::Homing::run_cycles(Machine::Homing::AllCycles);
+                    if (strncmp(config->_name.c_str(), "EggBot", 24) == 0) { // motor power toggle for EggBot only
+                        if (config->_oled->get_motors_on()) {
+                            config->_axes->set_disable(true);
+                            config->_oled->set_motors_on(false);
+                        } else {
+                            config->_axes->set_disable(false);
+                            config->_oled->set_motors_on(true);
+                        }
+                    } else { // all other machines do homing cycle
+                        Machine::Homing::run_cycles(Machine::Homing::AllCycles);
+                    }
 
                 // Jog command
                 } else if (strstr(config->_oled->_menu->get_selected()->display_name, "Jog ")) {
@@ -1192,39 +1355,206 @@ static void protocol_do_enter() {
                     }
 
                 // Factory Reset command
-                } else if (strcmp(config->_oled->_menu->get_selected()->display_name, "Reset Factory Settings") == 0) {
-
+                } else if (strcmp(config->_oled->_menu->get_selected()->display_name, "Confirm Factory Reset") == 0) {
+                    //config->_oled->popup_msg("Factory Reset Test!");
                     // Restore settings to defaults
                     settings_restore(SettingsRestore::Wifi | SettingsRestore::Defaults | SettingsRestore::StartupLines | SettingsRestore::Parameters);
 
                     // Restart when done
                     ESP.restart();
                     while (1) {}
+                } else if (strcmp(config->_oled->_menu->get_selected()->display_name, "Cancel Factory Reset") == 0) {
+                    // Just treat this like a back button
+                    config->_oled->_menu->exit_submenu();
+                
+                // Wifi commands
+                } else if (strcmp(config->_oled->_menu->get_selected()->display_name, "WiFi Info") == 0) {
+                    config->_oled->show_wifi_info();
+                } else if (strcmp(config->_oled->_menu->get_selected()->display_name, "Turn WiFi ON") == 0) {
+                    WebUI::wifi_mode->setStringValue((char*)"STA>AP"); // standard fallback wifi
+                    config->_oled->popup_msg("WiFi set to ON.                  Machine will reboot...", 2000);
+                    config->_oled->show_persistent_msg("Now Rebooting...");
+                    ESP.restart();
+                    while (1) {}
+                } else if (strcmp(config->_oled->_menu->get_selected()->display_name, "Turn WiFi OFF") == 0) {
+                    WebUI::wifi_mode->setStringValue((char*)"Off");
+                    config->_oled->popup_msg("WiFi set to OFF.                Machine will reboot...", 2000);
+                    config->_oled->show_persistent_msg("Now Rebooting...");
+                    ESP.restart();
+                    while (1) {}
+                // temp testing
+                } else if (strcmp(config->_oled->_menu->get_selected()->display_name, "TEST") == 0) {
 
+                    // draw some stuff on the right side of the menu area
+                    //  note this kind of drawing would normally be done within OLED.cpp, not here.
+                //    config->_oled->_oled->setColor(BLACK);
+                //    config->_oled->_oled->fillRect(64, 15, 64, 64);
+                //    config->_oled->_oled->setColor(WHITE);
+                //    config->_oled->_oled->fillRect(68, 19, 56, 56);
+                //    config->_oled->_oled->setColor(BLACK);
+                //    config->_oled->_oled->fillRect(72, 23, 48, 48);
+                //    config->_oled->_oled->setColor(WHITE);
+                //    config->_oled->_oled->fillRect(76, 27, 40, 40);
+                //    config->_oled->_oled->display();
+
+                //    config->_oled->_oled->setColor(BLACK);
+                //    config->_oled->_oled->fillRect(64, 15, 64, 64);
+                //    config->_oled->_oled->setColor(WHITE);
+                //    config->_oled->_oled->drawXbm(68, 18, 24, 24, settings_icon_bits);
+                //    config->_oled->_oled->display();
+
+                    config->_oled->show_home_layout();
+
+                } else if (strcmp(config->_oled->_menu->get_selected()->display_name, "TEST2") == 0) {
+                    config->_oled->show_persistent_msg("Blah blahdee bla blah foobar quxbaazloremipsumdolorsitamat.");
+
+                } else if (strcmp(config->_oled->_menu->get_selected()->display_name, "Run Latest") == 0) {
+                    // run most recent (mod date or just uploaded) gcode file, must be homed
+                    if (!config->_axes->_homed && config->_kinematics->canHome(0) &&
+                                !(strncmp(config->_name.c_str(), "EggBot", 24) == 0)) {
+                        config->_oled->popup_msg("Machine not homed");
+                        log_info("Debug path during unhomed: " << config->_oled->_menu->get_recent_file_path().c_str());
+                    } else {
+                        log_info("Passing path to InputFile from Run Latest: " << config->_oled->_menu->get_recent_file_path().c_str());
+                        config->_oled->_menu->set_completed_file_from_recent(); // store run file path
+                        InputFile *infile = new InputFile("sd", config->_oled->_menu->get_recent_file_path().c_str(), WebUI::AuthenticationLevel::LEVEL_ADMIN, allChannels);
+                        allChannels.registration(infile);
+                    }
+
+                } else if (strcmp(config->_oled->_menu->get_selected()->display_name, "Run Again") == 0) {
+                    // run gcode file that was just run, must be homed
+                    if (config->_oled->_menu->get_completed_file_path().c_str() == "") {
+                        config->_oled->popup_msg("Previously run file not found");
+                        log_info("Run Again file path was empty");
+                    } else if (!config->_axes->_homed && config->_kinematics->canHome(0) &&
+                                !(strncmp(config->_name.c_str(), "EggBot", 24) == 0)) {
+                        config->_oled->popup_msg("Machine not homed");
+                        log_info("Debug path during unhomed: " << config->_oled->_menu->get_completed_file_path().c_str());
+                    } else {
+                        log_info("Passing path to InputFile from Run Again: " << config->_oled->_menu->get_completed_file_path().c_str());
+                        InputFile *infile = new InputFile("sd", config->_oled->_menu->get_completed_file_path().c_str(), WebUI::AuthenticationLevel::LEVEL_ADMIN, allChannels);
+                        allChannels.registration(infile);
+                    }
+
+                } else if (strcmp(config->_oled->_menu->get_selected()->display_name, "Z Calibration Position") == 0) {
+                    // special calib function for EggBot Z servo
+                    if (eggZCalib) {
+                        gc_execute_line((char*)"G0 Z0");
+                        eggZCalib = false;
+                    } else {
+                        gc_execute_line((char*)"G0 Z-3.0");
+                        eggZCalib = true;
+                    }
+
+                } else if (strcmp(config->_oled->_menu->get_selected()->display_name, "Draw Bounds") == 0) {
+                    config->_oled->popup_msg("Feature in development");
+
+                } else if (strcmp(config->_oled->_menu->get_selected()->display_name, "Update Firmware") == 0){ // Enter FW Menu from Settings menu
+                    // Flashing::update_firmware_from_sdcard();
+                    log_info("Is Settings Menu: " << config->_oled->_menu->is_settings_menu());
+                    ListNodeType *selected_entry = config->_oled->_menu->get_selected();
+                    if (selected_entry->child != NULL) {
+                        log_info("Entering Firmware Menu");
+                        config->_oled->_menu->enter_submenu();
+                    } 
+                } else if (strcmp(config->_oled->_menu->get_selected()->display_name, "Update Config File") == 0){ // Enter Config Menu from Settings menu
+                    log_info("Is Settings Menu: " << config->_oled->_menu->is_settings_menu());
+                    ListNodeType *selected_entry = config->_oled->_menu->get_selected();
+                    if (selected_entry->child != NULL) {
+                        log_info("Entering Config Menu");
+                        config->_oled->_menu->enter_submenu();
+                    } 
+                } else if (strcmp(config->_oled->_menu->get_selected()->display_name, "Back To Run") == 0) {
+                    // back button specifically from post-run menu, go back to run menu
+                    config->_oled->_menu->return_to_run_menu();
                 // Back button
                 } else if ((strcmp(config->_oled->_menu->get_selected()->display_name, "< Back") == 0) || long_press) {
                     config->_oled->_menu->exit_submenu();
-
+                // install FW if firmware menu
+                } else if(config->_oled->_menu->is_firmware_menu()) {
+                    std::string fw_file = config->_oled->_menu->get_selected()->display_name;
+                    log_info("Selected: " << fw_file);
+                    config->_oled->show_persistent_msg("Updating Firmware            Plotter will restart...");
+                    Flashing::update_firmware_from_sdcard(fw_file);
+                // install config if config menu
+                } else if(config->_oled->_menu->is_config_menu()) {
+                    std::string cfg_file = config->_oled->_menu->get_selected()->display_name;
+                    log_info("Config Selected: " << cfg_file);
+                    config->_oled->show_persistent_msg("Updating Config File            Plotter will restart...");
+                    // This will copy the given file to local internal storage with name "config.yaml"
+                    Flashing::update_config_from_sdcard(cfg_file, true);
                 // Run file command if files menu
                 } else if (config->_oled->_menu->is_files_menu()) {
 
-                    // Display homing error if try to run unhomed
-                    if (!config->_axes->_homed) {
+                    ListNodeType *selected_entry = config->_oled->_menu->get_selected();
+                    char *name_copy = strdup(selected_entry->display_name);
 
-                        // Display error
-                        config->_oled->popup_msg("Machine not homed");
-
+                    // Check if the selected entry is a folder (has a child submenu)
+                    if (selected_entry->child != NULL) { // this works now after setup fixes
+                //    if (strstr(name_copy, ".gcode") == NULL) { // name does not end in .gcode, probably is a folder
+                        // It's a folder, enter the submenu
+                        log_info("Entering submenu");
+                        config->_oled->_menu->enter_submenu();
                     } else {
+                        // It's a file, execute the file
 
-                        InputFile *infile = new InputFile("sd", config->_oled->_menu->get_selected()->path, WebUI::AuthenticationLevel::LEVEL_ADMIN, allChannels);
-                        allChannels.registration(infile);
+                        // Auto-home if trying to run unhomed (unless no motors home)
+                        //  Unfortunately latest EggBot config doesn't return false from canHome() even though
+                        //  it seems like it should, so also exclude it explicitly.
+                        if (!config->_axes->_homed && config->_kinematics->canHome(0) &&
+                                !(strncmp(config->_name.c_str(), "EggBot", 24) == 0)) {
+                            log_info("Unhomed. About to home before running file: " << selected_entry->path);
+                            // Display error
+                            //config->_oled->popup_msg("Machine not homed");
+                            // New behavior: auto-home before file run if not homed
+                            config->_oled->set_file_awaiting_homing(selected_entry->path);
+                            config->_oled->show_persistent_msg("Homing before file run...");
+                            Machine::Homing::run_cycles(Machine::Homing::AllCycles);
+                        } else {
+                            log_info("Passing path to InputFile: " << selected_entry->path);
+                            config->_oled->_menu->set_completed_file(selected_entry->path); // store run file path
+                            InputFile *infile = new InputFile("sd", selected_entry->path, WebUI::AuthenticationLevel::LEVEL_ADMIN, allChannels);
+                            allChannels.registration(infile);
+                        }
                     }
+
 
                 // Download file command if RSS menu
                 } else if (config->_oled->_menu->is_rss_menu()) {
 #ifdef ENABLE_WIFI
                     WebUI::rssReader.download_file(config->_oled->_menu->get_selected()->path, config->_oled->_menu->get_selected()->display_name);
 #endif
+                } else if (!(config->_oled->_menu->is_settings_menu() || config->_oled->_menu->is_version_menu())) {
+                    // treat other unlabeled menus as files_menu because it's probably a files subfolder
+                    ListNodeType *selected_entry = config->_oled->_menu->get_selected();
+                    char *name_copy = strdup(selected_entry->display_name);
+
+                    // Check if the selected entry is a folder (has a child submenu)
+                    if (selected_entry->child != NULL) {
+                        // It's a folder, enter the submenu
+                        log_info("Entering submenu");
+                        config->_oled->_menu->enter_submenu();
+                    } else {
+                        // It's a file, execute the file
+
+                        // Auto-home if trying to run unhomed (unless no motors home)
+                        if (!config->_axes->_homed && config->_kinematics->canHome(0) &&
+                                !(strncmp(config->_name.c_str(), "EggBot", 24) == 0)) {
+                            log_info("Unhomed. About to home before running file: " << selected_entry->path);
+                            // Display error
+                            //config->_oled->popup_msg("Machine not homed");
+                            // New behavior: auto-home before file run if not homed
+                            config->_oled->set_file_awaiting_homing(selected_entry->path);
+                            config->_oled->show_persistent_msg("Homing before file run...");
+                            Machine::Homing::run_cycles(Machine::Homing::AllCycles);
+                        } else {
+                            log_info("Passing path to InputFile: " << selected_entry->path);
+                            config->_oled->_menu->set_completed_file(selected_entry->path); // store run file path
+                            InputFile *infile = new InputFile("sd", selected_entry->path, WebUI::AuthenticationLevel::LEVEL_ADMIN, allChannels);
+                            allChannels.registration(infile);
+                        }
+                    }
+
                 // Otherwise, enter the submenu if it exists
                 } else {
                     config->_oled->_menu->enter_submenu();

@@ -20,7 +20,7 @@ namespace Machine {
         int      _busNumber = 0;
         Pin      _sda;
         Pin      _scl;
-        uint32_t _frequency = 100000;
+        uint32_t _frequency = 800000; // 100000; Defauly to 800khz to match max esp32s3 i2c transfer rate.
         bool     _is_mvp;
         bool     _fail_safe = false;
 

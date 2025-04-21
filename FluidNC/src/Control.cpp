@@ -72,20 +72,24 @@ bool Control::safety_door_ajar() {
 
 // Returns if enter button is pressed, used for long press detection
 bool Control::enter_pressed() {
+    // log_info("Enter pressed");
     return _pins[1]->get();
 }
 
 // Returns whether the enter button is locked out
 bool Control::enter_locked() {
+    log_debug("Checking enter locked");
     return _pins[1]->locked();
 }
 
 // Locks the enter button
 void Control::lock_enter() {
+    log_debug("Enter is locked");
     _pins[1]->lock(); 
 }
 
 // Unlocks the enter button
 void Control::unlock_enter() {
+    log_debug("Enter is unlocked");
     _pins[1]->unlock(); 
 }

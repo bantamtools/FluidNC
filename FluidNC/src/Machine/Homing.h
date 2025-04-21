@@ -7,6 +7,7 @@
 #include "src/Configuration/Configurable.h"
 #include "src/System.h"    // AxisMask, MotorMask
 #include "src/Protocol.h"  // ExecAlarm
+#include "src/Flashing.h"
 #include <queue>
 
 namespace Machine {
@@ -99,4 +100,6 @@ namespace Machine {
         static const char* _phaseNames[];
         static const char* phaseName(Phase phase) { return _phaseNames[static_cast<int>(phase)]; }
     };
+
+    
 }

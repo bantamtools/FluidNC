@@ -18,7 +18,7 @@ namespace Machine {
 
     void Stepping::init() {
         log_info("Stepping:" << stepTypes[_engine].name << " Pulse:" << _pulseUsecs << "us Dsbl Delay:" << _disableDelayUsecs
-                             << "us Dir Delay:" << _directionDelayUsecs << "us Idle Delay:" << _idleMsecs << "ms");
+                             << "us Dir Delay:" << _directionDelayUsecs << "us Idle Delay:" << _idleMsecs << "ms, segments: " << _segments);
 
         // Prepare stepping interrupt callbacks.  The one that is actually
         // used is determined by timerStart() and timerStop()
@@ -139,7 +139,7 @@ namespace Machine {
         handler.item("pulse_us", _pulseUsecs, 0, 30);
         handler.item("dir_delay_us", _directionDelayUsecs, 0, 10);
         handler.item("disable_delay_us", _disableDelayUsecs, 0, 10);
-        handler.item("segments", _segments, 6, 20);
+        handler.item("segments", _segments, 6, 100);
     }
 
     void Stepping::afterParse() {

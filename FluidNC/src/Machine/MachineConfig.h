@@ -85,10 +85,16 @@ namespace Machine {
         UartChannel* _uart_channels[MAX_N_UARTS] = { nullptr };
         Uart*        _uarts[MAX_N_UARTS]         = { nullptr };
 
-        float _arcTolerance      = 0.002f;
-        float _junctionDeviation = 0.01f;
-        bool  _verboseErrors     = false;
-        bool  _reportInches      = false;
+        float _arcTolerance         = 0.002f;
+        float _junctionDeviation    = 0.01f;
+        bool  _verboseErrors        = false;
+        bool  _reportInches         = false;
+
+        bool _wifiOnLaunch          = true; // Hard set for if we are allowing hosting of/connecting to APs. This will be migrated to config.yaml eventually.
+        std::string _recoveryConfig = ""; // Config to recover from if boot without config on flash. Populated on sd_init.
+        bool _systemIsInitialized   = false;
+        bool _plannerReady          = false; // Dont allow motion control to begin after pause or file start until the planner has filled itself. 
+                                           // Set back to false on file start and feedhold.
 
         size_t _planner_blocks = 16;
 

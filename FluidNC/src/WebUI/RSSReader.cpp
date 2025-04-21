@@ -88,6 +88,8 @@ namespace WebUI {
 
     // Starts the RSS reader subsystem
     bool RSSReader::begin() {
+        return false; // DISABLE RSS FOR NOW
+        log_info("Beginning RSS Reader Service");
 
         // Stop if previously running
         end();
