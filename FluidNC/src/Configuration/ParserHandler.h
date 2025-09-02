@@ -8,14 +8,18 @@
 #include "Configurable.h"
 #include "../System.h"
 #include "parser_logging.h"
+#include "../Pins/ProtectedPinTracker.h"
+#include "../string_util.h"
 
 #include <vector>
+#include <cstring>
 
 namespace Configuration {
     class ParserHandler : public Configuration::HandlerBase {
     private:
         Configuration::Parser&   _parser;
         std::vector<const char*> _path;
+        bool                     _overlayMode;
 
     public:
         void enterSection(const char* name, Configuration::Configurable* section) override {
@@ -48,11 +52,14 @@ namespace Configuration {
                         try {
                             section->group(*this);
                         } catch (const AssertionFailed& ex) {
-                            // Log something meaningful to the user:
-                            log_error("Configuration error at "; for (auto it : _path) { ss << '/' << it; } ss << ": " << ex.msg);
+                            if (sys.state != State::ConfigAlarm) {
+                                // Log something meaningful to the user, but only once.
+                                log_error("Configuration error at "; for (auto it : _path) { ss << '/' << it; } ss << ": " << ex.msg);
 
-                            // Set the state to config alarm, so users can't run time machine.
-                            sys.state = State::ConfigAlarm;
+                                // Set the state to config alarm, so users can't run time machine.
+                                sys.state = State::ConfigAlarm;
+                            }
+                            throw;  // Re-throw to abort all parsing
                         }
 
                         if (_parser._token._state == TokenState::Matching) {
@@ -81,7 +88,7 @@ namespace Configuration {
         bool matchesUninitialized(const char* name) override { return _parser.is(name); }
 
     public:
-        ParserHandler(Configuration::Parser& parser) : _parser(parser) {}
+        ParserHandler(Configuration::Parser& parser, bool overlayMode = false) : _parser(parser), _overlayMode(overlayMode) {}
 
         void item(const char* name, int32_t& value, int32_t minValue, int32_t maxValue) override {
             if (_parser.is(name)) {
@@ -136,7 +143,39 @@ namespace Configuration {
 
         void item(const char* name, Pin& value) override {
             if (_parser.is(name)) {
-                auto parsed = _parser.pinValue();
+                // Use static lookup table for critical pin names
+                static const struct {
+                    const char* name;
+                    Pins::ProtectedPinTracker::PinFunction function;
+                } criticalPins[] = {
+                    {"a_pin",      Pins::ProtectedPinTracker::PinFunction::ENCODER_A},
+                    {"b_pin",      Pins::ProtectedPinTracker::PinFunction::ENCODER_B},
+                    {"enter_pin",  Pins::ProtectedPinTracker::PinFunction::ENTER_BUTTON},
+                    {"sda_pin",    Pins::ProtectedPinTracker::PinFunction::I2C_SDA},
+                    {"scl_pin",    Pins::ProtectedPinTracker::PinFunction::I2C_SCL},
+                    {"clk_pin",    Pins::ProtectedPinTracker::PinFunction::SD_CLK},
+                    {"cmd_pin",    Pins::ProtectedPinTracker::PinFunction::SD_CMD},
+                    {"d0_pin",     Pins::ProtectedPinTracker::PinFunction::SD_D0},
+                    {"d1_pin",     Pins::ProtectedPinTracker::PinFunction::SD_D1},
+                    {"d2_pin",     Pins::ProtectedPinTracker::PinFunction::SD_D2},
+                    {"d3_pin",     Pins::ProtectedPinTracker::PinFunction::SD_D3},
+                    {"cd_pin",     Pins::ProtectedPinTracker::PinFunction::SD_CD},
+                };
+                
+                // Default to OTHER (non-critical)
+                Pins::ProtectedPinTracker::PinFunction requestedFunction = 
+                    Pins::ProtectedPinTracker::PinFunction::OTHER;
+                
+                // Look up in table
+                for (const auto& entry : criticalPins) {
+                    if (strcmp(name, entry.name) == 0) {
+                        requestedFunction = entry.function;
+                        break;
+                    }
+                }
+                
+                // Bypass _parser.pinValue() and call Pin::create directly with function
+                auto parsed = Pin::create(string_util::trim(_parser.stringValue()), requestedFunction);
                 value.swap(parsed);
             }
         }
@@ -148,5 +187,6 @@ namespace Configuration {
         }
 
         HandlerType handlerType() override { return HandlerType::Parser; }
+        bool isOverlayMode() override { return _overlayMode; }
     };
 }

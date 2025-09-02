@@ -49,7 +49,6 @@ namespace Pins {
 
         _attributes = _attributes | value;
 
-        bool activeLow = _attributes.has(PinAttributes::ActiveLow);
 
         if (_owner == nullptr) {
             auto ext = config->_extenders;

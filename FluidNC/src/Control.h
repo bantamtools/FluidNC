@@ -8,7 +8,10 @@
 #include <vector>
 
 using namespace Machine;
+
 class Control : public Configuration::Configurable {
+    bool _immutable = false;  // ADD THIS
+    
 public:
     Control();
 
@@ -21,6 +24,7 @@ public:
 
     // Configuration handlers.
     void group(Configuration::HandlerBase& handler) override;
+    void makeImmutable() { _immutable = true; }  // ADD THIS
 
     bool stuck();
     bool safety_door_ajar();

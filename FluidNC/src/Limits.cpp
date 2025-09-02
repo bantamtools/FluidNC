@@ -143,7 +143,6 @@ void limits_soft_check(float* cartesian) {
                 }
             } while (sys.state != State::Idle);
         }
-        log_debug("Soft limits");
         mc_reset();                      // Issue system reset and ensure spindle and coolant are shutdown.
         rtAlarm = ExecAlarm::SoftLimit;  // Indicate soft limit critical event
         protocol_execute_realtime();     // Execute to enter critical event loop and system abort
@@ -172,6 +171,9 @@ void limitCheckTask(void* pvParameters) {
 }
 #endif
 
+// Margin of error allowed when checking soft limits in mm
+#define SOFT_LIMITS_ERR 0.5f; 
+
 float limitsMaxPosition(size_t axis) {
     auto  axisConfig = config->_axes->_axis[axis];
     auto  homing     = axisConfig->_homing;
@@ -179,7 +181,7 @@ float limitsMaxPosition(size_t axis) {
     auto  maxtravel  = axisConfig->_maxTravel;
 
     //return (homing == nullptr || homing->_positiveDirection) ? mpos + maxtravel : mpos;
-    return (homing == nullptr || homing->_positiveDirection) ? mpos : mpos + maxtravel;
+    return ((homing == nullptr || homing->_positiveDirection) ? mpos : mpos + maxtravel) + SOFT_LIMITS_ERR;
 }
 
 float limitsMinPosition(size_t axis) {
@@ -189,5 +191,5 @@ float limitsMinPosition(size_t axis) {
     auto  maxtravel  = axisConfig->_maxTravel;
 
     //return (homing == nullptr || homing->_positiveDirection) ? mpos : mpos - maxtravel;
-    return (homing == nullptr || homing->_positiveDirection) ? mpos - maxtravel : mpos;
+    return ((homing == nullptr || homing->_positiveDirection) ? mpos - maxtravel : mpos) - SOFT_LIMITS_ERR;
 }

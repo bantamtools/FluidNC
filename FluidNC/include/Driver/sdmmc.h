@@ -8,6 +8,8 @@
 
 // Definitions
 #define SD_NUM_ALLOWED_EXT  3   // Number of allowed file extensions
+#define SD_NUM_BIN_EXT 1        // Number of allowed file extensions for binaries (.bin)
+#define SD_NUM_CFG_EXT 1        // Number of allowed file extensions for config files (.yaml)
 
 bool sd_init_slot(uint32_t freq_hz, int width = 1, int clk_pin = -1, int cmd_pin = -1, int d0_pin = -1, int d1_pin = -1, int d2_pin = -1, int d3_pin = -1, int cd_pin = -1);
 void sd_unmount();

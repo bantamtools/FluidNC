@@ -13,6 +13,9 @@
 #include <freertos/FreeRTOS.h>
 
 namespace Extenders {
+    static bool i2c_read_warning_printed = false;
+    static bool i2c_write_warning_printed = false;
+
     EnumItem i2cDevice[] = { { int(I2CExtenderDevice::PCA9539), "pca9539" },
                              { int(I2CExtenderDevice::PCA9555), "pca9555" },
                              { int(I2CExtenderDevice::TCA6408), "tca6408" },
@@ -25,15 +28,21 @@ namespace Extenders {
 
         int err;
         if ((err = bus->write(address, &reg, 1)) < 0) {
-            log_warn("Cannot read from I2C bus");
+            if (!i2c_read_warning_printed) {
+                log_warn("Cannot read from I2C bus!!");
+                i2c_read_warning_printed = true;
+            }
 
             IOError();
             return 0;
         } else {
             uint8_t result = 0;
             if (bus->read(address, &result, 1) < 0) {
-                log_warn("Cannot read from I2C bus: "
-                         << "no response");
+                if (!i2c_read_warning_printed) {
+                    log_warn("Cannot read from I2C bus: "
+                             << "no response");
+                    i2c_read_warning_printed = true;
+                }
 
                 IOError();
             } else {
@@ -55,7 +64,10 @@ namespace Extenders {
         int err = bus->write(address, data, 2);
 
         if (err < 0) {
-            log_warn("Cannot write to I2C bus");
+            if (!i2c_write_warning_printed) {
+                log_warn("Cannot write to I2C bus");
+                i2c_write_warning_printed = true;
+            }
             IOError();
         } else {
             // This log line will probably generate a stack overflow and way too much data. Use with care:

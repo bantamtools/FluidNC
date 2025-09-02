@@ -14,6 +14,35 @@
 #include "GCode.h"             // CoolantState
 
 #include <cstdint>
+#include <cmath>
+
+// AIDAN DEV TESTING
+// Reduce by these amounts EG, block->programmedRate *= MAX(max_feedrate_dampening, feedrate_dampening);
+// #define NEXTDRAW_DAMPENING
+
+// Potentially replace these with absolute minimum values,
+// either set in config or elsewhere.
+constexpr float max_acceleration_dampening = 0.35f;
+constexpr float max_feedrate_dampening     = 0.4f;
+constexpr float max_junction_dampening     = 0.4f;
+constexpr float max_entry_dampening        = 0.4f;
+
+// Threshold calculations
+constexpr float mm_max                = 1.6; // m
+constexpr float mm_t                  = 4.0f; // t
+constexpr float mm_exp                = 8.0f; // q
+constexpr float mm_f                  = 0.67f; // f
+
+// Angular Calculations
+constexpr float dot_k         = 2.9f; // k
+constexpr float dot_i         = 1.1f; // p
+constexpr float dot_p         = 1.7; // i
+constexpr float dot_j         = 0.6f; // j
+constexpr float dot_scalar    = 0.7; // q
+
+constexpr float max_accel_angular_threshold = 0.98f; // < Not a smooth curve.
+constexpr float min_accel_angular_threshold = 0.02; // > Not a right angle
+
 
 // Define planner data condition flags. Used to denote running conditions of a block.
 struct PlMotion {

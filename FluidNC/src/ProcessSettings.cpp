@@ -23,6 +23,11 @@
 #include "xmodem.h"               // xmodemReceive(), xmodemTransmit()
 #include "StartupLog.h"           // startupLog
 #include "Driver/fluidnc_gpio.h"  // gpio_dump()
+#ifdef USE_SDMMC
+#include "Driver/sdmmc.h"         // sd_populate_files_menu()
+#else
+#include "Driver/sdspi.h"         // sd_populate_files_menu()
+#endif
 
 #include "FluidPath.h"
 #include "HashFS.h"
@@ -642,6 +647,11 @@ static Error xmodem_receive(const char* value, WebUI::AuthenticationLevel auth_l
     std::filesystem::path fname = outfile->fpath();
     delete outfile;
     HashFS::rehash_file(fname);
+
+    // Refresh SD card file list if the file was written to SD
+    if (strncmp(value, "/sd/", 4) == 0) {
+        sd_populate_files_menu();
+    }
 
     return size < 0 ? Error::UploadFailed : Error::Ok;
 }

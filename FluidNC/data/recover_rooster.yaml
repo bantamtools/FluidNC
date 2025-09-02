@@ -1,0 +1,46 @@
+name: "Recovery (Rooster)"
+board: "Bantam Tools Serama Rooster"
+meta: "1.0.0"
+
+start:
+ must_home: false
+
+control:
+ enter_pin: gpio.38:low
+
+# OLED; uses fixed I2C frequency of 800 kHz
+i2c0:
+   sda_pin: gpio.40
+   scl_pin: gpio.41
+
+oled:
+  i2c_num: 0
+  i2c_address: 60
+  width: 128
+  height: 64
+  radio_delay_ms: 2000
+
+encoder:
+ a_pin: gpio.36
+ b_pin: gpio.37
+
+# Configure SD card in SDMMC mode
+sdcard:
+ frequency_hz: 5000000
+ width: 4
+ clk_pin: gpio.5
+ cmd_pin: gpio.6
+ d0_pin: gpio.2
+ d1_pin: gpio.1
+ d2_pin: gpio.11
+ d3_pin: gpio.10
+ cd_pin: gpio.12
+
+# IO Expander
+extenders:
+  i2c_num: 0
+  pinextender0:
+    i2c_extender:
+      device: tca6408
+      device_id: 0
+      interrupt: gpio.35

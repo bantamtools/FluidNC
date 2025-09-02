@@ -5,13 +5,15 @@
 #include "Machine/I2CBus.h"
 #include <algorithm>
 
+#define OLEDDISPlAY_DOUBLE_BUFFER
+
 using namespace Machine;
 
 class SSD1306_I2C : public OLEDDisplay {
 private:
     uint8_t _address;
     I2CBus* _i2c;
-    int     _frequency;
+    long     _frequency;
     bool    _error = false;
     int     _num_retries;
 
@@ -98,7 +100,7 @@ public:
         }
 
         buffer[-1] = 0x40;  // control
-        _i2c->write(_address, (char*)&buffer[-1], displayBufferSize + 1);
+        _i2c->write(_address, &buffer[-1], displayBufferSize + 1);
 #endif
     }
 
@@ -118,7 +120,7 @@ private:
             _num_retries++;
             delay_ms(100);
         }
-        if (_num_retries == 3) {
+        if (_num_retries == 3) { // May want to initialize some sort of recovery if this condition is reached.
             log_error("OLED failed to respond");
             _error = true;
         }

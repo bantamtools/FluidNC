@@ -12,6 +12,7 @@
 #include "Config.h"
 #include "WebUI/Authentication.h"
 #include "InputFile.h"
+#include "Flashing.h"
 #ifdef USE_SDMMC
 #include "Driver/sdmmc.h"
 #else

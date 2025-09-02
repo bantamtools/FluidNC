@@ -29,6 +29,7 @@
 static volatile void* mc_pl_data_inflight;  // holds a plan_line_data_t while mc_move_motors has taken ownership of a line motion
 
 void mc_init() {
+    config->_systemIsInitialized = true;
     mc_pl_data_inflight = NULL;
 }
 

@@ -8,6 +8,7 @@
 #include "../EnumItem.h"
 #include "../SpindleDatatypes.h"
 #include "../UartTypes.h"
+#include "../Logging.h"
 
 #include <IPAddress.h>
 #include <string>
@@ -56,14 +57,40 @@ namespace Configuration {
         virtual void item(const char* name, std::string& value, int minLength = 0, int maxLength = 255) = 0;
 
         virtual HandlerType handlerType() = 0;
+        virtual bool isOverlayMode() { return false; }  // Default: not overlay mode
 
         template <typename T, typename... U>
         void section(const char* name, T*& value, U... args) {
             if (handlerType() == HandlerType::Parser) {
                 // For Parser, matchesUninitialized(name) resolves to _parser.is(name)
                 if (matchesUninitialized(name)) {
-                    Assert(value == nullptr, "Duplicate section %s", name);
-                    if (value == nullptr) {
+                    if (value != nullptr) {
+                        // Handle duplicate sections based on parsing mode
+                        if (isOverlayMode()) {
+                            // Check if this is a critical section that should be protected
+                            std::string sectionName(name);
+                            bool isCriticalSection = (sectionName == "control" || 
+                                                    sectionName == "i2c0" || 
+                                                    sectionName == "oled" || 
+                                                    sectionName == "encoder" || 
+                                                    sectionName == "sdcard" || 
+                                                    sectionName == "extenders");
+                            
+                            if (isCriticalSection) {
+                                // Warn about protected sections - not duplicates, just protected
+                                log_warn("User config section '" + std::string(name) + "' ignored (using board defaults)");
+                                enterSection(name, value);  // Use existing object
+                            } else {
+                                // Allow non-critical sections to be overridden silently
+                                delete value;  // Delete recovery config object
+                                value = new T(args...);  // Create new object from user config
+                                enterSection(name, value);
+                            }
+                        } else {
+                            // In base mode, duplicates are errors
+                            Assert(false, "Duplicate section %s", name);
+                        }
+                    } else {
                         value = new T(args...);
                         enterSection(name, value);
                     }

@@ -13,14 +13,14 @@
 #include "Pins/ErrorPinDetail.h"
 #include "Pins/ExtPinDetail.h"
 #include "string_util.h"
-#include <stdio.h>  // snprintf()
 
 Pins::PinDetail* Pin::undefinedPin = new Pins::VoidPinDetail();
 Pins::PinDetail* Pin::errorPin     = new Pins::ErrorPinDetail("unknown");
 
 static constexpr bool verbose_debugging = false;
 
-const char* Pin::parse(std::string_view pin_str, Pins::PinDetail*& pinImplementation) {
+const char* Pin::parse(std::string_view pin_str, Pins::PinDetail*& pinImplementation, 
+                       Pins::ProtectedPinTracker::PinFunction requestedFunction) {
     if (verbose_debugging) {
         log_info("Parsing pin string: " << pin_str);
     }
@@ -72,7 +72,7 @@ const char* Pin::parse(std::string_view pin_str, Pins::PinDetail*& pinImplementa
 
     // Build this pin:
     if (string_util::equal_ignore_case(prefix, "gpio")) {
-        pinImplementation = new Pins::GPIOPinDetail(static_cast<pinnum_t>(pin_number), parser);
+        pinImplementation = new Pins::GPIOPinDetail(static_cast<pinnum_t>(pin_number), parser, requestedFunction);
     }
     if (string_util::equal_ignore_case(prefix, "i2so")) {
         pinImplementation = new Pins::I2SOPinDetail(static_cast<pinnum_t>(pin_number), parser);
@@ -108,10 +108,10 @@ const char* Pin::parse(std::string_view pin_str, Pins::PinDetail*& pinImplementa
     }
 }
 
-Pin Pin::create(std::string_view str) {
+Pin Pin::create(std::string_view str, Pins::ProtectedPinTracker::PinFunction requestedFunction) {
     Pins::PinDetail* pinImplementation = nullptr;
     try {
-        const char* err = parse(str, pinImplementation);
+        const char* err = parse(str, pinImplementation, requestedFunction);
         if (err) {
             if (pinImplementation) {
                 delete pinImplementation;
@@ -122,12 +122,9 @@ Pin Pin::create(std::string_view str) {
         } else {
             return Pin(pinImplementation);
         }
-    } catch (const AssertionFailed& ex) {  // We shouldn't get here under normal circumstances.
+    } catch (const AssertionFailed& ex) {  
         log_error("ERR: " << str << " - " << ex.what());
-        char buf[255];
-        snprintf(buf, 255, "ERR: %s - %s", str, ex.what());
-        Assert(false, buf);
-        // return Pin(new Pins::ErrorPinDetail(str.str()));
+        throw;  // Re-throw the original exception to stop parsing
     }
 }
 

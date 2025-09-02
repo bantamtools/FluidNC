@@ -16,7 +16,6 @@ class Parking : public Configuration::Configurable {
 private:
     // Configuration
     bool  _enable           = false;
-    float _target_mpos      = -5.0;
     float _pullout          = 5.0;
     float _rate             = 800.0;
     float _pullout_rate     = 250.0;
@@ -42,6 +41,9 @@ private:
 
 public:
     Parking() {}
+
+    // Config item pulled to public so we can change it dynamically
+    float _target_mpos      = -5.0;
 
     void setup();       // Called when suspend start
     void set_target();  // Called when motion has stopped after suspend

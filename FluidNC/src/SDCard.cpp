@@ -13,7 +13,6 @@
 #else
 #include "Driver/sdspi.h"
 #endif
-#include "src/SettingsDefinitions.h"
 #include "FluidPath.h"
 #include "Protocol.h"
 
@@ -21,28 +20,14 @@ SDCard::SDCard() : _state(State::Idle) {}
 
 void SDCard::init() {
 #ifdef USE_SDMMC
-    pinnum_t clkPin = -1, cmdPin = -1, d0Pin = -1, d1Pin = -1, d2Pin = -1, d3Pin = -1, cdPin = -1;  // Using MVP 1-bit SDMMC by default
+    pinnum_t clkPin = -1, cmdPin = -1, d0Pin = -1, d1Pin = -1, d2Pin = -1, d3Pin = -1, cdPin = -1;
     static bool init_message = true;  // used to show messages only once.
 
     init_message = false;
 
-    // SD card not configured, use 1-bit SDMMC as fail-safe default
-    if (!_clk.defined() && !_cmd.defined() && !_d0.defined()) {
-
-        // MVP config
-        if (config->_i2c[0]->_is_mvp) {
-            _clk = Pin::create(MachineConfig::FAILSAFE_MVP_SDMMC_CLK);
-            _cmd = Pin::create(MachineConfig::FAILSAFE_MVP_SDMMC_CMD);
-            _d0  = Pin::create(MachineConfig::FAILSAFE_MVP_SDMMC_D0);
-            _cd  = Pin::create(MachineConfig::FAILSAFE_MVP_SDMMC_CD);
-            
-        // LFP config
-        } else {
-            _clk = Pin::create(MachineConfig::FAILSAFE_LFP_SDMMC_CLK);
-            _cmd = Pin::create(MachineConfig::FAILSAFE_LFP_SDMMC_CMD);
-            _d0  = Pin::create(MachineConfig::FAILSAFE_LFP_SDMMC_D0);
-            _cd  = Pin::create(MachineConfig::FAILSAFE_LFP_SDMMC_CD);
-        }
+    if (!_clk.defined() || !_cmd.defined() || !_d0.defined()) {
+        log_debug("SD card not configured - pins not defined");
+        return;
     }
 
     // Configure the SDMMC clock/data pins
@@ -105,6 +90,31 @@ void SDCard::init() {
     // Set up an event pin with card detect actions
     CardDetectPin *cardDetectEventPin = new CardDetectPin(_cardDetect);
     cardDetectEventPin->init();
+#endif
+}
+
+void SDCard::group(Configuration::HandlerBase& handler) {
+    if (_immutable) {
+        Machine::MachineConfig::addWarning("SD Card config ignored (using immutable defaults)");
+        return;
+    }
+
+#ifdef USE_SDMMC
+    handler.item("width", _width);
+    
+    handler.item("clk_pin", _clk);
+    handler.item("cmd_pin", _cmd);
+    handler.item("d0_pin", _d0);
+    handler.item("d1_pin", _d1);
+    handler.item("d2_pin", _d2);
+    handler.item("d3_pin", _d3);
+    handler.item("cd_pin", _cd);
+    
+    handler.item("frequency_hz", _frequency_hz, 400000, 50000000);
+#else
+    handler.item("cs_pin", _cs);
+    handler.item("card_detect_pin", _cardDetect);
+    handler.item("frequency_hz", _frequency_hz, 400000, 20000000);
 #endif
 }
 

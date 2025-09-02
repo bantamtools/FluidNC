@@ -33,6 +33,9 @@ namespace MotorDrivers {
 
         bool _has_errors = false;
 
+        // Initial position configuration
+        float _initial_position_mm = 0.0;        // Physical position at power-on
+
     public:
         RcServo() = default;
         ~RcServo() {
@@ -59,6 +62,9 @@ namespace MotorDrivers {
             handler.item("min_pulse_us", _min_pulse_us, SERVO_PULSE_US_MIN, SERVO_PULSE_US_MAX);
             handler.item("max_pulse_us", _max_pulse_us, SERVO_PULSE_US_MIN, SERVO_PULSE_US_MAX);
             handler.item("timer_ms", _timer_ms);
+            
+            // Initial position parameter
+            handler.item("initial_position_mm", _initial_position_mm);
 
             Servo::group(handler);
         }

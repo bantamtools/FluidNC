@@ -10,6 +10,10 @@
 // Plans and executes the single special motion case for parking. Independent of main planner buffer.
 // NOTE: Uses the always free planner ring buffer head to store motion parameters for execution.
 void Parking::moveto(float* target) {
+      // Check if the program flow is paused and skip if feedhold is from an M0 command 
+    if (gc_state.modal.program_flow == ProgramFlow::Paused) {
+        return;
+    }
     if (sys.abort) {
         return;  // Block during abort.
     }
@@ -66,6 +70,7 @@ void Parking::setup() {
     plan_data.motion.systemMotion   = 1;
     plan_data.motion.noFeedOverride = 1;
     plan_data.line_number           = PARKING_MOTION_LINE_NUMBER;
+    plan_data.is_jog                = false;
     block                           = plan_get_current_block();
 
     if (block) {

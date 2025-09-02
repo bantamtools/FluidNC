@@ -137,30 +137,25 @@ def addImage(name, offset, filename, srcpath, dstpath):
 flashsize = "4m"
 
 mcu = "esp32"
-envName = 'wifi_s3'
-
-if buildEnv(envName, verbose=verbose) != 0:
-    sys.exit(1)
-    
-buildDir = os.path.join('.pio', 'build', envName)
-shutil.copy(os.path.join(buildDir, 'firmware.elf'), os.path.join(relPath, envName + '-' + 'firmware.elf'))
-
-addImage(mcu + '-' + envName + '-firmware', '0x10000', 'firmware.bin', buildDir, mcu + '/' + envName)
-
-if envName == 'wifi_s3':
-    if buildFs('wifi_s3', verbose=verbose) != 0:
-        sys.exit(1)
-
-    # bootapp is a data partition that the bootloader and OTA use to determine which
-    # image to run. Its initial value is in a file "boot_app0.bin" in the platformio
-    # framework package. We copy it to the build directory so addImage can find it
-    bootappsrc = os.path.join(os.path.expanduser('~'), '.platformio', 'packages', 'framework-arduinoespressif32', 'tools', 'partitions', 'boot_app0.bin')
-    shutil.copy(bootappsrc, buildDir)
-
-    addImage(mcu + '-' + envName + '-' + flashsize + '-filesystem', '0x3d0000', 'littlefs.bin', buildDir, mcu + '/' + envName + '/' + flashsize)
-    addImage(mcu + '-' + flashsize + '_s3-partitions', '0x8000', 'partitions.bin', buildDir, mcu + '/' + flashsize)
-    addImage(mcu + '_s3-bootloader', '0x1000', 'bootloader.bin', buildDir, mcu)
-    addImage(mcu + '_s3-bootapp', '0xe000', 'boot_app0.bin', buildDir, mcu)
+for mcu in ['esp32']:
+    for envName in ['wifi_s3-2436', 'wifi_s3-1824', 'wifi_s3']:
+        if buildEnv(envName, verbose=verbose) != 0:
+            sys.exit(1)
+        buildDir = os.path.join('.pio', 'build', envName)
+        shutil.copy(os.path.join(buildDir, 'firmware.elf'), os.path.join(relPath, envName + '-' + 'firmware.elf'))
+        addImage(mcu + '-' + envName + '-firmware', '0x10000', 'firmware.bin', buildDir, mcu + '/' + envName)
+        if envName.startswith("wifi"):
+            if buildFs(envName, verbose=verbose) != 0:
+                sys.exit(1)
+            # bootapp is a data partition that the bootloader and OTA use to determine which
+            # image to run.  Its initial value is in a file "boot_app0.bin" in the platformio
+            # framework package.  We copy it to the build directory so addImage can find it
+            bootappsrc = os.path.join(os.path.expanduser('~'),'.platformio','packages','framework-arduinoespressif32','tools','partitions', 'boot_app0.bin')
+            shutil.copy(bootappsrc, buildDir)
+            addImage(mcu + '-' + envName + '-' + flashsize + '-filesystem', '0x3d0000', 'littlefs.bin', buildDir, mcu + '/' + envName + '/' + flashsize)
+            addImage(mcu + '-' + envName + '-' + flashsize + '_s3-partitions', '0x8000', 'partitions.bin', buildDir, mcu + '/' + flashsize)
+            addImage(mcu + '-' + envName +'_s3-bootloader', '0x1000', 'bootloader.bin', buildDir, mcu)
+            addImage(mcu + '-' + envName +'_s3-bootapp', '0xe000', 'boot_app0.bin', buildDir, mcu)
 
 
 def addSection(node, name, description, choice):
@@ -212,9 +207,19 @@ def makeManifest():
     addMCU("esp32", "ESP32-WROOM", "Firmware variant")
 
     addVariant("wifi_s3", "Supports WiFi and WebUI on the esp32_s3", "Installation type")
-    addInstallable(fresh_install, True, ["esp32-4m_s3-partitions", "esp32_s3-bootloader", "esp32_s3-bootapp", "esp32-wifi_s3-firmware", "esp32-wifi_s3-4m-filesystem"])
+    addInstallable(fresh_install, True, ["esp32-wifi_s3-4m_s3-partitions", "esp32-wifi_s3_s3-bootloader", "esp32-wifi_s3_s3-bootapp", "esp32-wifi_s3-firmware", "esp32-wifi_s3-4m-filesystem"])
     addInstallable(firmware_update, False, ["esp32-wifi_s3-firmware"])
     addInstallable(filesystem_update, False, ["esp32-wifi_s3-4m-filesystem"])
+
+    addVariant("wifi_s3-2436", "Supports WiFi and WebUI on the esp32_s3", "Installation type")
+    addInstallable(fresh_install, True, ["esp32-wifi_s3-2436-4m_s3-partitions", "esp32-wifi_s3-2436_s3-bootloader", "esp32-wifi_s3-2436_s3-bootapp", "esp32-wifi_s3-2436-firmware", "esp32-wifi_s3-2436-4m-filesystem"])
+    addInstallable(firmware_update, False, ["esp32-wifi_s3-2436-firmware"])
+    addInstallable(filesystem_update, False, ["esp32-wifi_s3-2436-4m-filesystem"])
+
+    addVariant("wifi_s3-1824", "Supports WiFi and WebUI on the esp32_s3", "Installation type")
+    addInstallable(fresh_install, True, ["esp32-wifi_s3-1824-4m_s3-partitions", "esp32-wifi_s3-1824_s3-bootloader", "esp32-wifi_s3-1824_s3-bootapp", "esp32-wifi_s3-1824-firmware", "esp32-wifi_s3-1824-4m-filesystem"])
+    addInstallable(firmware_update, False, ["esp32-wifi_s3-1824-firmware"])
+    addInstallable(filesystem_update, False, ["esp32-wifi_s3-1824-4m-filesystem"])
 
 makeManifest()
 
@@ -232,9 +237,12 @@ with open(os.path.join(manifestRelPath, "manifest.json"), "w") as manifest_file:
         # Add index.html.gz
         addToUpdateZip(updateZip, os.path.join('FluidNC', 'data', 'index.html.gz'), os.path.join('update', 'index.html.gz'))
         
-        # Add firmware.bin
-        firmwarePath = os.path.join('.pio', 'build', envName, 'firmware.bin')
-        addToUpdateZip(updateZip, firmwarePath, os.path.join('update', 'firmware.bin'))
+        # Add firmware.bin for each environment with envName appended
+        for envName in ['wifi_s3-2436', 'wifi_s3-1824', 'wifi_s3']:
+            firmwarePath = os.path.join('.pio', 'build', envName, 'firmware.bin')
+        # Append envName to the destination path in the update zip
+            destinationPath = os.path.join('update', f'{envName}_firmware.bin')
+            addToUpdateZip(updateZip, firmwarePath, destinationPath)
         
         # Add config.yaml
         configPath = os.path.join('FluidNC', 'data', 'config.yaml')

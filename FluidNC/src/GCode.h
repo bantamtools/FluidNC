@@ -284,7 +284,10 @@ struct parser_state_t {
     float tool_length_offset;  // Tracks tool length offset value when enabled.
 };
 
+static const int maxLine = 255;
 extern parser_state_t gc_state;
+//extern char gc_comment[maxLine];
+extern bool gc_saw_program_end;
 
 struct parser_block_t {
     NonModal     non_modal_command;

@@ -12,7 +12,6 @@
 const float TMC2209_RSENSE_DEFAULT = 0.11f;
 
 namespace MotorDrivers {
-
     class TMC2209Driver : public TrinamicUartDriver {
     public:
         // Overrides for inherited methods
@@ -37,6 +36,8 @@ namespace MotorDrivers {
 
     private:
         TMC2209Stepper* tmc2209 = nullptr;
+
+        uint32_t TPWMTHRS_FR = 5;
 
         bool test();
         void set_registers(bool isHoming);

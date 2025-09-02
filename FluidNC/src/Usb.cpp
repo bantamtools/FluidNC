@@ -1,3 +1,4 @@
+// Copyright (c) 2025 -  Windell Oskay, Bantam Tools
 // Copyright (c) 2023 -  Matt Staniszewski
 // Copyright (c) 2021 -  Mitch Bradley
 // Use of this source code is governed by a GPLv3 license that can be found in the LICENSE file.
@@ -11,7 +12,8 @@
 Usb::Usb() : _usb_num(0) {}
 
 void Usb::begin() {
-
+    Serial.setRxBufferSize(2048);  // Increase from default 256 to 2048 bytes
+    Serial.setTxBufferSize(2048);  // Also increase TX buffer for symmetry
     Serial.begin(115200);
 }
 
@@ -35,7 +37,8 @@ size_t Usb::write(const uint8_t* buffer, size_t length) {
 size_t Usb::timedReadBytes(char* buffer, size_t len, TickType_t timeout) {
 
     Serial.setTimeout(timeout);
-    int res = Serial.read(buffer, len);
+    size_t res = Serial.readBytes(buffer, len);
+
     // If res < 0, no bytes were read
 
     return res < 0 ? 0 : res;
@@ -46,7 +49,7 @@ void Usb::config_message(const char* prefix, const char* usage) {
 }
 
 int Usb::rx_buffer_available(void) {
-    return 256 - available();  // Based on RX/TX FIFO sizes in HWCDC
+    return 2048 - available();  // Updated for increased buffer size
 }
 
 int Usb::peek() {

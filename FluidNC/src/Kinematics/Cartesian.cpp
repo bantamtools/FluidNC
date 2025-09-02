@@ -3,6 +3,7 @@
 #include "src/Machine/MachineConfig.h"
 #include "src/Machine/Axes.h"  // ambiguousLimit()
 #include "src/Limits.h"
+#include "../Motors/MotorDriver.h"
 
 namespace Kinematics {
     void Cartesian::init() {
@@ -14,6 +15,11 @@ namespace Kinematics {
     void Cartesian::init_position() {
         auto n_axis = config->_axes->_numberAxis;
         for (size_t axis = 0; axis < n_axis; axis++) {
+            // Don't reset servo axes - they handle their own initialization
+            auto m = config->_axes->_axis[axis]->_motors[0];
+            if (m && m->_driver && strcmp(m->_driver->name(), "rc_servo") == 0) {
+                continue;
+            }
             set_motor_steps(axis, 0);  // Set to zeros
         }
     }

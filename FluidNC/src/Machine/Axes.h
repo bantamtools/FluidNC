@@ -72,6 +72,7 @@ namespace Machine {
         void step(uint8_t step_mask, uint8_t dir_mask);
         void unstep();
         void config_motors();
+        void set_unhomed(){ _homed = false; };
 
         std::string maskToNames(AxisMask mask);
         bool        namesToMask(const char* names, AxisMask& mask);

@@ -1,49 +1,57 @@
-<img src="https://github.com/bdring/FluidNC/wiki/images/logos/FluidNC.svg" width="600">
+# Bantam Tools FluidNC v1.11.0 - source release
 
-## Introduction
+Corresponding source for Bantam Tools FluidNC firmware v1.11.0, a modified version of
+[FluidNC](https://github.com/bdring/FluidNC), distributed under the GNU General Public
+License v3 (see `LICENSE` and `NOTICE`).
 
-**FluidNC** is a CNC firmware optimized for the ESP32 controller. It is the next generation of firmware from the creators of Grbl_ESP32. It includes a web based UI and the flexibility to operate a wide variety of machine types. This includes the ability to control machines with multiple tool types such as laser plus spindle or a tool changer.  
+## Building
 
-## Firmware Architecture
+Requires [PlatformIO](https://platformio.org/). Clone with submodules:
 
-- Object-Oriented hierarchical design
-- Hardware abstraction for machine features like spindles, motors, and stepper drivers
-- Extensible - Adding new features is much easier for the firmware as well as gcode senders.
+    git clone --recurse-submodules https://github.com/bantamtools/FluidNC
+    cd FluidNC
+    git checkout v1.11.0
+    git submodule update --init --recursive
+    pio run -e wifi_s3            # firmware.bin
+    pio run -e wifi_s3_usb-otg    # USB-OTG variant (where present in platformio.ini)
+    pio run -e wifi_s3 -t buildfs # littlefs.bin from FluidNC/data
 
-## Machine Definition Method
+Some releases also define board-variant environments (for example `wifi_s3-1824` and
+`wifi_s3-2436`), built the same way with `pio run -e <env>`. All environments are listed in
+`platformio.ini`.
 
-There is no need to compile the firmware. You use an installation script to upload the latest release of the firmware and then create [config file](http://wiki.fluidnc.com/en/config/overview) text file that describes your machine.  That file is uploaded to the FLASH on the ESP32 using the USB/Serial port or WIFI.
+`build-release.py` assembles the release image set. Building from a source archive without
+git metadata reports the version as `noGit`.
 
-You can have multiple config files stored on the ESP32. The default is config.yaml, but you can change that with [**$Config/Filename=<myOtherConfig.yaml>**](http://wiki.fluidnc.com/en/features/commands_and_settings#config_filename)
+All library dependencies are pinned in `platformio.ini` and `.gitmodules` to public repositories.
+Dependencies that the original release referenced by branch are pinned here to the exact
+revisions every release build fetched: each such dependency's branch head predates v1.11.0 and
+has not moved since.
 
-## Basic Grbl Compatibility
+## Flashing (ESP32-S3)
 
-The intent is to maintain as much Grbl compatibility as possible. It is 100% compatible with the day to day operations of running gcode with a sender, so there is no change to the Grbl gcode send/response protocol, and all Grbl gcode are supported. Most of the $ settings have been replaced with easily readable items in the config file.
+    esptool.py --chip esp32s3 write_flash 0x10000 firmware.bin 0x3D0000 littlefs.bin
 
+This updates the application and filesystem built from this source. Use the `firmware.bin`
+of the environment you built (for example `wifi_s3` or `wifi_s3_usb-otg`). For a full image
+set including the bootloader and partition table, see the scripts in
+`install_scripts/` and `build-release.py`, which give the exact offsets used for the released
+images.
 
-## WebUI
+Partition layout: `min_littlefs.csv`.
 
-FluidNC includes a built-in browser-based Web UI (Esp32_WebUI) so you control the machine from a PC, phone, or tablet on the same Wifi network.
+## Web UI
 
-## Wiki
+`FluidNC/data/index.html.gz` is built from [bantamtools/ESP3D-WEBUI-BT](https://github.com/bantamtools/ESP3D-WEBUI-BT)
+at commit `f5aa58a412f59a803a99631fd83a4c482b1aa1b9` (rebuilt and verified against the shipped file) with:
 
-[Check out the wiki](http://wiki.fluidnc.com) if you want the learn more about the feature or how to use it.
+    git -c core.autocrlf=true clone https://github.com/bantamtools/ESP3D-WEBUI-BT && cd ESP3D-WEBUI-BT && git checkout f5aa58a412f59a803a99631fd83a4c482b1aa1b9 && npm ci && npx gulp
 
-## Credits
+The source that is edited is `dist/` plus `gulpfile.js`. The `www/` directory holds the
+original upstream ESP3D-WEBUI source that `dist/` was derived from.
 
-The original [Grbl](https://github.com/gnea/grbl) is an awesome project by Sungeon (Sonny) Jeon. I have known him for many years and he is always very helpful. I have used Grbl on many projects.
+## License
 
-The Wifi and WebUI is based on [this project.](https://github.com/luc-github/ESP3D-WEBUI)  
-
-## Discussion
-
-<img src="http://wiki.fluidnc.com/discord-logo_trans.png" width="180">
-
-We have a Discord server for the development this project. Ask for an invite
-
-
-## Donations
-
-This project requires a lot of work and often expensive items for testing. Please consider a safe, secure and highly appreciated donation via the PayPal link below or via the GitHub sponsor link at the top of the page.
-
-[![](https://www.paypalobjects.com/en_US/i/btn/btn_donateCC_LG.gif)](https://www.paypal.com/donate/?hosted_button_id=8DYLB6ZYYDG7Y)
+GNU General Public License v3 or later. Third-party libraries keep their own licenses
+(arduino-esp32, WiFi and arduinoWebSockets: LGPL-2.1; tinyxml2: zlib; TMCStepper: MIT;
+esp8266-oled-ssd1306: MIT-style; platform-espressif32: Apache-2.0 build tooling).

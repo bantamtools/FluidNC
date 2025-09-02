@@ -33,6 +33,15 @@
 #include <string_view>
 
 namespace Machine {
+    // Forward declaration
+    enum class BoardType;
+    
+    enum class MachineType {
+        Default = 0,
+        EggBot,
+        // Add future machine types here
+    };
+    
     using ::Kinematics::Kinematics;
 
     class Start : public Configuration::Configurable {
@@ -85,10 +94,13 @@ namespace Machine {
         UartChannel* _uart_channels[MAX_N_UARTS] = { nullptr };
         Uart*        _uarts[MAX_N_UARTS]         = { nullptr };
 
-        float _arcTolerance      = 0.002f;
-        float _junctionDeviation = 0.01f;
-        bool  _verboseErrors     = false;
-        bool  _reportInches      = false;
+        float _arcTolerance         = 0.002f;
+        float _junctionDeviation    = 0.01f;
+        bool  _verboseErrors        = false;
+        bool  _reportInches         = false;
+
+        bool _wifiOnLaunch          = true; // Hard set for if we are allowing hosting of/connecting to APs. This will be migrated to config.yaml eventually.
+        bool _systemIsInitialized   = false;
 
         size_t _planner_blocks = 16;
 
@@ -104,6 +116,7 @@ namespace Machine {
         std::string _board = "None";
         std::string _name  = "None";
         std::string _meta  = "";
+        MachineType _machine_type = MachineType::Default;
 #if 1
         static MachineConfig*& instance() {
             static MachineConfig* instance = nullptr;
@@ -111,40 +124,27 @@ namespace Machine {
         }
 #endif
 
-        // Fail-safe defaults, used by display, encoder and SD card to initialize GPIOs when
-        // bad or no config file is used.  A set of fail-safes is available for MVP and LFP
-        // based on the I2C bus scan.
-        static constexpr std::string_view   FAILSAFE_MVP_I2C0_SDA       = "gpio.41";
-        static constexpr std::string_view   FAILSAFE_MVP_I2C0_SCL       = "gpio.40";
-        static constexpr pinnum_t           FAILSAFE_MVP_I2C0_SDA_PIN   = 41;
-        static constexpr pinnum_t           FAILSAFE_MVP_I2C0_SCL_PIN   = 40;
-        static constexpr std::string_view   FAILSAFE_MVP_ENC_A          = "gpio.35";
-        static constexpr std::string_view   FAILSAFE_MVP_ENC_B          = "gpio.48";
-        static constexpr std::string_view   FAILSAFE_MVP_ENC_ENTER      = "gpio.36";
-        static constexpr std::string_view   FAILSAFE_MVP_SDMMC_CLK      = "gpio.10";
-        static constexpr std::string_view   FAILSAFE_MVP_SDMMC_CMD      = "gpio.9";
-        static constexpr std::string_view   FAILSAFE_MVP_SDMMC_D0       = "gpio.8";
-        static constexpr std::string_view   FAILSAFE_MVP_SDMMC_CD       = "gpio.14";
-
-        static constexpr std::string_view   FAILSAFE_LFP_I2C0_SDA       = "gpio.40";
-        static constexpr std::string_view   FAILSAFE_LFP_I2C0_SCL       = "gpio.41";
-        static constexpr pinnum_t           FAILSAFE_LFP_I2C0_SDA_PIN   = 40;
-        static constexpr pinnum_t           FAILSAFE_LFP_I2C0_SCL_PIN   = 41;
-        static constexpr std::string_view   FAILSAFE_LFP_ENC_A          = "gpio.36";
-        static constexpr std::string_view   FAILSAFE_LFP_ENC_B          = "gpio.37";
-        static constexpr std::string_view   FAILSAFE_LFP_ENC_ENTER      = "gpio.38";
-        static constexpr std::string_view   FAILSAFE_LFP_SDMMC_CLK      = "gpio.5";
-        static constexpr std::string_view   FAILSAFE_LFP_SDMMC_CMD      = "gpio.6";
-        static constexpr std::string_view   FAILSAFE_LFP_SDMMC_D0       = "gpio.2";
-        static constexpr std::string_view   FAILSAFE_LFP_SDMMC_CD       = "gpio.12";
 
         void afterParse() override;
         void group(Configuration::HandlerBase& handler) override;
+        
+        MachineType getMachineType() const { return _machine_type; }
 
-        static bool load();
-        static bool load_file(std::string_view file);
-        static bool load_yaml(std::string_view yaml_string);
+        // static bool load();  // LEGACY - NOT USED - Replaced by loadLayered()
+        static bool loadLayered();
+        static bool load_file(std::string_view file, BoardType detectedBoard);
+        static bool load_file(std::string_view file, BoardType detectedBoard, bool clearPins);
+        static bool load_yaml(std::string_view yaml_string, BoardType detectedBoard);
+        static bool load_yaml(std::string_view yaml_string, BoardType detectedBoard, bool clearPins);
+        static void protectCriticalPins(BoardType detectedBoard);
 
+        // Warning counter system for configuration issues
+        static int configWarnings;  // Simple counter
+        static void addWarning(const char* msg);
+        static void clearWarnings();
+        static void reportWarnings();
+
+    private:
         ~MachineConfig();
     };
 }

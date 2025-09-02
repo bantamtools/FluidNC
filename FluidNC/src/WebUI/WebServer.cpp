@@ -788,7 +788,7 @@ namespace WebUI {
             log_info("Upload rejected");
             sendAuthFailed();
             pushError(ESP_ERROR_AUTHENTICATION, "Upload rejected", 401);
-        } else {
+        } else { // If admin
             //get current file ID
             HTTPUpload& upload = _webserver->upload();
             if ((_upload_status != UploadStatus::FAILED) || (upload.status == UPLOAD_FILE_START)) {
@@ -802,6 +802,8 @@ namespace WebUI {
                     if (_webserver->hasArg(sizeargname.c_str())) {
                         maxSketchSpace = _webserver->arg(sizeargname.c_str()).toInt();
                     }
+                    std::string info_msg = "SizeArgName: " + sizeargname;
+                    log_info(info_msg);
                     //check space
                     size_t flashsize = 0;
                     if (esp_ota_get_running_partition()) {
@@ -1085,6 +1087,14 @@ namespace WebUI {
                     pushError(ESP_ERROR_UPLOAD, "File upload mismatch");
                     log_info("Upload failed - size mismatch - exp " << filesize << " got " << actual_size);
                 }
+            }
+            log_info("uploadEnd, no error, filepath: " << pathname);
+            // note path is "/sd/file" or "/sd/path/to/file"
+            // want to store as latest file, without "/sd" prefix
+            if ( !(pathname.size()>4 && pathname.substr(pathname.size()-4) == "yaml") ) { // (unless it was a config file)
+                char recent_file_path[LIST_NAME_MAX_PATH];
+                strncpy(recent_file_path, pathname.erase(0,3).c_str(), LIST_NAME_MAX_PATH);
+                config->_oled->_menu->set_recent_file(recent_file_path, true);
             }
         } else {
             _upload_status = UploadStatus::FAILED;

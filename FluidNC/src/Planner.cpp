@@ -9,6 +9,7 @@
 */
 
 #include "Planner.h"
+#include "Config.h"
 #include "Machine/MachineConfig.h"
 
 #include <cstdlib>  // PSoc Required for labs
@@ -332,10 +333,12 @@ bool plan_buffer_line(float* target, plan_line_data_t* pl_data) {
     // down such that no individual axes maximum values are exceeded with respect to the line direction.
     // NOTE: This calculation assumes all axes are orthogonal (Cartesian) and works with ABC-axes,
     // if they are also orthogonal/independent. Operates on the absolute value of the unit vector.
-    block->millimeters  = convert_delta_vector_to_unit_vector(unit_vec);
-    block->acceleration = limit_acceleration_by_axis_maximum(unit_vec, block->motion.rapidMotion);
+
+    block->millimeters  = convert_delta_vector_to_unit_vector(unit_vec); // Distance of move in mm.
+    block->acceleration = limit_acceleration_by_axis_maximum(unit_vec, block->motion.rapidMotion); // Move acceleration
     block->rapid_rate   = limit_rate_by_axis_maximum(unit_vec);
-    // Store programmed rate.
+
+    // Target Feedrate.
     if (block->motion.rapidMotion) {
         block->programmed_rate = block->rapid_rate;
     } else {
@@ -367,7 +370,7 @@ bool plan_buffer_line(float* target, plan_line_data_t* pl_data) {
         // is exactly the same. Instead of motioning all the way to junction point, the machine will
         // just follow the arc circle defined here. The Arduino doesn't have the CPU cycles to perform
         // a continuous mode path, but ARM-based microcontrollers most certainly do.
-        //
+
         // NOTE: The max junction speed is a fixed value, since machine acceleration limits cannot be
         // changed dynamically during operation nor can the line move geometry. This must be kept in
         // memory in the event of a feedrate override changing the nominal speeds of blocks, which can
@@ -378,24 +381,97 @@ bool plan_buffer_line(float* target, plan_line_data_t* pl_data) {
             junction_cos_theta -= pl.previous_unit_vec[idx] * unit_vec[idx];
             junction_unit_vec[idx] = unit_vec[idx] - pl.previous_unit_vec[idx];
         }
+        float dot_prod = -junction_cos_theta;
+
+        // dot_prod = [-1, 1] -> [180 -> 0] degrees. 180 degrees turns around.
+        // junction_cos_theta = [-1, 1] -> [0, 180]
         // NOTE: Computed without any expensive trig, sin() or acos(), by trig half angle identity of cos(theta).
-        if (junction_cos_theta > 0.999999) {
-            //  For a 0 degree acute junction, just set minimum junction speed.
+        if (junction_cos_theta > 0.999999) { // 180 -> Degrees (Reverse direction)
+            //  For a 180 degree acute junction, just set minimum junction speed.
             block->max_junction_speed_sqr = MINIMUM_JUNCTION_SPEED * MINIMUM_JUNCTION_SPEED;
         } else {
-            if (junction_cos_theta < -0.999999) {
-                // Junction is a straight line or 180 degrees. Junction speed is infinite.
+            if (junction_cos_theta < -0.999999) { // Straight line, maintain all acceleration.
+                // Junction angle is a straight line or 0 degrees. Junction speed is infinite.
                 block->max_junction_speed_sqr = SOME_LARGE_VALUE;
-            } else {
+            } else { // (0, 180) degrees
                 convert_delta_vector_to_unit_vector(junction_unit_vec);
                 float junction_acceleration = limit_acceleration_by_axis_maximum(junction_unit_vec);
-                float sin_theta_d2          = sqrtf(0.5f * (1.0f - junction_cos_theta));  // Trig half angle identity. Always positive.
-                block->max_junction_speed_sqr =
-                    MAX(MINIMUM_JUNCTION_SPEED * MINIMUM_JUNCTION_SPEED,
+
+                float sin_theta_d2 = sqrtf(0.5f * (1.0f - junction_cos_theta));  // Trig half angle identity. Always positive.
+                block->max_junction_speed_sqr = MAX(MINIMUM_JUNCTION_SPEED * MINIMUM_JUNCTION_SPEED,
                         (junction_acceleration * config->_junctionDeviation * sin_theta_d2) / (1.0f - sin_theta_d2));
+
+                // default junction accel = config->_junctionDeviation // 0.01f
+
+#ifdef NEXTDRAW_DAMPENING
+                float cosine_factor = junction_cos_theta;
+                if(cosine_factor < 0) { // right angle or less
+                    cosine_factor = 0;
+                }
+
+                float dampening_factor = pow(cosine_factor, 2 + abs(junction_unit_vec[0] + junction_unit_vec[1]));
+                if(!block->motion.rapidMotion){
+                    block->acceleration *= MAX(dampening_factor, max_acceleration_dampening);
+                }
+#else // Custom dampening AIDAN
+                if(!block->motion.rapidMotion) {
+                    float acceleration_dampening = 1.0f;
+                    float feedrate_dampening = 1.0f;
+                    // float entry_speed_dampening = 1.0f;
+                    // float junction_speed_dampening = 1.0f;
+
+                    if(unit_vec[X_AXIS] || unit_vec[Y_AXIS]){ // Dampening for X Y moves
+                        //  [0, 2] -> [0, 180]
+
+                        bool dampened = false;  
+                        // limit acceleration based on x component of previous pl vec from 1 to zero.
+                        
+                        // Lesser nextdraw effect
+                        // float cosine_factor = dot_prod;
+                        // if(cosine_factor < 0) { // Obtuse angle
+                        //     cosine_factor = 0;
+                        // }
+
+                        // float dampening_factor = pow(cosine_factor, 4); // + junction_unit_vec[0] + junction_unit_vec[0])));
+                        // if(!block->motion.rapidMotion){
+                        //     block->acceleration *= MAX(dampening_factor, max_acceleration_dampening); // MAX(dampening_factor, 0.5f);
+                        // }
+
+                        if(dot_prod > min_accel_angular_threshold){ // q\left(1\ -\max\left(0.8+\frac{x^{k}-1}{i},\ 1-\frac{x^{p}}{j}\right)\right)
+                                // How much to subtract from factors.
+                                // Scale this factor by the X unit vec component
+                            float inc_factor = dot_scalar * (1 - 
+                                MAX( 1.0f + ((pow(dot_prod, dot_k) - 1) / dot_i),
+                                        1.0f - (pow(dot_prod, dot_p) / dot_j)) );
+
+                            if(dampened){
+                                inc_factor *= 0.7;
+                            }
+
+                            acceleration_dampening -= inc_factor;
+                            dampened = true;
+                        }
+
+                        if(block->millimeters < mm_t && dot_prod < max_accel_angular_threshold){ // \frac{1}{f}-\left(\frac{x}{t}\right)^{q}\cdot\left(1-m\right)-m
+                            float dim_factor = 1 - pow(block->millimeters/mm_t, mm_exp) * (1 - mm_max) + mm_max;
+                            if(dampened){
+                                dim_factor *= 0.5;
+                            }
+                            
+                            feedrate_dampening -= dim_factor;
+                            acceleration_dampening -= dim_factor;
+                            dampened = true;
+                        }
+                    }
+
+                    block->programmed_rate *= MAX(feedrate_dampening, max_feedrate_dampening);
+                    block->acceleration *= MAX(acceleration_dampening, max_acceleration_dampening);
+                }
+#endif
             }
         }
     }
+
     // Block system motion from updating this data to ensure next g-code motion is computed correctly.
     if (!(block->motion.systemMotion)) {
         float nominal_speed = plan_compute_profile_nominal_speed(block);

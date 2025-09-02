@@ -10,7 +10,6 @@
 #include <atomic>
 
 namespace MotorDrivers {
-
     void TMC2209Driver::init() {
         TrinamicUartDriver::init();
         if (!_uart) {
@@ -32,7 +31,9 @@ namespace MotorDrivers {
     }
 
     void TMC2209Driver::set_registers(bool isHoming) {
+        log_debug("Setting TMC2209 Registers");
         if (_has_errors) {
+            log_warn("Error in tmc2209 set_registers");
             return;
         }
 
@@ -44,6 +45,7 @@ namespace MotorDrivers {
         uint16_t run_i = (uint16_t)(_run_current * 1000.0);
         tmc2209->I_scale_analog(false);  // do not scale via pot
         tmc2209->rms_current(run_i, TrinamicBase::holdPercent());
+        uint32_t tpwmthrs_tstep = 1000000 / ((TPWMTHRS_FR / 60.0) * 80);
 
         // The TMCStepper library uses the value 0 to mean 1x microstepping
         int usteps = _microsteps == 1 ? 0 : _microsteps;
@@ -53,13 +55,15 @@ namespace MotorDrivers {
         switch (_mode) {
             case TrinamicMode ::StealthChop:
                 log_debug(axisName() << " StealthChop");
-                tmc2209->en_spreadCycle(false);
-                tmc2209->pwm_autoscale(true);
+                tmc2209->en_spreadCycle(false); // Effectively spreadCycle true means stealth chop is off.
+                tmc2209->pwm_autoscale(true);   // PWM autoscaling seems to be what is causing resonance.
+                tmc2209->TPWMTHRS(0x00);        // Disable threshold during homing essentially.
                 break;
-            case TrinamicMode ::CoolStep:
+            case TrinamicMode ::CoolStep: // This is CoolStep as set in our config.
                 log_debug(axisName() << " Coolstep");
-                tmc2209->en_spreadCycle(true);
-                tmc2209->pwm_autoscale(false);
+                tmc2209->en_spreadCycle(false);
+                tmc2209->pwm_autoscale(true); 
+                tmc2209->TPWMTHRS(tpwmthrs_tstep);
                 break;
             case TrinamicMode ::StallGuard:  //TODO: check all configurations for stallguard
             {
@@ -75,13 +79,14 @@ namespace MotorDrivers {
         }
 
         // dump the registers. This is helpful for people migrating to the Pro version
-        log_debug("CHOPCONF: 0x" << to_hex(tmc2209->CHOPCONF()));
-        log_debug("COOLCONF: 0x" << to_hex(tmc2209->COOLCONF()));
-        log_debug("TPWMTHRS: 0x" << to_hex(tmc2209->TPWMTHRS()));
-        log_debug("TCOOLTHRS: 0x" << to_hex(tmc2209->TCOOLTHRS()));
-        log_debug("GCONF: 0x" << to_hex(tmc2209->GCONF()));
-        log_debug("PWMCONF: 0x" << to_hex(tmc2209->PWMCONF()));
-        log_debug("IHOLD_IRUN: 0x" << to_hex(tmc2209->IHOLD_IRUN()));
+        log_debug("CHOPCONF: " << to_hex(tmc2209->CHOPCONF()));
+        log_debug("COOLCONF: " << to_hex(tmc2209->COOLCONF()));
+        log_debug("TPWMTHRS: " << to_hex(tmc2209->TPWMTHRS()));
+        log_debug("TCOOLTHRS: " << to_hex(tmc2209->TCOOLTHRS()));
+        log_debug("GCONF: " << to_hex(tmc2209->GCONF()));
+        log_debug("PWMCONF: " << to_hex(tmc2209->PWMCONF()));
+        log_debug("IHOLD_IRUN: " << to_hex(tmc2209->IHOLD_IRUN()));
+        log_debug("TPWMTHRS: " << to_hex(tmc2209->TPWMTHRS()));
     }
 
     void TMC2209Driver::debug_message() {

@@ -4,6 +4,7 @@
 #pragma once
 
 #include "PinDetail.h"
+#include "ProtectedPinTracker.h"
 
 namespace Pins {
     class GPIOPinDetail : public PinDetail {
@@ -23,7 +24,8 @@ namespace Pins {
 #else
         static const int nGPIOPins = 40;
 #endif
-        GPIOPinDetail(pinnum_t index, PinOptionsParser options);
+        GPIOPinDetail(pinnum_t index, PinOptionsParser options, 
+                      Pins::ProtectedPinTracker::PinFunction requestedFunction = Pins::ProtectedPinTracker::PinFunction::OTHER);
 
         PinCapabilities capabilities() const override;
 
@@ -38,6 +40,9 @@ namespace Pins {
         void detachInterrupt() override;
 
         std::string toString() override;
+        
+        // Static method to clear all pin claims - used during config loading reset
+        static void clearAllClaims();
 
         ~GPIOPinDetail() override { _claimed[_index] = false; }
     };

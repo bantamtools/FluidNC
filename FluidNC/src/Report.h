@@ -43,6 +43,7 @@ enum class Message : uint8_t {
     SpindleRestore  = 10,
     SleepMode       = 11,
     ConfigAlarmLock = 12,
+    SoftLimitLock   = 13,
     FileQuit        = 60,  // mc_reset was called during a file job
 };
 
@@ -78,6 +79,10 @@ void report_ngc_parameters(Channel& channel);
 
 // Prints current g-code parser mode state
 void report_gcode_modes(Channel& channel);
+
+// Prints most recent g-code comment
+// Not used at the moment, logging multiple comments caused timing/hang issues?
+//void report_gcode_comment(Channel& channel);
 
 // Prints build info and user info
 void report_build_info(const char* line, Channel& channel);

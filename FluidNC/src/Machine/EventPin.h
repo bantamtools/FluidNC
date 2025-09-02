@@ -15,8 +15,6 @@ namespace Machine {
 
         bool _locked;
 
-        bool _fail_safe = false;
-
         static bool inactive(EventPin* pin);
 
     public:

@@ -140,7 +140,7 @@ bool init_spi_bus(int mosi_pin, int miso_pin, int clk_pin) {
 
 // adapted from vfs_fat_sdmmc.c:esp_vfs_fat_sdmmc_mount()
 std::error_code sd_mount(int max_files) {
-    log_info("Mount_sd");
+    log_info("Mount_sd sdspi");
     esp_err_t err;
 
     // mount_prepare_mem() ... minus the strdup of base_path
@@ -182,7 +182,7 @@ cleanup:
 }
 
 void sd_unmount() {
-    log_info("Unmount_sd");
+    log_info("Unmount_sd sdspi");
     BYTE pdrv = ff_diskio_get_pdrv_card(card);
     if (pdrv == 0xff) {
         return;
@@ -289,7 +289,7 @@ void sd_populate_files_menu() {
 
                         strncpy(file_path, short_path.c_str(), LIST_NAME_MAX_PATH);
                         config->_oled->_menu->add_sd_file(file_path);
-                    }    
+                    }
                 }
             }
         }

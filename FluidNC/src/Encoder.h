@@ -17,11 +17,13 @@
 #include "Configuration/Configurable.h"
 #include <limits>
 
+
 // Class
 class Encoder : public Configuration::Configurable {
 
     Pin _a_pin;
     Pin _b_pin;
+    bool _immutable = false;  // ADD THIS
 
 private:
 
@@ -40,7 +42,11 @@ public:
     void init();
     int16_t get_difference();
 
+    // Override for encoder scroll behavior
+    bool _old_scroll_behavior = false;
+
     // Configuration handlers.
     void validate() override;
     void group(Configuration::HandlerBase& handler) override;
+    void makeImmutable() { _immutable = true; }  // ADD THIS
 };

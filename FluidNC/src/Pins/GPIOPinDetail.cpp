@@ -8,7 +8,8 @@
 
 #include "GPIOPinDetail.h"
 #include "../Assert.h"
-#include "../Config.h"
+#include "../Logging.h"
+#include "ProtectedPinTracker.h"
 
 namespace Pins {
     std::vector<bool> GPIOPinDetail::_claimed(nGPIOPins, false);
@@ -146,18 +147,53 @@ namespace Pins {
 #endif
     }
 
-    GPIOPinDetail::GPIOPinDetail(pinnum_t index, PinOptionsParser options) :
-        PinDetail(index), _capabilities(GetDefaultCapabilities(index)), _attributes(Pins::PinAttributes::Undefined), _readWriteMask(0) {
+    GPIOPinDetail::GPIOPinDetail(pinnum_t index, PinOptionsParser options, 
+                                 Pins::ProtectedPinTracker::PinFunction requestedFunction) :
+        PinDetail(index), _capabilities(GetDefaultCapabilities(index)), 
+        _attributes(Pins::PinAttributes::Undefined), _readWriteMask(0) {
         // NOTE:
         //
         // RAII is very important here! If we throw an exception in the constructor, the resources
         // that were allocated by the constructor up to that point _MUST_ be freed! Otherwise, you
         // WILL get into trouble.
 
-        Assert(index < nGPIOPins, "Pin number is greater than max %d", nGPIOPins - 1);
-        Assert(_capabilities != PinCapabilities::Reserved, "Unusable GPIO");
-        Assert(_capabilities != PinCapabilities::None, "Unavailable GPIO");
-        Assert(!_claimed[index], "Pin is already used.");
+        // Check if this is a protected pin first - before any other validation
+        if (ProtectedPinTracker::isProtected(index)) {
+            auto protectedFunc = ProtectedPinTracker::getProtectedFunction(index);
+            
+            // Check if this is a function conflict
+            // If requesting OTHER (non-critical) for a critical pin, it's always a conflict
+            // If requesting a specific critical function, it must match exactly
+            if (requestedFunction == ProtectedPinTracker::PinFunction::OTHER ||
+                (requestedFunction != protectedFunc)) {
+                
+                // Log concise error message (80 char limit)
+                if (requestedFunction == ProtectedPinTracker::PinFunction::OTHER) {
+                    // Non-critical function attempted on critical pin
+                    log_error("GPIO" << index << " is reserved for " << 
+                             ProtectedPinTracker::getProtectionReason(index));
+                } else {
+                    // Different critical function attempted
+                    log_error("GPIO" << index << " reserved for " <<
+                             ProtectedPinTracker::getProtectionReason(index) << 
+                             ", requested for " << 
+                             ProtectedPinTracker::functionToString(requestedFunction));
+                }
+                
+                // Throw AssertionFailed to trigger ConfigAlarm
+                Assert(false, "Pin function conflict on GPIO%d", index);
+            } else {
+                // Same function - just info message
+                log_info("Pin GPIO" << index << " already configured for " << 
+                        ProtectedPinTracker::getProtectionReason(index));
+                return;  // Exit without claiming pin
+            }
+        }
+
+        Assert(!_claimed[index], "GPIO%d is already in use by another component", index);
+        Assert(index < nGPIOPins, "Pin number %d exceeds maximum %d", index, nGPIOPins - 1);
+        Assert(_capabilities != PinCapabilities::Reserved, "GPIO%d is hardware reserved and cannot be used", index);
+        Assert(_capabilities != PinCapabilities::None, "GPIO%d is not available on this hardware", index);
 
         // User defined pin capabilities
         for (auto opt : options) {
@@ -242,7 +278,10 @@ namespace Pins {
     }
 
     void GPIOPinDetail::detachInterrupt() {
-        Assert(_attributes.has(PinAttributes::ISR), "Pin %s does not support interrupts");
+        if (!_attributes.has(PinAttributes::ISR)) {
+            log_error("Cannot detach interrupt from pin " << toString() << " - pin does not support interrupts");
+            return;
+        }
         ::detachInterrupt(_index);
     }
 
@@ -260,5 +299,10 @@ namespace Pins {
         }
 
         return s;
+    }
+    
+    void GPIOPinDetail::clearAllClaims() {
+        std::fill(_claimed.begin(), _claimed.end(), false);
+        log_debug("All GPIO pin claims cleared");
     }
 }

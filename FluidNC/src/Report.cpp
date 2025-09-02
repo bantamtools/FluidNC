@@ -123,6 +123,7 @@ std::map<Message, const char*> MessageText = {
     { Message::SpindleRestore, "Restoring spindle" },
     { Message::SleepMode, "Sleeping" },
     { Message::ConfigAlarmLock, "Configuration is invalid. Check boot messages for ERR's." },
+    { Message::SoftLimitLock, "Soft limit hit." },
     // Handled separately due to numeric argument
     // { Message::FileQuit, "Reset during file job at line: %d" },
 };
@@ -378,6 +379,13 @@ void report_gcode_modes(Channel& channel) {
     msg << " S" << uint32_t(gc_state.spindle_speed);
     log_to(channel, "[GC:", msg.str())
 }
+
+// Print most recent gcode comment
+/*
+void report_gcode_comment(Channel& channel) {
+    //log_info("Debug reporting GCode Comment in Report..." << gc_comment);
+    log_to(channel, "[GCCMT:", gc_comment);
+} */
 
 // Prints build info line
 void report_build_info(const char* line, Channel& channel) {

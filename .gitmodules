@@ -1,0 +1,15 @@
+[submodule "dependencies/arduinoWebSockets"]
+	path = dependencies/arduinoWebSockets
+	url = https://github.com/bantamtools/arduinoWebSockets.git
+[submodule "dependencies/arduino-esp32"]
+	path = dependencies/arduino-esp32
+	url = https://github.com/bantamtools/arduino-esp32.git
+[submodule "dependencies/WiFi"]
+	path = dependencies/WiFi
+	url = https://github.com/bantamtools/WiFi.git
+[submodule "dependencies/tinyxml2"]
+	path = dependencies/tinyxml2
+	url = https://github.com/bantamtools/tinyxml2.git
+[submodule "dependencies/platform-espressif32"]
+	path = dependencies/platform-espressif32
+	url = https://github.com/bantamtools/platform-espressif32.git

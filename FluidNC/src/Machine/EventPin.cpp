@@ -21,22 +21,8 @@ namespace Machine {
 
     void EventPin::init() {
         if (_pin->undefined()) {
-
-            // Encoder button not configured, use fail-safe default
-            if (_legend.compare("enter_pin") == 0) {
-                
-                // MVP config
-                if (config->_i2c[0]->_is_mvp) {
-                    *_pin = Pin::create(MachineConfig::FAILSAFE_MVP_ENC_ENTER);
-                
-                // LFP config
-                } else {
-                    *_pin = Pin::create(MachineConfig::FAILSAFE_LFP_ENC_ENTER);
-                }
-                _fail_safe = true;
-            } else {
-                return;
-            }
+            log_debug("Event pin '" << _legend << "' not configured");
+            return;
         }
 
         _pin->report(_legend);
@@ -46,8 +32,7 @@ namespace Machine {
         _gpio = _pin->getNative(Pin::Capabilities::Input);
         gpio_set_action(_gpio, gpioAction, (void*)this, _pin->getAttr().has(Pin::Attr::ActiveLow));
         
-        // Lock out event pins in fail-safe mode
-        _locked =  _fail_safe;
+        _locked = false;
     }
 
     bool EventPin::locked() {

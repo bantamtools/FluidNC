@@ -29,6 +29,11 @@ namespace Extenders {
     void Extenders::validate() {}
 
     void Extenders::group(Configuration::HandlerBase& handler) {
+        if (_immutable) {
+            log_warn("User config section 'extenders' ignored (using board defaults)");
+            return;
+        }
+        
         for (int i = 0; i < 10; ++i) {
             char tmp[11 + 3];
             tmp[0] = 0;

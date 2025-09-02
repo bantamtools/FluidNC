@@ -11,6 +11,7 @@
 
 #include <cstdint>
 
+
 class SDCard : public Configuration::Configurable {
 public:
     enum class State : uint8_t {
@@ -25,6 +26,7 @@ public:
 
 private:
     State _state;
+    bool _immutable = false;  // ADD THIS
 #ifdef USE_SDMMC
     int   _width = 1;
     Pin   _clk, _cmd, _d0, _d1, _d2, _d3, _cd;
@@ -45,32 +47,9 @@ public:
     // Initializes pins.
     void init();
 
-#ifdef USE_SDMMC
-    // Configuration handlers.
-    void group(Configuration::HandlerBase& handler) override {
-
-        handler.item("width", _width);
-
-        handler.item("clk_pin", _clk);
-        handler.item("cmd_pin", _cmd);
-        handler.item("d0_pin", _d0);
-        handler.item("d1_pin", _d1);
-        handler.item("d2_pin", _d2);
-        handler.item("d3_pin", _d3);
-        handler.item("cd_pin", _cd);
-
-        handler.item("frequency_hz", _frequency_hz, 400000, 50000000);
-    }
-
+    void group(Configuration::HandlerBase& handler) override;
+    void makeImmutable() { _immutable = true; }
     void validate() override;
-#else
-    // Configuration handlers.
-    void group(Configuration::HandlerBase& handler) override {
-        handler.item("cs_pin", _cs);
-        handler.item("card_detect_pin", _cardDetect);
-        handler.item("frequency_hz", _frequency_hz, 400000, 20000000);
-    }
-#endif
 
     ~SDCard();
 };

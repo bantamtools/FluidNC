@@ -8,6 +8,7 @@
 #include "Limits.h"
 #include "Menu.h"
 
+
 // Jogging settings
 #define JOG_X_STEP              1.0
 #define JOG_Y_STEP              1.0
@@ -44,9 +45,11 @@ public:
     static Layout posLabelLayout;
     static Layout radioAddrLayout;
     static Layout connectWifiLayout;
+	static Layout bottomTextLayout;
+	static Layout bottomRightLayout;
 
-private:
-
+private: // AIDAN
+    bool _immutable = false;  // ADD THIS
     std::string _report;
 
     std::string _radio_info;
@@ -60,15 +63,26 @@ private:
     bool        _file_job_running = false;
     uint32_t    _run_start_time = 0;
     uint32_t    _prev_run_time = 0;
+    bool        _job_just_started = false;
+    uint32_t    _saved_run_time = 0;
 
-    int _radio_delay = 2000;
+    std::string _comment;
+    int _comment_countdown = 0;
+
+    std::string _file_awaiting_homing;
+
+    int _radio_delay = 1000;//2000;
 
     uint8_t _i2c_num = 0;
 
     int _enc_diff = 0;
     bool _enc_scroll_lockout = true;
 
+	bool _startupConfigWarning = false;
+
     bool _popup = false;
+
+    bool _motors_on = true; // to track toggle for EggBot; assume motors powered on startup
 
     int _header_height = 15;
 
@@ -77,6 +91,8 @@ private:
     void parse_report();
     void parse_status_report();
     void parse_gcode_report();
+    void parse_gcode_comment_report();
+    void parse_error_report();
     void parse_STA();
     void parse_IP();
     void parse_AP();
@@ -96,7 +112,7 @@ private:
 
     void draw_checkbox(int16_t x, int16_t y, int16_t width, int16_t height, bool checked);
 
-    void wrapped_draw_string(int16_t y, const std::string& s, font_t font);
+    void wrapped_draw_string(int16_t y, const std::string& s, font_t font, bool setFont = true);
     void truncated_draw_string(int16_t y, const std::string& s, font_t font);
 
     void show(Layout& layout, const std::string& msg) { show(layout, msg.c_str()); }
@@ -128,11 +144,36 @@ public:
     void set_jog_state(JogState);
     bool is_active();
 
+	void render_icon_menu();
+	void show_home_layout(int hightlight = 2);
+	void show_run_layout(int hightlight = 2);
+	void show_postrun_layout(int highlight = 1);
+
+	void show_persistent_msg(std::string msg);
+	void show_wifi_info();
+	void clear_popup();
+	bool showing_popup() { return _popup; }
+
+	bool is_file_job_running() { return _file_job_running; };
+	void set_file_job_running(bool running) { _file_job_running = running; };
+
+	void set_file_awaiting_homing(const char *path) { _file_awaiting_homing = path; }
+
+	bool get_motors_on() { return _motors_on; }
+	void set_motors_on(bool val) { _motors_on = val; refresh_display(); }
+
+	// public version so we can call straight from GCode.cpp without using logging/channels
+    void parse_gcode_comment_report(std::string report);
+
+	// add method to assert _oled->buffer[-1] == 0x40;
+	void printBufferControl(){
+		// uint32_t = (char*)_oled->&buffer[-1]
+	}
+
     OLEDDisplay* _oled;
     Menu* _menu = new Menu();
 
     // Configurable
-
     uint8_t _address = 0x3c;
     int     _width   = 128;
     int     _height  = 64;
@@ -147,6 +188,10 @@ public:
     Channel* pollLine(char* line) override;
     void     flushRx() override {}
 
+	void showOLEDInfo(){
+		log_info("OLEDInfo: " << to_hex(_address));
+	}
+
     bool   lineComplete(char*, char) override { return false; }
     size_t timedReadBytes(char* buffer, size_t length, TickType_t timeout) override { return 0; }
 
@@ -155,13 +200,10 @@ public:
 
     void afterParse() override;
 
-    void group(Configuration::HandlerBase& handler) override {
-        handler.item("i2c_num", _i2c_num);
-        handler.item("i2c_address", _address);
-        handler.item("width", _width);
-        handler.item("height", _height);
-        handler.item("radio_delay_ms", _radio_delay);
-    }
+    void group(Configuration::HandlerBase& handler) override;
+
+    void makeImmutable() { _immutable = true; }
+    void setStartupConfigWarning() { _startupConfigWarning = true; }
 };
 
 // Created by http://oleddisplay.squix.ch/ Consider a donation

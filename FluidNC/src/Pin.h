@@ -6,6 +6,7 @@
 #include "Pins/PinDetail.h"
 #include "Pins/PinCapabilities.h"
 #include "Pins/PinAttributes.h"
+#include "Pins/ProtectedPinTracker.h"
 
 #include <esp_attr.h>  // IRAM_ATTR
 #include <cstdint>
@@ -13,6 +14,7 @@
 #include <cstring>
 #include <utility>
 #include <string_view>
+#include <stdexcept>
 #include "Assert.h"
 
 // #define DEBUG_PIN_DUMP  // Pin debugging. WILL spam you with a lot of data!
@@ -77,7 +79,8 @@ class Pin {
     // Implementation details of this pin.
     Pins::PinDetail* _detail;
 
-    static const char* parse(std::string_view str, Pins::PinDetail*& detail);
+    static const char* parse(std::string_view str, Pins::PinDetail*& detail, 
+                             Pins::ProtectedPinTracker::PinFunction requestedFunction = Pins::ProtectedPinTracker::PinFunction::OTHER);
 
     inline Pin(Pins::PinDetail* detail) : _detail(detail) {}
 
@@ -99,7 +102,8 @@ public:
     static const int ASSERTING   = 0x10;
     static const int DEASSERTING = 0x11;
 
-    static Pin  create(std::string_view str);
+    static Pin  create(std::string_view str, 
+                      Pins::ProtectedPinTracker::PinFunction requestedFunction = Pins::ProtectedPinTracker::PinFunction::OTHER);
     static bool validate(const char* str);
 
     // We delete the copy constructor, and implement the move constructor. The move constructor is required to support
@@ -161,3 +165,4 @@ public:
 
     ~Pin();
 };
+

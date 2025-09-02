@@ -26,6 +26,7 @@ bool localfs_mount() {
         }
         // Try to create a SPIFFS filesystem
         if (!spiffs_mount(spiffsName, true)) {
+            log_info("Created new spiffs filesystem");
             localfsName = spiffsName;
             return false;
         }

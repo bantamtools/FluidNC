@@ -1,0 +1,216 @@
+// Default YAML formatted config for machines to 
+// recover off of if bad config read during boot.
+
+#pragma once
+
+// This will need to be changed per build based on the machine.
+// This is an 2436 default config
+const char* defaultConfig = R"(
+    name: "ArtFrame2436"
+    board: "Serama Rooster"
+    meta: "1.0.0"
+    
+    planner_blocks: 10
+    
+    start:
+     must_home: false
+    
+    control:
+     enter_pin: gpio.38:low
+     long_press_ms: 400
+    
+    #Junction deviation used for cornering calculations. Default 0.01
+    # junction_deviation_mm: 0.01
+    
+    # Stepper UART
+    uart1:
+     txd_pin: gpio.43
+     rxd_pin: gpio.44
+     baud: 115200
+     mode: 8N1
+    
+    stepping:
+     engine: TIMED
+     idle_ms: 255
+     pulse_us: 4
+     dir_delay_us: 1
+     disable_delay_us: 1
+     segments: 120
+    
+    axes:
+      shared_stepper_disable_pin: NO_PIN
+      shared_stepper_reset_pin: NO_PIN
+    
+      x:
+        steps_per_mm: 80
+        max_rate_mm_per_min: 40000
+        acceleration_mm_per_sec2: 2000
+        rapid_acceleration_mm_per_sec2: 3000
+        soft_limits: true
+        homing:
+          cycle: 3
+          mpos_mm: 0
+          positive_direction: false
+          feed_mm_per_min: 4000
+          seek_mm_per_min: 4000
+        
+        motor0:
+          limit_neg_pin: gpio.8:high
+          pulloff_mm: 4
+          tmc_2209:
+            uart_num: 1
+            addr: 0
+            r_sense_ohms: 0.100
+            run_amps: 1.000
+            hold_amps: 0.600
+            microsteps: 16
+            stallguard: 0
+            stallguard_debug: false
+            toff_disable: 0
+            toff_stealthchop: 5
+            toff_coolstep: 3
+            run_mode: CoolStep
+            homing_mode: StealthChop
+            use_enable: true
+            direction_pin: gpio.14:low
+            step_pin: gpio.21
+            disable_pin: NO_PIN
+        motor1:
+          null_motor:
+    
+      y:
+        steps_per_mm: 80
+        max_rate_mm_per_min: 40000
+        acceleration_mm_per_sec2: 2000
+        rapid_acceleration_mm_per_sec2: 3000
+        soft_limits: true
+        homing:
+          cycle: 2
+          mpos_mm: 0
+          positive_direction: false
+          feed_mm_per_min: 4000
+          seek_mm_per_min: 4000
+        
+        motor0:
+          limit_neg_pin: gpio.7:high
+          pulloff_mm: 4
+          tmc_2209:
+            uart_num: 1
+            addr: 1
+            r_sense_ohms: 0.100
+            run_amps: 0.900
+            hold_amps: 0.500
+            microsteps: 16
+            stallguard: 0
+            stallguard_debug: false
+            toff_disable: 0
+            toff_stealthchop: 5
+            toff_coolstep: 3
+            run_mode: CoolStep
+            homing_mode: StealthChop
+            use_enable: true
+            direction_pin: gpio.15:low
+            step_pin: gpio.26
+            disable_pin: NO_PIN
+        motor1:
+            null_motor:
+    
+      z:
+        steps_per_mm: 40
+        max_rate_mm_per_min: 50000
+        acceleration_mm_per_sec2: 10000
+        rapid_acceleration_mm_per_sec2: 10000
+        max_travel_mm: 60
+        soft_limits: true
+        homing:
+          cycle: 1
+          mpos_mm: 60
+          positive_direction: true
+          feed_mm_per_min: 1600
+          seek_mm_per_min: 1600
+    
+        motor0:
+          limit_pos_pin: gpio.4:high
+          pulloff_mm: 2
+          tmc_2209:
+            uart_num: 1
+            addr: 2
+            r_sense_ohms: 0.100
+            run_amps: 0.900
+            hold_amps: 0.500
+            microsteps: 8
+            stallguard: 0
+            stallguard_debug: false
+            toff_disable: 0
+            toff_stealthchop: 5
+            toff_coolstep: 3
+            run_mode: CoolStep
+            homing_mode: StealthChop
+            use_enable: true
+            direction_pin: gpio.17:high
+            step_pin: gpio.47
+            disable_pin: NO_PIN
+        motor1:
+            null_motor:
+    
+    # Toolchange behavior
+    parking:
+      enable: true
+      axis: Z
+      pullout_distance_mm: 3.000
+      pullout_rate_mm_per_min: 10000
+      target_mpos_mm: 60.000
+      rate_mm_per_min: 10000
+      park_on_feedhold: true
+    
+    # OLED
+    i2c0:
+       sda_pin: gpio.40
+       scl_pin: gpio.41
+       frequency: 800000
+            
+    oled:
+      i2c_num: 0
+      i2c_address: 60
+      width: 128
+      height: 64
+      radio_delay_ms: 2000
+    
+    # Encoder
+    encoder:
+     a_pin: gpio.36
+     b_pin: gpio.37
+    
+    # Configure SD card in SDMMC mode
+    sdcard:
+     frequency_hz: 5000000
+     width: 4
+     clk_pin: gpio.5
+     cmd_pin: gpio.6
+     d0_pin: gpio.2
+     d1_pin: gpio.1
+     d2_pin: gpio.11
+     d3_pin: gpio.10
+     cd_pin: gpio.12
+    
+    # IO Expander
+    extenders:
+      i2c_num: 0
+      pinextender0:
+        i2c_extender:
+          device: tca6408
+          device_id: 0
+          interrupt: gpio.35
+    
+    # User Outputs
+    user_outputs:
+      # Expansion IOs 0-4
+      digital0_pin: gpio.48
+      digital1_pin: gpio.45
+      digital2_pin: pinext0.3
+      digital3_pin: gpio.46
+      digital4_pin: pinext0.6
+      # LEDs 0-1
+      digital5_pin: pinext0.4:low
+      digital6_pin: pinext0.5:low
+)";

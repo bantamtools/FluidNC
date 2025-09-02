@@ -6,6 +6,7 @@
 
 #    include "Main.h"
 #    include "Machine/MachineConfig.h"
+#    include "Machine/BoardDetection.h"
 
 #    include "Config.h"
 #    include "Report.h"
@@ -44,6 +45,7 @@ void mem_task( void * pvParameters ) {
 
 void setup() {
     disableCore0WDT();
+    vTaskDelay(pdMS_TO_TICKS(1000));
     try {
     	timing_init();
 #ifdef ARDUINO_USB_CDC_ON_BOOT
@@ -52,8 +54,20 @@ void setup() {
 #else
         uartInit();       // Setup serial port
         Uart0.println();  // create some white space after ESP32 boot info
-#endif
-
+#endif 
+        
+        // Mount filesystem BEFORE board detection so it's available for early boot
+        if (localfs_mount()) {
+            log_error("Cannot mount a local filesystem");
+        } else {
+            log_info("Local filesystem type is " << localfsName);
+        }
+        
+        // NEW: Detect board type before any configuration or hardware initialization
+        // This must happen early to solve the I2C chicken-and-egg problem
+        Machine::BoardType boardType = Machine::detectBoardType();
+        log_info("Detected board: " << Machine::getBoardTypeName(boardType));
+        
         // Setup input polling loop after loading the configuration,
         // because the polling may depend on the config
         allChannels.init();
@@ -70,13 +84,7 @@ void setup() {
         log_info("FluidNC " << git_info);
         log_info("Compiled with ESP32 SDK:" << esp_get_idf_version());
 
-        if (localfs_mount()) {
-            log_error("Cannot mount a local filesystem");
-        } else {
-            log_info("Local filesystem type is " << localfsName);
-        }
-
-        bool configOkay = config->load();
+        bool configOkay = config->loadLayered();
 
         make_user_commands();
 
@@ -146,6 +154,33 @@ void setup() {
             config->_control->init();
 
             config->_kinematics->init();
+        } else { // Things we want to initialize even if no config.
+            // If we're here, recovery config loaded but user config failed
+            // Initialize critical UI components for error recovery
+            
+            // I2C bus (required for OLED)
+            for (size_t i = 0; i < MAX_N_I2C; i++) {
+                if (config->_i2c[i]) {
+                    config->_i2c[i]->init();
+                }
+            }
+            
+            // OLED display (for error messages)
+            if (config->_oled) {
+                config->_oled->init();
+            }
+            
+            // Encoder (for menu navigation)
+            if (config->_encoder) {
+                config->_encoder->init();
+            }
+            
+            // Control pins (enter button for recovery)
+            if (config->_control) {
+                config->_control->init();
+            }
+            
+            log_info("Critical UI components initialized for error recovery");
         }
 
         // Initialize system state.
@@ -185,8 +220,11 @@ void setup() {
         sys.state = State::ConfigAlarm;
     }
 
-    // Try Bluetooth first so its memory can be released if it is disabled
+    // Try Bluetooth first so its memory can be released if it is disabled 
     if (!WebUI::bt_config.begin()) {
+        if(!config->_wifiOnLaunch){
+            WebUI::wifi_mode->setStringValue((char*)"Off");
+        }
         WebUI::wifi_config.begin();
     }
 

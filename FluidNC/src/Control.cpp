@@ -5,6 +5,7 @@
 
 #include "Protocol.h"        // *Event
 #include "Machine/Macros.h"  // macro0Event
+#include "Machine/MachineConfig.h"
 
 Control::Control() {
     // The SafetyDoor pin must be defined first because it is checked explicity in safety_door_ajar()
@@ -26,6 +27,12 @@ void Control::init() {
 }
 
 void Control::group(Configuration::HandlerBase& handler) {
+    if (_immutable) {
+        // Skip all pin processing to avoid individual "Ignored key" messages
+        // Section-level warning already shown in HandlerBase.h
+        return; 
+    }
+    // Existing vector iteration
     for (auto pin : _pins) {
         handler.item(pin->_legend.c_str(), pin->_pin);
     }
@@ -72,20 +79,24 @@ bool Control::safety_door_ajar() {
 
 // Returns if enter button is pressed, used for long press detection
 bool Control::enter_pressed() {
+    // log_info("Enter pressed");
     return _pins[1]->get();
 }
 
 // Returns whether the enter button is locked out
 bool Control::enter_locked() {
+    log_debug("Checking enter locked");
     return _pins[1]->locked();
 }
 
 // Locks the enter button
 void Control::lock_enter() {
+    log_debug("Enter is locked");
     _pins[1]->lock(); 
 }
 
 // Unlocks the enter button
 void Control::unlock_enter() {
+    log_debug("Enter is unlocked");
     _pins[1]->unlock(); 
 }

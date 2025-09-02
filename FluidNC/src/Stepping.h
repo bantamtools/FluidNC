@@ -38,7 +38,11 @@ namespace Machine {
         // execution lead time there is for other processes to run.  The latency for a feedhold or other
         // override is roughly 10 ms times _segments.
 
-        size_t _segments = 12;
+        // Try increasing this to provide stepper segments beyond long press while loop holdup issues.
+        // With a long press of 500ms defined, this gives us a window of around 50 segments at an 
+        // average of 10 ms per segment for no feedhold issues.
+
+        size_t _segments = 12;  
 
         uint32_t _idleMsecs           = 255;
         uint32_t _pulseUsecs          = 4;

@@ -19,8 +19,12 @@ namespace Extenders {
         void validate() override;
         void group(Configuration::HandlerBase& handler) override;
         void init();
+        void makeImmutable() { _immutable = true; }
 
         ~Extenders();
+
+    private:
+        bool _immutable = false;
     };
 
     using PinExtenderFactory = Configuration::GenericFactory<PinExtenderDriver>;

@@ -45,14 +45,19 @@ namespace MotorDrivers {
 
         config_message();
 
+        // Always set initial motor position (even if 0.0)
+        set_motor_steps(_axis_index, mpos_to_steps(_initial_position_mm, _axis_index));
+
         _disabled = true;
 
         schedule_update(this, _timer_ms);
     }
 
     void RcServo::config_message() {
-        log_info("    " << name() << " Pin:" << _output_pin.name() << " Pulse Len(" << _min_pulse_us << "," << _max_pulse_us
-                        << " period:" << _pwm->period() << ")");
+        auto axis = config->_axes->_axis[_axis_index];
+        log_info("    RC Servo Pin:" << _output_pin.name() << " Range(0-" << axis->_maxTravel 
+                 << " mm; " << _min_pulse_us << "-" << _max_pulse_us << " μs) Initial:" 
+                 << _initial_position_mm << " mm");
     }
 
     void RcServo::_write_pwm(uint32_t duty) {
@@ -77,7 +82,7 @@ namespace MotorDrivers {
         }
     }
 
-    // Homing justs sets the new system position and the servo will move there
+    // Homing just sets the new system position and the servo will move there
     bool RcServo::set_homing_mode(bool isHoming) {
         log_debug("Servo homing:" << isHoming);
         if (_has_errors)
@@ -115,7 +120,7 @@ namespace MotorDrivers {
         servo_pulse_len = static_cast<uint32_t>(mapConstrain(
             servo_pos, limitsMinPosition(_axis_index), limitsMaxPosition(_axis_index), (float)_min_pulse_cnt, (float)_max_pulse_cnt));
 
-        // log_info("su " << servo_pulse_len);
+        log_debug("RC Servo: Position=" << mpos << "mm, Pulse=" << servo_pulse_len << "μs, Steps=" << get_axis_motor_steps(_axis_index));
 
         _write_pwm(servo_pulse_len);
     }

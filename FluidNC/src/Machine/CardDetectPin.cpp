@@ -17,7 +17,11 @@ namespace Machine {
     }
 
     void CardDetectPin::update(bool value) {
-
+        if(!config->_systemIsInitialized){
+            return;
+        }
+        
+        log_debug("Update in card detect pin");
         // Mount/unmount SD card based on card detect value (active-low)
         if (value) {
             sd_unmount();
