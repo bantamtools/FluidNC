@@ -1344,6 +1344,14 @@ static void protocol_do_enter() {
                         }
                     } else { // all other machines do homing cycle
                         Machine::Homing::run_cycles(Machine::Homing::AllCycles);
+                        
+                        // Wait for homing to complete
+                        do {
+                            protocol_execute_realtime();
+                        } while (sys.state == State::Homing);
+                        
+                        // Execute startup scripts after homing, matching $H behavior
+                        settings_execute_startup();
                     }
 
                 // Jog command
