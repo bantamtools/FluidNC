@@ -102,7 +102,6 @@ axes:
         # 1000 Maps to Z=15 (top position; max_pulse_us)
         # Initialize Servo physically at 15 mm (top)
 
-
 # OLED
 i2c0:
    sda_pin: gpio.41

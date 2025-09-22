@@ -151,6 +151,11 @@ void setup() {
 
             config->_axes->init();
 
+            // Rebuild menu after axes are fully initialized
+            if (config->_oled && config->_oled->_menu) {
+                config->_oled->_menu->rebuild();
+            }
+
             config->_control->init();
 
             config->_kinematics->init();
@@ -201,9 +206,12 @@ void setup() {
             // NOTE: The startup script will run after successful completion of the homing cycle, but
             // not after disabling the alarm locks. Prevents motion startup blocks from crashing into
             // things uncontrollably. Very bad.
-            if (config->_start->_mustHome && Machine::Axes::homingMask) {
-                // If there is an axis with homing configured, enter Alarm state on startup
+            if (config->_start->_mustHome && config->_axes->hasRealHomingCycles()) {
+                // If there is an axis with real homing configured, enter Alarm state on startup
                 sys.state = State::Alarm;
+            } else if (!config->_axes->hasRealHomingCycles()) {
+                // No axes have real homing cycles - mark as already homed
+                config->_axes->_homed = true;
             }
             for (auto s : config->_spindles) {
                 s->init();

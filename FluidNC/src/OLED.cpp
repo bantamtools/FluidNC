@@ -147,7 +147,13 @@ static void jog_timer_cb(void* arg)
         case 'X': jog_command = "$J=X" + String(saved_axes[X_AXIS], 3) + " F" + String(JOG_FEEDRATE, 3); break;
         case 'Y': jog_command = "$J=Y" + String(saved_axes[Y_AXIS], 3) + " F" + String(JOG_FEEDRATE, 3); break;
         case 'Z': jog_command = "$J=Z" + String(saved_axes[Z_AXIS], 3) + " F" + String(JOG_FEEDRATE, 3); break;
-        default: break;
+        case 'A': jog_command = "$J=A" + String(saved_axes[A_AXIS], 3) + " F" + String(JOG_FEEDRATE, 3); break;
+        case 'B': jog_command = "$J=B" + String(saved_axes[B_AXIS], 3) + " F" + String(JOG_FEEDRATE, 3); break;
+        case 'C': jog_command = "$J=C" + String(saved_axes[C_AXIS], 3) + " F" + String(JOG_FEEDRATE, 3); break;
+        default: 
+            jog_state = JogState::Scrolling;
+            jog_timer_active = false;
+            return;
     }   
     gc_execute_line((char*)jog_command.c_str());
 
@@ -186,7 +192,7 @@ OLED::Layout OLED::stateLayout          = { 0, 0, 0, DejaVu_Sans_10, TEXT_ALIGN_
 OLED::Layout OLED::elapsedTimeLayout    = { 63, 0, 128, DejaVu_Sans_10, TEXT_ALIGN_CENTER };
 OLED::Layout OLED::percentLayout128     = { 128, 0, 128, DejaVu_Sans_10, TEXT_ALIGN_RIGHT };
 OLED::Layout OLED::percentLayout64      = { 64, 0, 64, DejaVu_Sans_10, TEXT_ALIGN_RIGHT };
-OLED::Layout OLED::posLabelLayout       = { 110, 15, 128, DejaVu_Sans_10, TEXT_ALIGN_RIGHT };
+OLED::Layout OLED::posLabelLayout       = { 105, 15, 128, DejaVu_Sans_10, TEXT_ALIGN_RIGHT };
 OLED::Layout OLED::radioAddrLayout      = { 128, 0, 128, DejaVu_Sans_10, TEXT_ALIGN_RIGHT };
 OLED::Layout OLED::connectWifiLayout    = { 63, 52, 128, DejaVu_Sans_10, TEXT_ALIGN_CENTER };
 OLED::Layout OLED::bottomTextLayout     = { 0, 52, 0, DejaVu_Sans_10, TEXT_ALIGN_LEFT };
@@ -278,12 +284,15 @@ void OLED::init() {
     // Bantam Logo
     _oled->drawXbm(0, 18, _width, 26, bantam_logo_bits);
     // Machine name, FW version...
-    show(stateLayout, config->_name.c_str());
+    show_state_text(config->_name);
     char bantam_ver_str[LIST_NAME_MAX_STR] = {"Version: "};
     strncat(bantam_ver_str, git_info_short, LIST_NAME_MAX_STR - 10);
     show(bottomTextLayout, bantam_ver_str); // TODO which version info do we want here?
 
     _oled->display();
+
+    // Pre-render jog mode headers for fast swapping
+    initJogHeaders();
 
     jog_state = JogState::Idle;
 
@@ -337,29 +346,26 @@ void OLED::encoder_update(int16_t enc_diff) {
         }
 
         // Set the selected axis to the increment value and clamp to extents
-        switch (axis[0]) {
-            case 'X': 
-            
-                saved_axes[X_AXIS] += (JOG_X_STEP * (float)_enc_diff); 
-                if (saved_axes[X_AXIS] < limitsMinPosition(X_AXIS)) saved_axes[X_AXIS] = limitsMinPosition(X_AXIS);
-                if (saved_axes[X_AXIS] > limitsMaxPosition(X_AXIS)) saved_axes[X_AXIS] = limitsMaxPosition(X_AXIS);
-                break;
-            
-            case 'Y': 
-            
-                saved_axes[Y_AXIS] += (JOG_Y_STEP * (float)_enc_diff);
-                if (saved_axes[Y_AXIS] < limitsMinPosition(Y_AXIS)) saved_axes[Y_AXIS] = limitsMinPosition(Y_AXIS);
-                if (saved_axes[Y_AXIS] > limitsMaxPosition(Y_AXIS)) saved_axes[Y_AXIS] = limitsMaxPosition(Y_AXIS);
-                break;
+        int axis_index = -1;
+        float jog_step = 1.0;
 
-            case 'Z': 
-            
-                saved_axes[Z_AXIS] += (JOG_Z_STEP * (float)_enc_diff); 
-                if (saved_axes[Z_AXIS] < limitsMinPosition(Z_AXIS)) saved_axes[Z_AXIS] = limitsMinPosition(Z_AXIS);
-                if (saved_axes[Z_AXIS] > limitsMaxPosition(Z_AXIS)) saved_axes[Z_AXIS] = limitsMaxPosition(Z_AXIS);
-                break;
-            
+        // Convert axis character to index and get jog step
+        switch (axis[0]) {
+            case 'X': axis_index = X_AXIS; jog_step = JOG_X_STEP; break;
+            case 'Y': axis_index = Y_AXIS; jog_step = JOG_Y_STEP; break;
+            case 'Z': axis_index = Z_AXIS; jog_step = JOG_Z_STEP; break;
+            case 'A': axis_index = A_AXIS; jog_step = JOG_A_STEP; break;
+            case 'B': axis_index = B_AXIS; jog_step = JOG_B_STEP; break;
+            case 'C': axis_index = C_AXIS; jog_step = JOG_C_STEP; break;
             default: break;
+        }
+
+        if (axis_index >= 0 && axis_index < config->_axes->_numberAxis) {
+            saved_axes[axis_index] += (jog_step * (float)_enc_diff);
+            if (saved_axes[axis_index] < limitsMinPosition(axis_index)) 
+                saved_axes[axis_index] = limitsMinPosition(axis_index);
+            if (saved_axes[axis_index] > limitsMaxPosition(axis_index)) 
+                saved_axes[axis_index] = limitsMaxPosition(axis_index);
         }
 
         // Update the dro with the jog axis value
@@ -371,14 +377,23 @@ void OLED::encoder_update(int16_t enc_diff) {
 }
 
 void OLED::show_state() {
-
-    // Clear anything left in radio area
-    _oled->setColor(BLACK);
-    _oled->fillRect(0, 0, 40, _header_height);
-    _oled->setColor(WHITE);
-
-    show(stateLayout, _state);
-    _oled->fillRect(0, _header_height - 2, _width, 2);  // Thick line
+    // Special fast path for jog mode
+    if (_menu != nullptr && _menu->is_jogging_menu()) {
+        bool currently_jogging = (_state == "Jog");
+        
+        // Always update header to match current state during 250ms refresh
+        showJogHeaderFast(currently_jogging);  // Includes separator line
+        // No separator line needed - it's in the cached headers
+    } else {
+        // Normal state display path
+        clearHeaderWithSeparator();
+        
+        std::string display_text = (_state == "Idle" && _menu != nullptr) 
+            ? _menu->get_current_menu_title() 
+            : _state;
+            
+        show_state_text(display_text);
+    }
 }
 
 void OLED::show_limits(bool probe, const bool* limits) {
@@ -424,9 +439,13 @@ void OLED::show_menu() {
     menu_max_active_entries = 4;
 
     // Clear any highlighting left in menu area
-    _oled->setColor(BLACK);
-    _oled->fillRect(0, _header_height, menu_width, _height);
-    _oled->setColor(WHITE);
+    if (menu_width == _width) {
+        clearContentAreaFast();
+    } else {
+        _oled->setColor(BLACK);
+        _oled->fillRect(0, _header_height, menu_width, _height);
+        _oled->setColor(WHITE);
+    }
 
     // Update the menu selection if not jogging
     if (jog_state == JogState::Idle) {
@@ -470,6 +489,7 @@ void OLED::show_menu() {
 
 // This is where file running menu stuff is drawn from?
 void OLED::show_file() {
+    // log_info("OLED show_file() called, _state=" << _state << ", _file_job_running=" << _file_job_running << ", _download_mode=" << _download_mode);
     // log_info("OLED Show file");
     char time_str[10];
     int pct = int(_percent);
@@ -479,7 +499,7 @@ void OLED::show_file() {
         _run_start_time = millis();
         _saved_run_time = 0;
 
-    } else if ((_state == "Idle" && !_file_job_running && !_download_mode) || pct == 100) {
+} else if ((_state == "Idle" && !_file_job_running && !_download_mode) || pct == 100) {
 //        _prev_run_time += (millis() - _run_start_time);
 //        _saved_run_time = _prev_run_time / 1000;
         _run_start_time = 0;
@@ -499,16 +519,16 @@ void OLED::show_file() {
         }
     }
 
-    // Exit if file/download not running, no filename or have one last SD report
+// Exit if file/download not running, no filename or have one last SD report
     if ((!_file_job_running && !_download_mode) || /*(!_download_mode && _run_start_time == 0) ||*/ (_filename.length() == 0) || (_state != "Run" && pct == 100)) {
         return;
     }
 
     // Clear anything left in file areas
     _oled->setColor(BLACK);
-    _oled->fillRect(40, 0, 87, 11); // updated to clear entire time-elapsed area
-    _oled->fillRect(0, _header_height, _width, _height);
+    _oled->fillRect(40, 0, 88, 11); // clear entire time-elapsed area (40 to 128) - specific area, keep fillRect
     _oled->setColor(WHITE);
+    clearContentAreaFast();
 
     if (_width == 128) {
         show(percentLayout128, std::to_string(pct) + '%');
@@ -545,12 +565,47 @@ void OLED::show_file() {
         show(percentLayout64, std::to_string(pct) + '%');
     }
 
-    // Display pause/resume message at bottom OR toolchange comment if present
+    // Clear immediate comment when not in Run state
+    if (_state != "Run" && _comment_countdown > 0) {
+        _comment_countdown = 0;  // Clear immediate display on state exit
+    }
+
+    // Display pause/resume message at bottom OR comments if present
     if (_comment_countdown > 0) {
+        // Immediate display comment active
         wrapped_draw_string(40, _comment, DejaVu_Sans_10);
+    } else if (!_saved_m0_comment.empty() && 
+               gc_state.modal.program_flow == ProgramFlow::Paused &&
+               sys.state == State::Hold && 
+               sys.suspend.bit.holdComplete &&
+               (!config->_parking->park_on_feedhold() || sys.suspend.bit.retractComplete)) {
+        // M0 pause fully stopped with saved comment, and parking is complete (if enabled)
+        if (!_m0_comment_logged) {
+            log_info("M0 message displayed: " << _saved_m0_comment);
+            _m0_comment_logged = true;
+        }
+        wrapped_draw_string(40, _saved_m0_comment, DejaVu_Sans_10);
     } else if (!_download_mode) {
-        _oled->drawString(0, 40, "Click to PAUSE/RESUME");
-        _oled->drawString(0, 52, "Long Press to CANCEL");
+        // Default messages (keep existing code)
+        if (_state == "Run") {
+            if (_pause_requested) {
+                _oled->drawString(0, 46, "Pause requested...");
+            } else {
+                _oled->drawString(0, 46, "Click to PAUSE");
+            }
+} else if (_state == "Decel") {  // Hold:1 - decelerating
+            _oled->drawString(0, 46, "Pausing, please wait...");
+        } else if (_state == "Hold") {    // Hold:0 - fully stopped
+            // Only show resume message if parking is disabled OR parking is complete
+            if (!config->_parking->park_on_feedhold() || sys.suspend.bit.retractComplete) {
+                // Clear the message area before drawing new text
+                clearLowerContentFast();  // Clear Y=40 to Y=63 efficiently
+                _oled->drawString(0, 40, "Click to RESUME");
+                _oled->drawString(0, 52, "HOLD to CANCEL");
+            } else {
+                _oled->drawString(0, 46, "Pausing, please wait...");
+            }
+}
     }
 
     // Add a method to cleanup all drawn stuff to clear corruption?
@@ -585,27 +640,63 @@ void OLED::show_dro(float* axes, bool isMpos, bool* limits) {
     _oled->fillRect(64, _header_height, 64, _height);
     _oled->setColor(WHITE);
 
-    show(posLabelLayout, isMpos ? "M Pos" : "W Pos");
+    show(posLabelLayout, isMpos ? "Position" : "Offset");
+
+    // Define preferred axis order per machine type (same as jog menu)
+    int axis_order[3];
+    switch (config->getMachineType()) {
+        case Machine::MachineType::EggBot:
+            // EggBot: A (egg), B (pen), Z (lift)
+            axis_order[0] = A_AXIS;
+            axis_order[1] = B_AXIS; 
+            axis_order[2] = Z_AXIS;
+            break;
+            
+        // Add future machine types here:
+        // case Machine::MachineType::FutureMachine:
+        //     axis_order[0] = ?_AXIS;
+        //     axis_order[1] = ?_AXIS;
+        //     axis_order[2] = ?_AXIS;
+        //     break;
+            
+        default:
+            // Default for all other machines: X, Y, Z
+            axis_order[0] = X_AXIS;
+            axis_order[1] = Y_AXIS;
+            axis_order[2] = Z_AXIS;
+            break;
+    }
 
     _oled->setFont(DejaVu_Sans_10);
     uint8_t oled_y_pos;
-    for (uint8_t axis = X_AXIS; axis < n_axis; axis++) {
-        oled_y_pos = ((_height == 64) ? 26 : 19) + (axis * 10);
+    int display_count = 0;
+    
+    // Display axes in preferred order (limit to 3)
+    for (int i = 0; i < 3 && display_count < 3; i++) {
+        int axis = axis_order[i];
+        if (axis < n_axis && config->_axes->_axis[axis] && 
+            config->_axes->_axis[axis]->_motors[0] && 
+            config->_axes->_axis[axis]->_motors[0]->isReal()) {
+            
+            oled_y_pos = ((_height == 64) ? 26 : 19) + (display_count * 10);
 
-        std::string axis_msg(1, Machine::Axes::_names[axis]);
-        if (_width == 128) {
-            axis_msg += ":";
-        } else {
-            // For small displays there isn't room for separate limit boxes
-            // so we put it after the label
-            axis_msg += limits[axis] ? "L" : ":";
+            std::string axis_msg(1, Machine::Axes::_names[axis]);
+            if (_width == 128) {
+                axis_msg += ":";
+            } else {
+                // For small displays there isn't room for separate limit boxes
+                // so we put it after the label
+                axis_msg += limits[axis] ? "L" : ":";
+            }
+            _oled->setTextAlignment(TEXT_ALIGN_LEFT);
+            _oled->drawString(68 + 0, oled_y_pos, axis_msg.c_str());
+
+            _oled->setTextAlignment(TEXT_ALIGN_RIGHT);
+            snprintf(axisVal, 20 - 1, "%.3f", axes[axis]);
+            _oled->drawString((_width == 128) ? 68 + 60 : 68 + 63, oled_y_pos, axisVal);
+            
+            display_count++;
         }
-        _oled->setTextAlignment(TEXT_ALIGN_LEFT);
-        _oled->drawString(68 + 0, oled_y_pos, axis_msg.c_str());
-
-        _oled->setTextAlignment(TEXT_ALIGN_RIGHT);
-        snprintf(axisVal, 20 - 1, "%.3f", axes[axis]);
-        _oled->drawString((_width == 128) ? 68 + 60 : 68 + 63, oled_y_pos, axisVal);
     }
     _oled->display();
 }
@@ -615,9 +706,20 @@ void OLED::show_radio_info() {
         return;
     }
 
-    // Clear anything left in radio area
+    // Don't clear the radio area when showing custom menu titles in Idle state
+    // This prevents truncation of custom menu titles
+    if (_state == "Idle" && _menu != nullptr) {
+        return;
+    }
+
+    // Don't clear the header area when in jog mode - preserve jog header
+    if (_menu != nullptr && _menu->is_jogging_menu()) {
+        return;
+    }
+
+    // Clear anything left in radio area (avoid state text area)
     _oled->setColor(BLACK);
-    _oled->fillRect(30, 0, 98, 11);
+    _oled->fillRect(70, 0, 58, 11);  // Clear right side only to avoid state text conflict
     _oled->setColor(WHITE);
 
     if (_width == 128) {
@@ -636,9 +738,7 @@ void OLED::show_radio_info() {
 void OLED::show_error(std::string msg) {
 
     // Clear anything left in error message area
-    _oled->setColor(BLACK);
-    _oled->fillRect(0, _header_height, _width, _height);
-    _oled->setColor(WHITE);
+    clearContentAreaFast();
 
     // Draw message
     //truncated_draw_string(_header_height, msg, DejaVu_Sans_10);
@@ -714,17 +814,15 @@ void OLED::render_icon_menu() {
 void OLED::show_home_layout(int hightlight) {
 //    log_info("show home layout");
     // clear entire screen and set text state
-    _oled->setColor(BLACK);
-    _oled->fillRect(0,0,_width,_height);
-    _oled->setColor(WHITE);
+    clearScreenFast();
     _oled->setTextAlignment(TEXT_ALIGN_LEFT);
     _oled->setFont(DejaVu_Sans_10);
     // top text
     if (_state == "Home") {
-        show(stateLayout, "Homing...");
+        show_state_text("Homing...");
     } else {
         // Machine name as specified in config file
-        show(stateLayout, config->_name.c_str());
+        show_state_text(config->_name);
     }
     // three icons, order of this menu is now FILES - HOME - SETTINGS
     if (hightlight == 1) {
@@ -802,9 +900,7 @@ void OLED::show_home_layout(int hightlight) {
 void OLED::show_run_layout(int hightlight) {  // run menu
     log_info("Show run layout");
     // clear entire screen and set text state
-    _oled->setColor(BLACK);
-    _oled->fillRect(0,0,_width,_height);
-    _oled->setColor(WHITE);
+    clearScreenFast();
     _oled->setTextAlignment(TEXT_ALIGN_LEFT);
     _oled->setFont(DejaVu_Sans_10);
     // top text
@@ -813,7 +909,7 @@ void OLED::show_run_layout(int hightlight) {  // run menu
     int i = 0;
     while (entry && entry->display_name && i < 4) {
         if (entry->selected) {
-            show(stateLayout, entry->display_name);
+            show_state_text(entry->display_name);
         }
         entry = entry->next;
         i++;
@@ -854,16 +950,14 @@ void OLED::show_postrun_layout(int hightlight) {  // run menu
     log_info("Show postrun layout");
     // clear run timer here to make sure it gets reset between repeated runs
     if (_saved_run_time == 0) {
-        _prev_run_time += (millis() - _run_start_time);
+        _prev_run_time = (millis() - _run_start_time);
         _saved_run_time = _prev_run_time / 1000;
         //log_info("Calc'd run time in postrun: " << _saved_run_time);
     }
     _run_start_time = 0;
     _prev_run_time = 0;
     // clear entire screen and set text state
-    _oled->setColor(BLACK);
-    _oled->fillRect(0,0,_width,_height);
-    _oled->setColor(WHITE);
+    clearScreenFast();
     _oled->setTextAlignment(TEXT_ALIGN_LEFT);
     _oled->setFont(DejaVu_Sans_10);
     // top text
@@ -880,12 +974,12 @@ void OLED::show_postrun_layout(int hightlight) {  // run menu
                         (_saved_run_time / 3600),          // hours
                         ((_saved_run_time % 3600) / 60),   // minutes
                         ((_saved_run_time % 3600) % 60));  // seconds
-                    show(stateLayout, completed_msg);
+                    show_state_text(completed_msg);
                 } else {
-                    show(stateLayout, "Plot Cancelled");
+                    show_state_text("Plot Cancelled");
                 }
             } else {
-                show(stateLayout, entry->display_name);
+                show_state_text(entry->display_name);
             }
         }
         entry = entry->next;
@@ -932,6 +1026,22 @@ void OLED::refresh_display(bool menu_only) {
     }
 }
 
+void OLED::processDisplayRefresh() {
+    if (!_oled || !_active) {
+        return;
+    }
+    
+    // Cast to SSD1306_I2C to access the refresh flag and method
+    SSD1306_I2C* ssd1306 = static_cast<SSD1306_I2C*>(_oled);
+    
+    // Check timing and perform refresh if needed
+    uint32_t now = millis();
+    if (ssd1306->_refresh_needed && now >= _next_refresh_ms) {
+        _next_refresh_ms = now + REFRESH_INTERVAL_MS;
+        ssd1306->performDisplayUpdate();
+    }
+}
+
 // Display a popup message temporarily
 void OLED::popup_msg(std::string msg, int dly) {
 
@@ -952,11 +1062,20 @@ void OLED::show_persistent_msg(std::string msg) {
 }
 
 // manual clear for errors that stick around (like unexpected end of file)
+void OLED::clear() {
+    if (_oled) {
+        // _oled->clear();  // Obsolete - replaced with faster clearScreenFast()
+        clearScreenFast();  // Much faster - uses direct memset on buffer
+        _last_state_width = 0;  // Reset text width tracking since we cleared everything
+    }
+}
+
 void OLED::clear_popup() {
     log_info("OLED clear popup called");
     _popup = false;
     refresh_display();
 }
+
 
 void OLED::parse_numbers(std::string s, float* nums, int maxnums) {
     size_t pos     = 0;
@@ -995,7 +1114,14 @@ void OLED::parse_status_report() {
     // Now the string is a sequence of field|field|field
     size_t pos     = 0;
     auto   nextpos = _report.find_first_of("|", pos);
-    _state         = _report.substr(pos + 1, nextpos - pos - 1);
+_state = _report.substr(pos + 1, nextpos - pos - 1);
+    
+    // Map internal state names to user-friendly display names
+if (_state == "Hold:1") {
+        _state = "Decel";  // Decelerating
+    } else if (_state == "Hold:0") {
+        _state = "Hold";   // Fully stopped
+    }
     // check for finished homing
     if (was_homing && _state != "Home") {
         if (config->_axes->_homed) {
@@ -1020,6 +1146,9 @@ void OLED::parse_status_report() {
 
     bool probe              = false;
     bool limits[MAX_N_AXIS] = { false };
+    
+    // Reset pause_requested flag before parsing (assume false unless found)
+    _pause_requested = false;
 
     static float axes[MAX_N_AXIS];
     bool  isMpos    = false;
@@ -1086,6 +1215,9 @@ void OLED::parse_status_report() {
                     case 'C':
                         limits[C_AXIS] = true;
                         break;
+                    case 'Q':  // New: pause reQuested
+                        _pause_requested = true;
+                        break;
                 }
                 continue;
             }
@@ -1137,6 +1269,7 @@ void OLED::parse_status_report() {
             continue;
         }
     }
+    
     show_all(axes, isMpos, limits);
 }
 
@@ -1342,6 +1475,7 @@ void OLED::parse_report() {
         _file_job_running = true;
         _job_just_started = true;
         _saved_run_time = 0;
+        _prev_run_time = 0;
         return;
     }
     if (_report.rfind("[MSG:INFO: Run file closed]", 0) == 0) { // Moved directly to the ~InputFile() to avoid reporting inconsistencies.
@@ -1387,6 +1521,124 @@ size_t OLED::char_width(char c, font_t font) {
     xfont_t* xf    = (xfont_t*)font;
     int      index = c - xf->first;
     return (index < 0) ? 0 : xf->glyphs[index].width;
+}
+
+uint16_t OLED::calculate_text_width(const std::string& text, font_t font) {
+    uint16_t total_width = 0;
+    for (char c : text) {
+        total_width += char_width(c, font);
+    }
+    return total_width;
+}
+
+void OLED::show_state_text(const std::string& text) {
+    // Calculate and save the width of the text we're about to display
+    _last_state_width = calculate_text_width(text, DejaVu_Sans_10);
+    
+    // Display the text
+    show(stateLayout, text);
+}
+
+void OLED::clearScreenFast() {
+    // Equivalent to: _oled->fillRect(0, 0, _width, _height);
+    // but much faster - same as _oled->clear() but more explicit
+    
+    uint16_t bufferSize = _oled->width() * _oled->height() / 8;
+    memset(_oled->buffer, 0, bufferSize);
+}
+
+void OLED::clearContentAreaFast() {
+    // Equivalent to: _oled->fillRect(0, 16, _width, _height - 16);
+    // Clears content area (pixel rows 16-63, pages 2-7)
+    
+    uint64_t* qword_ptr = reinterpret_cast<uint64_t*>(_oled->buffer + 256);
+    
+    // Unroll loop: clear 8 qwords per iteration (64 bytes)
+    // 768 bytes = 12 iterations of 64 bytes each
+    for (int i = 0; i < 12; i++) {
+        *qword_ptr++ = 0;  *qword_ptr++ = 0;  *qword_ptr++ = 0;  *qword_ptr++ = 0;
+        *qword_ptr++ = 0;  *qword_ptr++ = 0;  *qword_ptr++ = 0;  *qword_ptr++ = 0;
+    }
+}
+
+void OLED::clearLowerContentFast() {
+    // Equivalent to: _oled->fillRect(0, 40, 128, 24);
+    // Clear Y=40 to Y=63 (pages 5-7, bytes 640-1023)
+    // This clears the lower 24 pixels (3 pages × 128 bytes/page = 384 bytes)
+    uint64_t* qword_ptr = reinterpret_cast<uint64_t*>(_oled->buffer + 640);
+    
+    // 384 bytes = 48 qwords = 6 iterations of 8 qwords
+    // Unrolled loop for maximum performance
+    for (int i = 0; i < 6; i++) {
+        *qword_ptr++ = 0;  *qword_ptr++ = 0;  *qword_ptr++ = 0;  *qword_ptr++ = 0;
+        *qword_ptr++ = 0;  *qword_ptr++ = 0;  *qword_ptr++ = 0;  *qword_ptr++ = 0;
+    }
+}
+
+void OLED::initJogHeaders() {
+    // Save current buffer state (first 2 pages)
+    uint8_t tempBuffer[256];
+    memcpy(tempBuffer, _oled->buffer, 256);
+    
+    // Generate blank header with separator template using readable functions
+    _oled->setColor(BLACK);
+    _oled->fillRect(0, 0, _width, _header_height);           // Clear header area to black
+    _oled->setColor(WHITE);
+    _oled->fillRect(0, _header_height - 2, _width, 2);       // Draw separator in white
+    memcpy(blankHeaderWithSeparator, _oled->buffer, 256);
+    
+    // Render "Jog mode" off-screen
+    clearHeaderWithSeparator();
+    _oled->setFont(DejaVu_Sans_10);
+    _oled->setTextAlignment(TEXT_ALIGN_LEFT);
+    _oled->drawString(0, 0, String("Jog mode"));
+    memcpy(jogModeHeader, _oled->buffer, 256);
+    
+    // Render "Jog mode         - moving -" off-screen
+    clearHeaderWithSeparator();
+    _oled->drawString(0, 0, String("Jog mode         - moving -"));
+    memcpy(jogModeMovingHeader, _oled->buffer, 256);
+    
+    // Restore original buffer
+    memcpy(_oled->buffer, tempBuffer, 256);
+    
+    headersInitialized = true;
+}
+
+void OLED::clearHeaderWithSeparator() {
+    memcpy(_oled->buffer, blankHeaderWithSeparator, 256);
+}
+
+void OLED::showJogHeaderFast(bool moving) {
+    // Equivalent to: memcpy(_oled->buffer, cached, 256) + memset(_oled->buffer_back, 0xFF, 256)
+    // but ~8× faster using 64-bit union operations instead of byte-by-byte copying
+    
+    uint8_t* cached = moving ? jogModeMovingHeader : jogModeHeader;
+    
+    // Use 64-bit unions for fast memory operations
+    union {
+        uint8_t  bytes[8];
+        uint64_t qword;
+    } data;
+    
+    uint64_t* src64 = (uint64_t*)cached;
+    uint64_t* dst64 = (uint64_t*)_oled->buffer;
+    
+    // Copy 256 bytes in 32 operations (vs 256)
+    for (int i = 0; i < 32; i++) {  // 256 bytes / 8 = 32 iterations
+        dst64[i] = src64[i];
+    }
+    
+    // Mark as dirty for double buffering
+    #ifdef OLEDDISPLAY_DOUBLE_BUFFER
+    uint64_t* back64 = (uint64_t*)_oled->buffer_back;
+    data.qword = 0xFFFFFFFFFFFFFFFFULL;  // 8 bytes of 0xFF
+    
+    // Set dirty pattern in 32 operations (vs 256)  
+    for (int i = 0; i < 32; i++) {  // 256 bytes / 8 = 32 iterations
+        back64[i] = data.qword;
+    }
+    #endif
 }
 
 void OLED::wrapped_draw_string(int16_t y, const std::string& s, font_t font, bool setFont) {
@@ -1454,5 +1706,51 @@ void OLED::draw_checkbox(int16_t x, int16_t y, int16_t width, int16_t height, bo
         _oled->fillRect(x, y, width, height);  // If log.0
     } else {
         _oled->drawRect(x, y, width, height);  // If log.1
+    }
+}
+
+void OLED::set_comment(const char* text, bool is_m0) {
+    if (!text) return;
+    
+    if (is_m0) {
+        // Save for M0 display
+        _saved_m0_comment = text;
+        if (_saved_m0_comment.length() > 64) {
+            _saved_m0_comment = _saved_m0_comment.substr(0, 61) + "...";
+        }
+        _m0_comment_logged = false;  // Reset logging flag for new message
+    } else {
+        // Handle empty string as clear command
+        if (*text == '\0') {
+            _comment.clear();
+            _comment_countdown = 0;
+        } else {
+            // Set immediate display with countdown
+            _comment = text;
+            if (_comment.length() > 64) {
+                _comment = _comment.substr(0, 61) + "...";
+            }
+            _comment_countdown = 42;  // ~10.5 seconds at 4Hz
+        }
+    }
+}
+
+void OLED::clear_m0_comment() {
+    _saved_m0_comment.clear();
+    _m0_comment_logged = false;  // Reset logging flag
+}
+
+void OLED::process_clear_command() {
+    // Clear immediate comment if displayed
+    if (_comment_countdown > 0) {
+        _comment.clear();
+        _comment_countdown = 0;
+    }
+    
+    // Clear M0 comment if we're in M0 pause state
+    if (gc_state.modal.program_flow == ProgramFlow::Paused && 
+        sys.state == State::Hold) {
+        _saved_m0_comment.clear();
+        _m0_comment_logged = false;  // Reset logging flag
     }
 }

@@ -4,11 +4,21 @@
 #include "InputFile.h"
 
 #include "Report.h"
+#include "Protocol.h"
+#include "Machine/MachineConfig.h"  // config
+#include "GCode.h"  // For gc_clear_m0_comment()
 
 InputFile::InputFile(const char* defaultFs, const char* path, WebUI::AuthenticationLevel auth_level, Channel& out) :
     FileStream(path, "r", defaultFs), _auth_level(auth_level), _out(out), _line_num(0)  {
     log_info("Run file opened");  // Used by OLED for elapsed time
     gc_saw_program_end = false; // clear flag for truncated file checking
+    
+    // Clear comments when opening new file
+    if (config && config->_oled) {
+        config->_oled->set_comment("", false);  // Clear immediate
+        config->_oled->clear_m0_comment();      // Clear M0
+    }
+    gc_clear_m0_comment();  // Clear pending M0 comment
 }
 /*
   Read a line from the file
@@ -105,9 +115,20 @@ void InputFile::stopJob() {
 
 InputFile::~InputFile() {
     log_info("Run file closed");  // Used by OLED for elapsed time
+    
+    // Clear comments when closing file
+    if (config && config->_oled) {
+        config->_oled->set_comment("", false);  // Clear immediate
+        config->_oled->clear_m0_comment();      // Clear M0
+    }
+    gc_clear_m0_comment();  // Clear pending M0 comment
+    
     _progress = "";
 
     if(config->_oled){
+        // Wait for all motion to complete and state to become Idle
+        protocol_buffer_synchronize();
+        
         config->_oled->set_file_job_running(false);
         config->_oled->_menu->go_to_postrun_menu();
         // config->_oled->refresh_display();  // Makes sure we clear the elapsed time display

@@ -48,7 +48,7 @@ namespace Machine {
         int      _cycle             = -1;    // what auto-homing cycle does this axis home on?
         bool     _allow_single_axis = true;  // Allow use of $H<axis> command on this axis
         bool     _positiveDirection = true;
-        float    _mpos              = 0.0f;    // After homing this will be the mpos of the switch location
+        float    _mpos              = 0.0f;    // After homing this will be the mpos after pulloff is complete
         float    _feedRate          = 50.0f;   // pulloff and second touch speed
         float    _seekRate          = 200.0f;  // this first approach speed
         uint32_t _settle_ms         = 250;     // ms settling time for homing switches after motion

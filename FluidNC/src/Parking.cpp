@@ -20,6 +20,7 @@ void Parking::moveto(float* target) {
     log_debug("MOVE: target position =\t[ " << target[0] << " " << target[1] << " " << target[2] << " ]");
 
     if (plan_buffer_line(target, &plan_data)) {
+        sys.parkingInProgress = true;  // Mark parking in progress
         sys.step_control.executeSysMotion = true;
         sys.step_control.endMotion        = false;  // Allow parking motion to execute, if feed hold is active.
         Stepper::parking_setup_buffer();            // Setup step segment buffer for special parking motion case
@@ -28,11 +29,24 @@ void Parking::moveto(float* target) {
         do {
             protocol_exec_rt_system();
             if (sys.abort) {
+                sys.parkingInProgress = false;  // Clear flag on abort
                 return;
             }
         } while (sys.step_control.executeSysMotion);
         Stepper::parking_restore_buffer();  // Restore step segment buffer to normal run state.
+        sys.parkingInProgress = false;  // Clear flag when parking motion completes
     } else {
+        sys.parkingInProgress = false;  // Clear flag if planning not executed
+        
+        // Check if planning returned false because no motion was needed
+        float delta_x = target[0] - get_mpos()[0];
+        float delta_y = target[1] - get_mpos()[1]; 
+        float delta_z = target[2] - get_mpos()[2];
+        
+        if (abs(delta_x) < 0.001 && abs(delta_y) < 0.001 && abs(delta_z) < 0.001) {
+        } else {
+        }
+        
         sys.step_control.executeSysMotion = false;
         protocol_exec_rt_system();
     }
@@ -89,6 +103,8 @@ void Parking::set_target() {
 }
 
 void Parking::park(bool restart) {
+    // Clear any stale deferred pause request
+    sys.deferredPauseRequest = false;
 
     log_debug("PARK: INITIAL position =\t[ " << get_mpos()[0] << " " << get_mpos()[1] << " " << get_mpos()[2] << " ]");
 
@@ -149,8 +165,14 @@ void Parking::unpark(bool restart) {
     // Execute fast restore motion to the pull-out position. Parking requires homing enabled.
     // NOTE: State is will remain DOOR, until the de-energizing and retract is complete.
     if (can_park()) {
-        // Check to ensure the motion doesn't move below pull-out position.
-        if (parking_target[_axis] <= _target_mpos) {
+        // Recalculate correct retract position
+        if (!restart) {
+            retract_waypoint = restore_target[_axis] + _pullout;
+            retract_waypoint = MIN(retract_waypoint, _target_mpos);
+        }
+
+        // Check if we need to move to pull-out position (only if we're above it)
+        if (get_mpos()[_axis] > retract_waypoint) {
             log_debug("Parking return to pullout position");
             parking_target[_axis] = retract_waypoint;
             plan_data.feed_rate   = _rate;

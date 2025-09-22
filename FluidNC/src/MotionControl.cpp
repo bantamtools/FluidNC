@@ -376,6 +376,7 @@ void mc_override_ctrl_update(Override override_state) {
 // realtime abort command and hard limits. So, keep to a minimum.  Stuff that cannot be
 // done quickly is handled later when Protocol.cpp responds to rtReset.
 void mc_reset() {
+    sys.pauseRequested = false;  // Clear on system reset
     // Only this function can set the system reset. Helps prevent multiple kill calls.
     if (!rtReset) {
         rtReset = true;

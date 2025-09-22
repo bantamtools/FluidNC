@@ -73,6 +73,7 @@ namespace Machine {
         void unstep();
         void config_motors();
         void set_unhomed(){ _homed = false; };
+        bool hasRealHomingCycles() const;
 
         std::string maskToNames(AxisMask mask);
         bool        namesToMask(const char* names, AxisMask& mask);

@@ -38,6 +38,7 @@ parser_block_t gc_block;
 bool gc_saw_program_end; // for detecting premature file end
 
 std::string comment_msg;
+static char pending_m0_comment[65] = "";  // Static buffer for M0 comment (64 chars + null)
 
 #define FAIL(status) return (status);
 
@@ -45,11 +46,16 @@ void gc_init() {
     // Reset parser state:
     memset(&gc_state, 0, sizeof(parser_state_t));
     gc_saw_program_end = false;
+    pending_m0_comment[0] = '\0';  // Initialize as empty string
 
     // Load default G54 coordinate system.
     gc_state.modal.coord_select = CoordIndex::G54;
     gc_state.modal.override     = config->_start->_deactivateParking ? Override::Disabled : Override::ParkingMotion;
     coords[gc_state.modal.coord_select]->get(gc_state.coord_system);
+}
+
+void gc_clear_m0_comment() {
+    pending_m0_comment[0] = '\0';
 }
 
 // Sets g-code parser position in mm. Input in steps. Called by the system abort and hard
@@ -63,16 +69,84 @@ static void gcode_comment_msg(char* comment) {
     const size_t offset = 4;  // ignore "MSG_" part of comment
     size_t       index  = offset;
 
-    // our (Bantam) tool change comment do not have MSG, store entire string for display
-    //log_info("Saving GCode Comment..." << comment);
-    //strncpy(gc_comment, comment, maxLine);
-    // On second thought, passing strings rapidly via log channels seemed to run into race conditions and
-    //  hang the FW sometimes, so we're just gonna send the needed ones straight to OLED instead of using channels.
-    if (strstr(comment, "Tool") || strstr(comment, "CLEAR")) { // only send ones we care about
-        comment_msg = "[GCCMT:";
-        comment_msg += comment;
-        comment_msg += "]";
-        config->_oled->parse_gcode_comment_report(comment_msg);
+    // Skip leading whitespace
+    char* text = comment;
+    while (*text == ' ' || *text == '\t') text++;
+    
+    // Efficient switch-based comment routing for OLED
+    if (config && config->_oled) {
+        // Use first character for fast dispatch
+        switch (text[0]) {
+            case '!':
+                if (text[1] == '!') {
+                    // Use local pointer to avoid modifying text
+                    const char* content = text + 2;
+                    while (*content == ' ' || *content == '\t') content++;
+                    if (*content != '\0') {  // Only if non-empty
+                        config->_oled->set_comment(content, false);
+                    }
+                }
+                break;
+                
+            case '#':
+                if (text[1] == '#') {
+                    // M0 comment - save for later instead of setting immediately
+                    const char* content = text + 2;
+                    while (*content == ' ' || *content == '\t') content++;
+                    if (*content != '\0') {
+                        strncpy(pending_m0_comment, content, 64);
+                        pending_m0_comment[64] = '\0';  // Ensure null termination
+                        // If truncated, add ellipsis
+                        if (strlen(content) > 64) {
+                            strcpy(pending_m0_comment + 61, "...");
+                        }
+                        // DON'T call set_comment here anymore
+                    }
+                }
+                break;
+                
+            case 'I':
+                // Check for "Install Tool"
+                if (strncmp(text + 1, "nstall Tool", 11) == 0) {
+                    // M0 comment - save for later
+                    strncpy(pending_m0_comment, text, 64);
+                    pending_m0_comment[64] = '\0';  // Ensure null termination
+                    // If truncated, add ellipsis
+                    if (strlen(text) > 64) {
+                        strcpy(pending_m0_comment + 61, "...");
+                    }
+                    // DON'T call set_comment here anymore
+                }
+                break;
+                
+            case 'T':
+                // Check for "Toolchange"
+                if (strncmp(text + 1, "oolchange", 9) == 0) {
+                    // M0 comment - save for later
+                    strncpy(pending_m0_comment, text, 64);
+                    pending_m0_comment[64] = '\0';  // Ensure null termination
+                    // If truncated, add ellipsis
+                    if (strlen(text) > 64) {
+                        strcpy(pending_m0_comment + 61, "...");
+                    }
+                    // DON'T call set_comment here anymore
+                }
+                break;
+                
+            case 'C':
+                // Check for exact "CLEAR" only
+                if (text[1] == 'L' && text[2] == 'E' && 
+                    text[3] == 'A' && text[4] == 'R') {
+                    // Verify it's exactly "CLEAR" (nothing after except whitespace)
+                    const char* after = text + 5;
+                    while (*after == ' ' || *after == '\t') after++;
+                    if (*after == '\0') {
+                        // Let OLED handle what to clear based on its state
+                        config->_oled->process_clear_command();
+                    }
+                }
+                break;
+        }
     }
     // Also using comments to set some config vars dynamically
     if (strstr(comment, "Install Height")) {
@@ -166,35 +240,51 @@ static void gcode_comment_msg(char* comment) {
 // Edit GCode line in-place, removing whitespace and comments and
 // converting to uppercase
 void collapseGCode(char* line) {
-    // parenPtr, if non-NULL, is the address of the character after (
-    char* parenPtr = NULL;
+    // Track comment nesting depth instead of simple pointer
+    int parenDepth = 0;
+    char* commentStart = NULL;  // Points to start of outermost comment
+    
     // outPtr is the address where newly-processed characters will be placed.
-    // outPtr is alway less than or equal to inPtr.
+    // outPtr is always less than or equal to inPtr.
     char* outPtr = line;
     char  c;
+    
     for (char* inPtr = line; (c = *inPtr) != '\0'; inPtr++) {
         if (isspace(c)) {
             continue;
         }
         switch (c) {
             case ')':
-                if (parenPtr) {
-                    // Terminate comment by replacing ) with NUL
-                    *inPtr = '\0';
-                    gcode_comment_msg(parenPtr);
-                    parenPtr = NULL;
+                if (parenDepth > 0) {
+                    parenDepth--;
+                    if (parenDepth == 0) {
+                        // Exiting outermost comment - process it
+                        *inPtr = '\0';  // Temporary termination for comment processing
+                        gcode_comment_msg(commentStart);
+                        commentStart = NULL;
+                    }
+                    // If still inside nested comment (parenDepth > 0), continue skipping
                 }
-                // Strip out ) that does not follow a (
+                // If parenDepth was 0, this is an unmatched ), ignore it
                 break;
             case '(':
-                // Start the comment at the character after (
-                parenPtr = inPtr + 1;
+                if (parenDepth == 0) {
+                    // Starting outermost comment
+                    commentStart = inPtr + 1;
+                }
+                parenDepth++;
+                // If already in comment (parenDepth > 1), just increment and continue skipping
                 break;
             case ';':
                 // NOTE: ';' comment to EOL is a LinuxCNC definition. Not NIST.
-                // gcode_comment_msg(inPtr + 1);
-                *outPtr = '\0';
-                return;
+                // Semicolon comments take precedence over parenthesis comments
+                if (parenDepth == 0) {
+                    // Only process ; comment if not inside parentheses
+                    *outPtr = '\0';
+                    return;
+                }
+                // If inside parentheses, ; is just part of the comment
+                break;
             case '%':
                 // TODO: Install '%' feature
                 // Program start-end percent sign NOT SUPPORTED.
@@ -202,20 +292,27 @@ void collapseGCode(char* line) {
                 // where, during a program, the system auto-cycle start will continue to execute
                 // everything until the next '%' sign. This will help fix resuming issues with certain
                 // functions that empty the planner buffer to execute its task on-time.
+                if (parenDepth == 0) {
+                    // Only process % when not inside comment
+                    // For now, we ignore % characters
+                }
                 break;
             case '\r':
-                // In case one sneaks in
+                // In case one sneaks in - always ignore
                 break;
             default:
-                if (!parenPtr) {
+                if (parenDepth == 0) {
+                    // Not inside any comment - add to output
                     *outPtr++ = toupper(c);  // make upper case
                 }
+                // If inside comment (parenDepth > 0), skip this character
         }
     }
+    
     // On loop exit, *inPtr is '\0'
-    if (parenPtr) {
-        // Handle unterminated ( comments
-        gcode_comment_msg(parenPtr);
+    if (parenDepth > 0 && commentStart) {
+        // Handle unterminated parenthesis comment(s)
+        gcode_comment_msg(commentStart);
     }
     *outPtr = '\0';
 }
@@ -1743,6 +1840,13 @@ Error gc_execute_line(char* line) {
             break;
         case ProgramFlow::Paused:
             protocol_buffer_synchronize();  // Sync and finish all remaining buffered motions before moving on.
+            
+            // Set the M0 comment in OLED after motions complete
+            if (pending_m0_comment[0] != '\0' && config && config->_oled) {
+                config->_oled->set_comment(pending_m0_comment, true);
+                pending_m0_comment[0] = '\0';  // Clear after use
+            }
+            
             if (sys.state != State::CheckMode) {
                 protocol_send_event(&feedHoldEvent, false);
                 protocol_execute_realtime();  // Execute suspend.

@@ -308,10 +308,6 @@ namespace Machine {
         }
         // Add future machine type checks here
         
-        // Rebuild menu after machine type is determined
-        if (_oled && _oled->_menu) {
-            _oled->_menu->rebuild();
-        }
     }
 
     // const char defaultConfig[] = "name: Default (Test Drive)\nboard: None\n";

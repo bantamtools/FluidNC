@@ -9,7 +9,7 @@ class Menu : public List {
 
 private:
 
-    ListType *_main_menu, *_files_menu, *_jogging_menu, *_rss_menu, *_settings_menu, *_version_menu, *_run_menu, *_postrun_menu, *_current_menu, *_firmware_menu, *_config_menu, *_confirm_menu;
+    ListType *_main_menu, *_files_menu, *_jogging_menu, *_rss_menu, *_settings_menu, *_version_menu, *_run_menu, *_postrun_menu, *_current_menu, *_firmware_menu, *_config_menu, *_confirm_menu, *_homing_choice_menu;
     std::string _recent_file_path;
     std::string _recent_file_name;
     bool _recent_file_is_new_upload;
@@ -30,11 +30,14 @@ public:
     bool is_home_menu();
     bool is_run_menu();
     bool is_settings_menu();
+    bool is_jogging_menu();
     bool is_version_menu();
     bool is_postrun_menu();
     bool is_firmware_menu();
     bool is_config_menu();
     bool is_confirm_menu();
+    bool is_homing_choice_menu();
+    bool should_clear_on_entry(ListType* menu);
     void connect_rss_feed(ListType *feed);
     void print_current_menu();
 
@@ -57,10 +60,12 @@ public:
     void return_to_run_menu();
     void go_to_postrun_menu();
     void go_to_files_menu();
+    void go_to_homing_choice_menu();
     void update_selection(int max_active_entries, int enc_diff);
     bool is_full_width();
     void rebuild();
 
     ListType* firmware_menu() { return _firmware_menu; };
     ListType* config_menu() { return _config_menu; };
+    const char* get_current_menu_title();
 };

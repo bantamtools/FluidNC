@@ -49,6 +49,9 @@ struct system_t {
     Percent        spindle_speed_ovr;  // Spindle speed value in percent
     Override       override_ctrl;      // Tracks override control states.
     SpindleSpeed   spindle_speed;
+    bool           pauseRequested;     // Indicates user has requested pause (immediate feedback)
+    bool           parkingInProgress;     // True when parking motion is active  
+    bool           deferredPauseRequest;  // Pause request deferred during parking
 };
 extern system_t sys;
 

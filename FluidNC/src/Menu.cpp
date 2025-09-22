@@ -17,6 +17,7 @@ Menu::Menu() {
     _firmware_menu = new struct ListType;
     _config_menu = new struct ListType;
     _confirm_menu = new struct ListType;
+    _homing_choice_menu = new struct ListType;
     // _fw_update_menu = new struct ListType;
 
     // Initialize the menus
@@ -30,9 +31,23 @@ Menu::Menu() {
     init(_firmware_menu, _settings_menu);
     init(_config_menu, _settings_menu);
     init(_confirm_menu, _settings_menu);
+    init(_homing_choice_menu, _jogging_menu);
 
     // Set main menu as current
     _current_menu = _main_menu;
+
+    // Initialize menu titles
+    strcpy(_main_menu->title, "Main Menu");
+    strcpy(_files_menu->title, "Select G-code file");
+    strcpy(_settings_menu->title, "Settings");
+    strcpy(_jogging_menu->title, "Jog mode");
+    strcpy(_version_menu->title, "Version");
+    strcpy(_postrun_menu->title, "Plot Complete");
+    strcpy(_firmware_menu->title, "Update Firmware");
+    strcpy(_config_menu->title, "Update Config");
+    strcpy(_confirm_menu->title, "Confirm");
+    strcpy(_homing_choice_menu->title, "Machine Not Homed");
+    strcpy(_run_menu->title, "Run Menu");
 
     _recent_file_is_new_upload = false;
 
@@ -57,6 +72,7 @@ Menu::~Menu() {
     remove_entries(_main_menu);
     remove_entries(_postrun_menu);
     remove_entries(_confirm_menu);
+    remove_entries(_homing_choice_menu);
 
     // Deallocate memory for the menus
     delete(_version_menu);
@@ -69,6 +85,7 @@ Menu::~Menu() {
     delete(_main_menu);
     delete(_postrun_menu);
     delete(_confirm_menu);
+    delete(_homing_choice_menu);
 }
 
 // Returns true if the current menu is the files menu
@@ -90,6 +107,9 @@ bool Menu::is_run_menu(void) {
 bool Menu::is_settings_menu(void) {
     return (_current_menu == _settings_menu);
 }
+bool Menu::is_jogging_menu(void) {
+    return (_current_menu == _jogging_menu);
+}
 bool Menu::is_version_menu(void) {
     return (_current_menu == _version_menu);
 }
@@ -104,6 +124,16 @@ bool Menu::is_config_menu(void){
 }
 bool Menu::is_confirm_menu(void) {
     return (_current_menu == _confirm_menu);
+}
+bool Menu::is_homing_choice_menu(void) {
+    return (_current_menu == _homing_choice_menu);
+}
+
+bool Menu::should_clear_on_entry(ListType* menu) {
+    // Clear screen when entering these menu types to eliminate display artifacts
+    return (menu == _jogging_menu ||     // Jogging menu has real-time position updates
+            menu == _settings_menu ||    // Settings menu benefits from clean slate
+            menu == _files_menu);        // File menu benefits from clean slate
 }
 
 // Connects the RSS feed to the menu system
@@ -136,6 +166,14 @@ void Menu::print_current_menu() {
     } else {
         log_info("Some other menu");
     }
+}
+
+const char* Menu::get_current_menu_title() {
+    if (_current_menu && _current_menu->title[0] != '\0') {
+        return _current_menu->title;
+    }
+    // Fallback for any menu without a title
+    return "Menu";
 }
 
 // Returns the active menu head
@@ -172,6 +210,16 @@ void Menu::enter_submenu(void) {
 
         // Make the submenu active
         _current_menu = selected_entry->child;      
+
+        // Clear screen for certain menu types to eliminate display artifacts
+        if (should_clear_on_entry(_current_menu) && config->_oled) {
+            config->_oled->clear();
+        }
+
+        // Special handling for jog menu - show initial header
+        if (_current_menu == _jogging_menu && config->_oled) {
+            config->_oled->showJogHeaderFast(false);  // Show "Jog mode" header
+        }
 
         // Special case for files list, select first file instead of "Back"
         if (is_files_menu()) {
@@ -229,6 +277,13 @@ void Menu::go_to_files_menu() {
         config->_oled->refresh_display();
     }
 }
+
+void Menu::go_to_homing_choice_menu() {
+    _current_menu = _homing_choice_menu;
+    if(config->_oled){
+        config->_oled->refresh_display();
+    }
+}
  
 // Helper function to return the active tail
 struct ListNodeType *Menu::get_active_tail(ListType *menu, int max_active_entries) {
@@ -276,6 +331,11 @@ ListType* Menu::add_directory(char *path, bool isBin, bool isCfg) {
         token_copy[0] = '\0'; // clear any data from previous loop
         strncat(token_copy, token, 76);
         strncat(token_copy, "/", 2); // append '/' to folder name in menu
+        
+        // Save the current folder name for potential title use
+        char folder_name[80];
+        strncpy(folder_name, token, 79);
+        folder_name[79] = '\0';
 
         for (ListNodeType *entry = current_menu->head; entry != NULL; entry = entry->next) {
             if (strcmp(entry->display_name, token_copy) == 0 && entry->child != NULL) {
@@ -292,6 +352,8 @@ ListType* Menu::add_directory(char *path, bool isBin, bool isCfg) {
         if (!found && token != NULL) { // only make new menu if we're not at the file at the end
             ListType *new_menu = new ListType;
             init(new_menu, current_menu);
+            // Set folder name as title (without trailing slash)
+            strcpy(new_menu->title, folder_name);
             // Add a "Back" button at the start of each new submenu
             prep(new_menu);
 //            log_info("Adding menu entry for folder: " << token_copy);
@@ -389,9 +451,63 @@ void Menu::build(void) {
 
     // Jogging Menu
     add_entry(_jogging_menu, NULL, NULL, "< Back");
-    add_entry(_jogging_menu, NULL, NULL, "Jog X");
-    add_entry(_jogging_menu, NULL, NULL, "Jog Y");
-    add_entry(_jogging_menu, NULL, NULL, "Jog Z");
+    
+    // Add jog entries for configured axes (limit to 3 for display)
+    if (config && config->_axes && config->_axes->_numberAxis > 0) {
+        int jog_entries = 0;
+        
+        // Define preferred axis order per machine type
+        int axis_order[3];
+        switch (config->getMachineType()) {
+            case Machine::MachineType::EggBot:
+                // EggBot: A (egg), B (pen), Z (lift)
+                axis_order[0] = A_AXIS;
+                axis_order[1] = B_AXIS; 
+                axis_order[2] = Z_AXIS;
+                break;
+                
+            // Add future machine types here:
+            // case Machine::MachineType::FutureMachine:
+            //     axis_order[0] = ?_AXIS;
+            //     axis_order[1] = ?_AXIS;
+            //     axis_order[2] = ?_AXIS;
+            //     break;
+                
+            default:
+                // Default for all other machines: X, Y, Z
+                axis_order[0] = X_AXIS;
+                axis_order[1] = Y_AXIS;
+                axis_order[2] = Z_AXIS;
+                break;
+        }
+        
+        // Add jog entries in preferred order
+        for (int i = 0; i < 3 && jog_entries < 3; i++) {
+            int axis_idx = axis_order[i];
+            if (axis_idx < config->_axes->_numberAxis && 
+                config->_axes->_axis[axis_idx] && 
+                config->_axes->_axis[axis_idx]->_motors[0] && 
+                config->_axes->_axis[axis_idx]->_motors[0]->isReal()) {
+                
+                char jog_text[10];
+                snprintf(jog_text, sizeof(jog_text), "Jog %c", config->_axes->axisName(axis_idx));
+                add_entry(_jogging_menu, NULL, NULL, jog_text);
+                jog_entries++;
+            }
+        }
+        
+        // If no axes were added, fall back to defaults
+        if (jog_entries == 0) {
+            add_entry(_jogging_menu, NULL, NULL, "Jog X");
+            add_entry(_jogging_menu, NULL, NULL, "Jog Y");
+            add_entry(_jogging_menu, NULL, NULL, "Jog Z");
+        }
+    } else {
+        // Fallback to default axes if config not ready
+        add_entry(_jogging_menu, NULL, NULL, "Jog X");
+        add_entry(_jogging_menu, NULL, NULL, "Jog Y");
+        add_entry(_jogging_menu, NULL, NULL, "Jog Z");
+    }
 
     // Files Menu
     add_entry(_files_menu, NULL, NULL, "< Back");
@@ -401,7 +517,7 @@ void Menu::build(void) {
     //add_entry(_settings_menu, NULL, NULL, "Update");  // WebUI already includes OTA functionality
     add_entry(_settings_menu, _version_menu, NULL, "Version");
     add_entry(_settings_menu, _confirm_menu, NULL, "Reset Factory Settings");
-    add_entry(_settings_menu, _jogging_menu, NULL, "Jogging");
+    add_entry(_settings_menu, _jogging_menu, NULL, "Jog mode");
 //    add_entry(_settings_menu, NULL, NULL, "WiFi Info");  // off for initial public release
 /*    if( WebUI::wifi_mode->get() != 0 ) { //WebUI::WiFiStartupMode::WiFiOff // temp disabled due to plotting bug
         add_entry(_settings_menu, _jogging_menu, NULL, "Turn WiFi OFF");
@@ -424,6 +540,10 @@ void Menu::build(void) {
     // confirmation for factory reset
     add_entry(_confirm_menu, NULL, NULL, "Cancel Factory Reset");
     add_entry(_confirm_menu, NULL, NULL, "Confirm Factory Reset");
+    
+    // homing choice menu entries
+    add_entry(_homing_choice_menu, NULL, NULL, "< Back");
+    add_entry(_homing_choice_menu, NULL, NULL, "Run Homing");
     
     // Version Menu
     char bantam_ver_str[LIST_NAME_MAX_STR] = {"FW Version: "};
@@ -462,6 +582,7 @@ void Menu::rebuild(void) {
     remove_entries(_firmware_menu);
     remove_entries(_config_menu);
     remove_entries(_confirm_menu);
+    remove_entries(_homing_choice_menu);
     
     // Rebuild the menu structure with current config
     build();

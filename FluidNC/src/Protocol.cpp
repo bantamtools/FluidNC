@@ -92,7 +92,6 @@ void protocol_reset() {
 
 static int32_t idleEndTime = 0;
 
-static uint32_t enterStartTime = 0;
 
 /*
   PRIMARY LOOP:
@@ -217,7 +216,12 @@ void polling_loop(void* unused) {
         }
 
         // Read ultrasonic sensor
-        protocol_read_ultrasonic();
+        // protocol_read_ultrasonic(); // DISABLED 2025-08-29 --WHO.
+        
+        // Process display refresh if needed
+        if (config->_oled) {
+            config->_oled->processDisplayRefresh();
+        }
 
         if (activeChannel) {
             // Poll for realtime characters when waiting for the primary loop
@@ -567,6 +571,8 @@ static void protocol_start_holding() {
         }
         sys.step_control.executeHold = true;  // Initiate suspend state with active flag.
     }
+    // log_info("protocol_start_holding");
+    // config->_oled->refresh_display();  // Update display to show "Pausing" message
 }
 
 static void protocol_cancel_jogging() {
@@ -621,6 +627,20 @@ static void protocol_do_motion_cancel() {
 static void protocol_do_feedhold(void *arg) {
 
     bool sync = (bool)arg;
+    
+    // Set flag immediately for user feedback (State::Cycle is the internal name for "Run")
+    if (sys.state == State::Cycle || sys.state == State::Jog) {
+        sys.pauseRequested = true;
+    }
+    
+    log_info("Feedhold process initiated");
+    
+    // Block feedhold during parking operations only
+    if (sys.parkingInProgress) {
+        log_info("Feedhold deferred during parking operation");
+        sys.deferredPauseRequest = true;
+        return;  // Defer feedhold
+    }
 
     // Sync buffers before feedholding if requested
     if (sync) {
@@ -631,6 +651,7 @@ static void protocol_do_feedhold(void *arg) {
         runLimitLoop = false;  // Hack to stop show_limits()
         return;
     }
+
     // log_debug("protocol_do_feedhold " << state_name());
     // Execute a feed hold with deceleration, if required. Then, suspend system.
     switch (sys.state) {
@@ -653,6 +674,8 @@ static void protocol_do_feedhold(void *arg) {
             break;
 
         case State::Cycle:
+            sys.state = State::Hold;  // Set state BEFORE starting deceleration
+            config->_oled->refresh_display();  // Immediately update OLED to show "Pausing"
             protocol_start_holding();
             break;
 
@@ -661,7 +684,10 @@ static void protocol_do_feedhold(void *arg) {
             protocol_cancel_jogging();
             return;  // Do not change the state to Hold
     }
-    sys.state = State::Hold;
+    // State::Cycle now sets state above, other cases fall through to here
+    if (sys.state != State::Hold) {
+        sys.state = State::Hold;
+    }
 }
 
 static void protocol_do_safety_door() {
@@ -765,6 +791,17 @@ static void protocol_do_initiate_cycle() {
     if ((pb = plan_get_current_block()) && !sys.suspend.bit.motionCancel) {
         sys.suspend.value = 0;  // Break suspend state.
         sys.state         = pb->is_jog ? State::Jog : State::Cycle;
+        
+        // Clear any deferred pause when resuming motion
+        if (sys.deferredPauseRequest) {
+            log_info("Cleared stale deferred pause on resume to " << state_name());
+            sys.deferredPauseRequest = false;
+        }
+        
+        // Clear "Resuming..." message now that motion is actually starting
+        if (config && config->_oled) {
+            config->_oled->set_comment("", false);  // Clear comment
+        }
         Stepper::prep_buffer();  // Initialize step segment buffer before beginning cycle.
         Stepper::wake_up();
     } else {  // Otherwise, do nothing. Set and resume IDLE state.
@@ -783,6 +820,7 @@ static void protocol_initiate_homing_cycle() {
 }
 
 static void protocol_do_cycle_start() {
+    sys.pauseRequested = false;  // Clear when resuming
     // log_debug("protocol_do_cycle_start " << state_name());
     // Execute a cycle start by starting the stepper interrupt to begin executing the blocks in queue.
 
@@ -812,9 +850,17 @@ static void protocol_do_cycle_start() {
                 } else {
                     // Unpark before resuming if needed
                     if ((config->_parking->park_on_feedhold()) && (sys.suspend.bit.retractComplete)) {
+                        // Clear M0 comment when initiating restore (parking path)
+                        if (config && config->_oled) {
+                            config->_oled->clear_m0_comment();
+                        }
                         sys.suspend.bit.initiateRestore = true;
                     // Otherwise, resume
                     } else {
+                        // Clear M0 comment when resuming
+                        if (config && config->_oled) {
+                            config->_oled->clear_m0_comment();
+                        }
                         protocol_do_initiate_cycle();
                     }
                 }
@@ -875,8 +921,15 @@ void protocol_do_cycle_stop() {
                 // Hold complete. Set to indicate ready to resume.  Remain in HOLD or DOOR states until user
                 // has issued a resume command or reset.
                 plan_cycle_reinitialize();
-                if (sys.step_control.executeHold) {
+if (sys.step_control.executeHold) {
                     sys.suspend.bit.holdComplete = true;
+                    // Force status report to update OLED with Hold:0 state
+                    report_realtime_status(allChannels);
+                } else {
+                    // This is likely parking motion completing - send status report to update OLED
+                    if (sys.state == State::Hold && sys.suspend.bit.holdComplete) {
+                        report_realtime_status(allChannels);
+                    }
                 }
                 sys.step_control.executeHold      = false;
                 sys.step_control.executeSysMotion = false;
@@ -1056,7 +1109,10 @@ static void protocol_exec_rt_suspend() {
                     config->_parking->park(sys.suspend.bit.restartRetract);
 
                     sys.suspend.bit.retractComplete = true;
-                    sys.suspend.bit.restartRetract  = false;  
+                    sys.suspend.bit.restartRetract  = false;
+
+                    // Send status report to update OLED after parking completes
+                    report_realtime_status(allChannels);
 
                     if (config->_control->enter_locked()) {
                         config->_control->unlock_enter();
@@ -1093,8 +1149,20 @@ static void protocol_exec_rt_suspend() {
                         if (!sys.suspend.bit.restartRetract && 
                             ((sys.state == State::SafetyDoor && !sys.suspend.bit.safetyDoorAjar) ||
                              (sys.state == State::Hold && config->_parking->park_on_feedhold()))) {
-                            sys.state = State::Idle;
-                            protocol_send_event(&cycleStartEvent);  // Resume program.
+                            // Check deferred pause BEFORE resuming to prevent motion corruption
+                            if (sys.deferredPauseRequest) {
+                                log_info("Deferred pause after unparking - re-parking immediately");
+                                sys.deferredPauseRequest = false;
+                                
+                                // Re-park with original position preserved
+                                config->_parking->park(true);  // true = keep original restore position
+                                
+                                // Stay in Hold:0 - no state change, no resume
+                            } else {
+                                // Only resume if no deferred pause
+                                sys.state = State::Idle;
+                                protocol_send_event(&cycleStartEvent);  // Resume program
+                            }
                         }
                     }
                 }
@@ -1220,29 +1288,87 @@ static void protocol_do_card_detect(void* arg) {
 }
 
 static void protocol_do_enter() {
-    log_info("Protocol Do Enter");
+    log_info("Button press detected");
+    
+    // Check if parking is in progress
+    if (sys.parkingInProgress) {
+        log_info("Button dismissed during parking operation");
+        if (sys.state == State::Cycle) {
+            sys.deferredPauseRequest = true;
+            log_info("Pause request deferred until after parking completes");
+        }
+        return;  // Dismiss button press
+    }
 
-    // config->_oled->_menu->print_current_menu();
-    bool long_press = false;
-
-    // Bail if enter button locked out
+    // Bail if enter button locked out (prevents duplicates)
     if (config->_control->enter_locked()) {
         log_info("Enter Locked, exiting protocol");
         return;
     }
 
-    // Measure enter press and flag if long press
-    enterStartTime = millis();
-    while (config->_control->enter_pressed() && ((millis() - enterStartTime) < config->_control->_long_press_ms)) {
-        delay_ms(10);
+    if (sys.state == State::Cycle) {
+        
+        // Normal user pause - no M0 pending
+        config->_control->lock_enter();  // Prevent duplicate feedhold events
+        sys.pauseRequested = true;        // Set flag for immediate feedback
+        protocol_send_event(&feedHoldEvent, true); // True -> Exhaust queue, do not decelerate
+        log_info("Pause requested during cycle");
+        return;
     }
-    if ((millis() - enterStartTime) >= config->_control->_long_press_ms) {
-        long_press = true;
+    
+    if (sys.state == State::Hold && !sys.suspend.bit.holdComplete) {
+        // Hold:1 (still decelerating) - ignore button
+        log_info("Button pressed during deceleration - ignored");
+        return;
     }
-
-    // Enter released, process state changes
+    
+    if (sys.state == State::Hold && sys.suspend.bit.holdComplete) {
+        // Hold:0 - machine stopped, safe to block
+        // If we're here, button was definitely released after pause (edge-triggered)
+        log_info("Button pressed in Hold:0 - checking for long press");
+        
+        // Check if parking is in progress - CRITICAL FIX
+        if (sys.parkingInProgress) {
+            log_info("Button dismissed during parking operation (Hold:0 state)");
+            sys.deferredPauseRequest = true;
+            log_info("Resume request deferred until after parking completes");
+            return;  // Dismiss button press
+        }
+        
+        uint32_t threshold = millis() + config->_control->_long_press_ms;
+        
+        // Block while button held (safe - machine is stopped)
+        while (config->_control->enter_pressed() && millis() < threshold) {
+            delay_ms(10);
+        }
+        
+        if (millis() >= threshold) {
+            // Long press - Cancel
+            log_info("Cancel requested during hold");
+            // Only mark as unhomed if the machine has real homing capability
+            if (config->_axes->hasRealHomingCycles()) {
+                config->_axes->set_unhomed();
+            }
+            protocol_send_event(&resetEvent);
+        } else {
+            // Short press - Resume
+            log_info("Resume requested during hold");
+            // Show "Resuming..." message immediately if parking is enabled
+            if (config && config->_oled && config->_parking && config->_parking->park_on_feedhold()) {
+                config->_oled->set_comment("Resuming...", false);
+            }
+            config->_control->lock_enter();
+            protocol_send_event(&cycleStartEvent);
+            protocol_execute_realtime();
+            if (config->_control->enter_locked()) {
+                config->_control->unlock_enter();
+            }
+        }
+        return;
+    }
+    
+    // Handle other states with existing switch statement
     switch (sys.state) {
-
         case State::ConfigAlarm:
             // Handle recovery config loading
             if (config && config->_oled && config->_oled->showing_popup()) {
@@ -1257,43 +1383,6 @@ static void protocol_do_enter() {
         case State::Homing:
         case State::Sleep:
         case State::SafetyDoor:
-            break;
-
-        // Feedhold / cancel during a cycle
-        case State::Cycle:
-
-            // Long press, cancel job
-            if (long_press) {
-                config->_axes->set_unhomed();
-                // config->_oled->_menu->print_current_menu();
-                protocol_send_event(&resetEvent);
-                log_info("Long press in do_enter_cycle");
-            // Click / short press, feedhold job
-            } else {
-                config->_control->lock_enter();
-                protocol_send_event(&feedHoldEvent, true);  // Sync before before feedholding
-            }
-            break;
-
-        // Resume / cancel during a feedhold
-        case State::Hold:
-
-            // Cycle start / cancel when IDLE or hold is complete and ready to resume.
-            if (sys.suspend.bit.holdComplete) {
-
-                 // Long press, cancel job
-                if (long_press) {
-                    protocol_send_event(&resetEvent);
-                } else {
-                    // log_info("Short press in do_enter_hold");
-                    config->_control->lock_enter();
-                    protocol_send_event(&cycleStartEvent);
-                    protocol_execute_realtime();
-                    if (config->_control->enter_locked()) {
-                        config->_control->unlock_enter();
-                    }
-                }
-            }
             break;
 
         // Clear alarm when in ALARM state
@@ -1354,15 +1443,15 @@ static void protocol_do_enter() {
                         settings_execute_startup();
                     }
 
-                // Jog command
-                } else if (strstr(config->_oled->_menu->get_selected()->display_name, "Jog ")) {
+                // Jog command (Jog X, Jog Y, Jog Z - single letter after "Jog ")
+                } else if (strlen(config->_oled->_menu->get_selected()->display_name) == 5 &&
+                          strstr(config->_oled->_menu->get_selected()->display_name, "Jog ")) {
 
-                    // Display homing error if try to jog unhomed
-                    if (!config->_axes->_homed) {
-
-                        // Display error
-                        config->_oled->popup_msg("Machine not homed");
-
+                    // Check if machine needs homing
+                    if (!config->_axes->_homed && config->_axes->hasRealHomingCycles()) {
+                        // Show homing choice menu (acts as modal popup over jogging menu)
+                        config->_oled->_menu->go_to_homing_choice_menu();
+                        
                     } else {
 
                         char axis = (strrchr(config->_oled->_menu->get_selected()->display_name, ' ') + 1)[0];
@@ -1389,6 +1478,34 @@ static void protocol_do_enter() {
                 } else if (strcmp(config->_oled->_menu->get_selected()->display_name, "Cancel Factory Reset") == 0) {
                     // Just treat this like a back button
                     config->_oled->_menu->exit_submenu();
+
+                // Handle homing choice menu
+                } else if (config->_oled->_menu->is_homing_choice_menu()) {
+                    
+                    if (strcmp(config->_oled->_menu->get_selected()->display_name, "< Back") == 0) {
+                        // Return to jogging menu (parent set during menu initialization)
+                        config->_oled->_menu->exit_submenu();
+                        // Force clean redraw of jogging menu
+                        config->_oled->clear();
+                        config->_oled->refresh_display();
+                        
+                    } else if (strcmp(config->_oled->_menu->get_selected()->display_name, "Run Homing") == 0) {
+                        // Display "Homing..." message
+                        config->_oled->show_persistent_msg("Homing...");
+                        
+                        // Start homing and block until complete
+                        Machine::Homing::run_cycles(Machine::Homing::AllCycles);
+                        do {
+                            protocol_execute_realtime();
+                        } while (sys.state == State::Homing);
+                        
+                        // Clear message and return to jogging menu
+                        config->_oled->clear_popup();
+                        config->_oled->_menu->exit_submenu();
+                        // Force clean redraw of jogging menu
+                        config->_oled->clear();
+                        config->_oled->refresh_display();
+                    }
                 
                 // Wifi commands
                 } else if (strcmp(config->_oled->_menu->get_selected()->display_name, "WiFi Info") == 0) {
@@ -1491,7 +1608,7 @@ static void protocol_do_enter() {
                     // back button specifically from post-run menu, go back to run menu
                     config->_oled->_menu->return_to_run_menu();
                 // Back button
-                } else if ((strcmp(config->_oled->_menu->get_selected()->display_name, "< Back") == 0) || long_press) {
+                } else if (strcmp(config->_oled->_menu->get_selected()->display_name, "< Back") == 0) {
                     config->_oled->_menu->exit_submenu();
                 // install FW if firmware menu
                 } else if(config->_oled->_menu->is_firmware_menu()) {

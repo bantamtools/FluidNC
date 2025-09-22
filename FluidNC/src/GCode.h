@@ -306,8 +306,14 @@ enum class AxisCommand : uint8_t {
 // Initialize the parser
 void gc_init();
 
+// Clear pending M0 comment
+void gc_clear_m0_comment();
+
 // Execute one block of rs275/ngc/g-code
 Error gc_execute_line(char* line);
+
+// Edit GCode line in-place, removing whitespace and comments and converting to uppercase
+void collapseGCode(char* line);
 
 // Set g-code parser position. Input in steps.
 void gc_sync_position();

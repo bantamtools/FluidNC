@@ -13,6 +13,9 @@
 #define JOG_X_STEP              1.0
 #define JOG_Y_STEP              1.0
 #define JOG_Z_STEP              0.5
+#define JOG_A_STEP              1.0
+#define JOG_B_STEP              1.0
+#define JOG_C_STEP              0.5
 #define JOG_TIMER_MS            250
 #define JOG_FEEDRATE            1000.0
 
@@ -68,6 +71,8 @@ private: // AIDAN
 
     std::string _comment;
     int _comment_countdown = 0;
+    std::string _saved_m0_comment;     // M0 pause comment storage
+    bool _m0_comment_logged = false;   // Track if current M0 message was logged
 
     std::string _file_awaiting_homing;
 
@@ -78,11 +83,25 @@ private: // AIDAN
     int _enc_diff = 0;
     bool _enc_scroll_lockout = true;
 
+    uint16_t _last_state_width = 0;  // Pixel width of last state text displayed
+
 	bool _startupConfigWarning = false;
 
     bool _popup = false;
 
     bool _motors_on = true; // to track toggle for EggBot; assume motors powered on startup
+
+    bool _pause_requested = false;  // Tracks if pause has been requested
+    
+    // Display refresh timing
+    uint32_t _next_refresh_ms = 0;
+    static constexpr uint32_t REFRESH_INTERVAL_MS = 50;  // 20 Hz
+
+    // Pre-rendered header buffers for jog mode
+    uint8_t jogModeHeader[256];        // "Jog mode" cached
+    uint8_t jogModeMovingHeader[256];  // "Jog mode ... - moving -" cached  
+    uint8_t blankHeaderWithSeparator[256];  // Clear header + separator template
+    bool headersInitialized = false;
 
     int _header_height = 15;
 
@@ -121,6 +140,13 @@ private: // AIDAN
     uint8_t font_width(font_t font);
     uint8_t font_height(font_t font);
     size_t  char_width(char s, font_t font);
+    uint16_t calculate_text_width(const std::string& text, font_t font);
+    void show_state_text(const std::string& text);
+    void clearScreenFast();
+    void clearContentAreaFast();
+    void clearLowerContentFast();
+    void clearHeaderWithSeparator();    // Fast clear header + separator using cached template
+    void initJogHeaders();              // Initialize cached headers
 
     OLEDDISPLAY_GEOMETRY _geometry = GEOMETRY_128_64;
 
@@ -139,10 +165,13 @@ public:
 
     void init();
     void refresh_display(bool menu_only = false);
+    void processDisplayRefresh();  // Process deferred display updates
+    void clear();
     void popup_msg(std::string msg, int dly = 2000);
     JogState get_jog_state();
     void set_jog_state(JogState);
     bool is_active();
+    void showJogHeaderFast(bool moving); // Fast header swap for jog mode
 
 	void render_icon_menu();
 	void show_home_layout(int hightlight = 2);
@@ -164,6 +193,10 @@ public:
 
 	// public version so we can call straight from GCode.cpp without using logging/channels
     void parse_gcode_comment_report(std::string report);
+    
+    void set_comment(const char* text, bool is_m0);  // Set either type of comment
+    void clear_m0_comment();                         // Clear M0 comment on button press
+    void process_clear_command();                    // Handle CLEAR based on current state
 
 	// add method to assert _oled->buffer[-1] == 0x40;
 	void printBufferControl(){

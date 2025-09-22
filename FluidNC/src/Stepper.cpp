@@ -121,6 +121,11 @@ typedef struct {
 } st_prep_t;
 static st_prep_t prep;
 
+// Pause state storage for parking resume functionality
+static pause_state_t pause_state;
+static portMUX_TYPE stepper_spinlock = portMUX_INITIALIZER_UNLOCKED;
+
+
 /* "The Stepper Driver Interrupt" - This timer interrupt is the workhorse, employing
    the venerable Bresenham line algorithm to manage and exactly synchronize multi-axis moves.
    Unlike the popular DDA algorithm, the Bresenham algorithm is not susceptible to numerical
@@ -313,6 +318,8 @@ void Stepper::reset() {
     // Initialize stepper algorithm variables.
     memset(&prep, 0, sizeof(st_prep_t));
     memset(&st, 0, sizeof(stepper_t));
+    sys.parkingInProgress = false;     // Clear parking flag
+    sys.deferredPauseRequest = false;  // Clear deferred pause flag
     st.exec_segment     = NULL;
     pl_block            = NULL;  // Planner block pointer used by segment buffer
     segment_buffer_tail = 0;
@@ -336,36 +343,97 @@ bool Stepper::update_plan_block_parameters() {
 
 // Changes the run state of the step segment buffer to execute the special parking motion.
 void Stepper::parking_setup_buffer() {
-    // Store step execution data of partially completed block, if necessary.
-    if (prep.recalculate_flag.holdPartialBlock) {
-        prep.last_st_block_index  = prep.st_block_index;
+    log_info("PARK_SAVE: sr=" << prep.steps_remaining << " hpb=" << (int)prep.recalculate_flag.holdPartialBlock);
+    
+    if (prep.recalculate_flag.holdPartialBlock && pl_block) {
+        // Save existing stepper state (unchanged)
+        prep.last_st_block_index = prep.st_block_index;
         prep.last_steps_remaining = prep.steps_remaining;
-        prep.last_dt_remainder    = prep.dt_remainder;
-        prep.last_step_per_mm     = prep.step_per_mm;
+        prep.last_dt_remainder = prep.dt_remainder;
+        prep.last_step_per_mm = prep.step_per_mm;
+        
+        // Copy critical values that could change (minimal critical section)
+        float local_steps_remaining;
+        plan_block_t* local_pl_block;
+        
+        portENTER_CRITICAL(&stepper_spinlock);
+        local_steps_remaining = prep.steps_remaining;  // Could be modified by prep_buffer()
+        local_pl_block = pl_block;  // Could become NULL
+        portEXIT_CRITICAL(&stepper_spinlock);
+        
+        // Verify we still have a valid block after critical section
+        if (!local_pl_block) {
+            log_error("PARK_SAVE: pl_block became NULL during save");
+            return;
+        }
+        
+        // NEW: Calculate and save target position (outside critical section)
+        // These pl_block fields are immutable once block is created
+        float current_pos[MAX_N_AXIS];
+        copyAxes(current_pos, get_mpos());
+        
+        // Calculate how many steps remain for each axis using Bresenham ratios
+        for (int axis = 0; axis < MAX_N_AXIS; axis++) {
+            float axis_steps_remaining = local_steps_remaining * 
+                (local_pl_block->steps[axis] / (float)local_pl_block->step_event_count);
+            
+            // Calculate target position  
+            float step_direction = (local_pl_block->direction_bits & bitnum_to_mask(axis)) ? -1.0 : 1.0;
+            float mm_remaining = axis_steps_remaining / config->_axes->_axis[axis]->_stepsPerMm;
+            pause_state.target_position[axis] = current_pos[axis] + (step_direction * mm_remaining);
+        }
+        
+        // Save motion parameters (these fields are immutable)
+        pause_state.feed_rate = local_pl_block->programmed_rate;
+        pause_state.spindle_speed = local_pl_block->spindle_speed;  // Save actual spindle speed
+        pause_state.spindle = local_pl_block->spindle;
+        pause_state.coolant = local_pl_block->coolant;
+        pause_state.line_number = local_pl_block->line_number;
+        pause_state.motion = local_pl_block->motion;  // Copy entire motion structure
+        pause_state.valid = true;  // Mark as valid data
     }
-    // Set flags to execute a parking motion
-    prep.recalculate_flag.parking     = 1;
+    
+    // Set flags to execute a parking motion (unchanged)
+    prep.recalculate_flag.parking = 1;
     prep.recalculate_flag.recalculate = 0;
-    pl_block                          = NULL;  // Always reset parking motion to reload new block.
+    
+    pl_block = NULL;  // Always reset parking motion to reload new block
 }
 
 // Restores the step segment buffer to the normal run state after a parking motion.
 void Stepper::parking_restore_buffer() {
-    // Restore step execution data and flags of partially completed block, if necessary.
-    if (prep.recalculate_flag.holdPartialBlock) {
-        st_prep_block                          = &st_block_buffer[prep.last_st_block_index];
-        prep.st_block_index                    = prep.last_st_block_index;
-        prep.steps_remaining                   = prep.last_steps_remaining;
-        prep.dt_remainder                      = prep.last_dt_remainder;
-        prep.step_per_mm                       = prep.last_step_per_mm;
-        prep.recalculate_flag.holdPartialBlock = 1;
-        prep.recalculate_flag.recalculate      = 1;
-        prep.req_mm_increment                  = REQ_MM_INCREMENT_SCALAR / prep.step_per_mm;  // Recompute this value.
+    log_info("PARK_REST: hpb=" << (int)prep.recalculate_flag.holdPartialBlock);
+    
+    if (prep.recalculate_flag.holdPartialBlock && prep.last_steps_remaining > 0 && pause_state.valid) {
+        // NEW: Instead of restoring old state, create fresh block to saved target
+        log_info("PARK_REST: Creating new block to saved target");
+        
+        // Prepare line data for new block
+        plan_line_data_t line_data;
+        line_data.feed_rate = pause_state.feed_rate;
+        line_data.spindle_speed = pause_state.spindle_speed;  // Restore actual spindle speed
+        line_data.spindle = pause_state.spindle;
+        line_data.coolant = pause_state.coolant;
+        line_data.line_number = pause_state.line_number;
+        line_data.motion = pause_state.motion;  // Copy entire motion structure
+        line_data.is_jog = false;
+        
+        // Create new planner block to target position
+        if (plan_buffer_line(pause_state.target_position, &line_data)) {
+            log_info("PARK_REST: New block created successfully");
+            prep.recalculate_flag.holdPartialBlock = 0;
+            pause_state.valid = false;  // Clear validity flag
+        } else {
+            log_error("PARK_REST: Failed to create resume block (zero-length motion)");
+            // Fall back to clearing state - this is safe and follows existing patterns
+            prep.recalculate_flag = {};
+            pause_state.valid = false;
+        }
     } else {
         prep.recalculate_flag = {};
     }
-
-    pl_block = NULL;  // Set to reload next block.
+    
+    pl_block = NULL;  // Set to reload next block
 }
 
 // Increments the step segment buffer block data ring buffer.
@@ -404,6 +472,15 @@ void Stepper::prep_buffer() {
             }
 
             if (pl_block == NULL) {
+                // Clean up motion state when no block is available
+                // Use same threshold as stepper: check if less than 1 step remaining (would ceiling to 0)
+                if (!sys.step_control.executeSysMotion && prep.steps_remaining < 1.0) {
+                    // Only clean if step_per_mm is not already zero (avoid repeated cleaning)
+                    if (prep.step_per_mm != 0) {
+                        prep.step_per_mm = 0;
+                        prep.mm_complete = 0;
+                    }
+                }
                 return;  // No planner blocks. Exit.
             }
 
@@ -465,6 +542,10 @@ void Stepper::prep_buffer() {
              hold, override the planner velocities and decelerate to the target exit speed.
             */
             prep.mm_complete  = 0.0;  // Default velocity profile complete at 0.0mm from end of block.
+            if (pl_block == NULL) {
+                // Block was cleared during cancellation or system state change
+                return;
+            }
             float inv_2_accel = 0.5f / pl_block->acceleration;
             if (sys.step_control.executeHold) {  // [Forced Deceleration to Zero Velocity]
                 // Compute velocity profile parameters for a feed hold in-progress. This profile overrides
@@ -699,6 +780,8 @@ void Stepper::prep_buffer() {
            machines (i.e. exceeding 10 meters axis travel at 200 step/mm).
         */
         float step_dist_remaining    = prep.step_per_mm * mm_remaining;                       // Convert mm_remaining to steps
+        
+        
         float n_steps_remaining      = ceilf(step_dist_remaining);                            // Round-up current steps remaining
         float last_n_steps_remaining = ceilf(prep.steps_remaining);                           // Round-up last steps remaining
         prep_segment->n_step         = uint16_t(last_n_steps_remaining - n_steps_remaining);  // Compute number of steps to execute.
@@ -727,7 +810,10 @@ void Stepper::prep_buffer() {
 
         dt += prep.dt_remainder;  // Apply previous segment partial step execute time
         // dt is in minutes so inv_rate is in minutes
-        float inv_rate = dt / (last_n_steps_remaining - step_dist_remaining);  // Compute adjusted step rate inverse
+        float denominator = last_n_steps_remaining - step_dist_remaining;
+        
+
+        float inv_rate = dt / denominator;  // Compute adjusted step rate inverse
 
         // Compute CPU cycles per step for the prepped segment.
         // fStepperTimer is in units of timerTicks/sec, so the dimensional analysis is

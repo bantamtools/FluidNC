@@ -10,8 +10,23 @@
 */
 
 #include "EnumItem.h"
+#include "SpindleDatatypes.h"
+#include "GCode.h"
+#include "Planner.h"
 
 #include <cstdint>
+
+// Pause state storage for parking resume functionality
+struct pause_state_t {
+    float target_position[MAX_N_AXIS];  // Where the block was heading
+    float feed_rate;                    // Feed rate for the motion  
+    SpindleSpeed spindle_speed;         // Actual spindle speed value
+    SpindleState spindle;               // Spindle state
+    CoolantState coolant;               // Coolant state
+    int32_t line_number;                // Line number for reporting
+    PlMotion motion;                    // Motion type flags (includes rapidMotion)
+    bool valid;                         // Indicates if pause data is valid
+};
 
 namespace Stepper {
     void init();

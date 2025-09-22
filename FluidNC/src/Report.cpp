@@ -532,6 +532,24 @@ static std::string pinString() {
         }
         msg += ctrl_pin_report;
     }
+    
+    // Add pause requested flag (only during Cycle/Jog states)
+    if (sys.pauseRequested && 
+        (sys.state == State::Cycle || sys.state == State::Jog)) {
+        if (prefixNeeded) {
+            prefixNeeded = false;
+            msg += "|Pn:";
+        }
+        msg += 'Q';  // Q for "pause reQuested"
+    }
+    
+    // Auto-clear if we've transitioned out of Cycle/Jog
+    if (sys.pauseRequested && 
+        sys.state != State::Cycle && 
+        sys.state != State::Jog) {
+        sys.pauseRequested = false;
+    }
+    
     return msg;
 }
 

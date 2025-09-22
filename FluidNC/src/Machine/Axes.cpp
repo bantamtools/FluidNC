@@ -156,6 +156,30 @@ namespace Machine {
         }
     }
 
+    bool Axes::hasRealHomingCycles() const {
+        // Check if any axis has real homing (not just set_mpos_only which is cycle -1)
+        // AND has real motors (not just null_motor placeholders)
+        if (!homingMask) {
+            return false;
+        }
+        for (int axis = 0; axis < _numberAxis; axis++) {
+            if (_axis[axis] && _axis[axis]->_homing && _axis[axis]->_homing->_cycle >= 0) {
+                // Check if this axis has any real (non-null) motors
+                bool hasRealMotor = false;
+                for (int motor = 0; motor < Axis::MAX_MOTORS_PER_AXIS; motor++) {
+                    if (_axis[axis]->_motors[motor] && _axis[axis]->_motors[motor]->isReal()) {
+                        hasRealMotor = true;
+                        break;
+                    }
+                }
+                if (hasRealMotor) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     // Some small helpers to find the axis index and axis motor index for a given motor. This
     // is helpful for some motors that need this info, as well as debug information.
     size_t Axes::findAxisIndex(const MotorDrivers::MotorDriver* const driver) const {

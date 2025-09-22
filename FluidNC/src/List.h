@@ -26,6 +26,7 @@ typedef struct ListType {
     struct ListType *parent;
     struct ListNodeType *head;
     struct ListNodeType *active_head;
+    char title[80];  // Menu/folder title for display
 } ListType;
 
 class List {

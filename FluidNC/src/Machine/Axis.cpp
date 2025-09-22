@@ -30,9 +30,11 @@ namespace Machine {
         auto     maxRate  = config->_stepping->maxPulsesPerSec();
         Assert(stepRate <= maxRate, "Stepping rate %d steps/sec exceeds the maximum rate %d", stepRate, maxRate);
         if (_homing == nullptr) {
-            _homing         = new Homing();
+            _homing = new Homing();
+            // Axis had no homing: section in config - set cycle to 0 for default participation in homing
             _homing->_cycle = 0;
         }
+        // If _homing was created by config parser, it keeps its configured values (including cycle: -1 for disabled)
         if (_motors[0] == nullptr) {
             _motors[0] = new Machine::Motor(_axis, 0);
         }
