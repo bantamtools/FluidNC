@@ -15,6 +15,8 @@ namespace MotorDrivers {
 namespace Machine {
     class Axes : public Configuration::Configurable {
         bool _switchedStepper = false;
+        bool _motors_disabled = true;  // Start with safe default (disabled)
+                                       // Will be updated by first set_disable() call
 
     public:
         static constexpr const char* _names = "XYZABC";
@@ -79,6 +81,9 @@ namespace Machine {
         bool        namesToMask(const char* names, AxisMask& mask);
 
         std::string motorMaskToNames(MotorMask mask);
+
+        // Motor state query
+        bool motors_are_disabled() const { return _motors_disabled; }
 
         // Configuration helpers:
         void group(Configuration::HandlerBase& handler) override;

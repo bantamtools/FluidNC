@@ -1424,13 +1424,9 @@ static void protocol_do_enter() {
                 // Home command
                 if (strcmp(config->_oled->_menu->get_selected()->display_name, "Home") == 0) {
                     if (config->getMachineType() == Machine::MachineType::EggBot) { // motor power toggle for EggBot only
-                        if (config->_oled->get_motors_on()) {
-                            config->_axes->set_disable(true);
-                            config->_oled->set_motors_on(false);
-                        } else {
-                            config->_axes->set_disable(false);
-                            config->_oled->set_motors_on(true);
-                        }
+                        bool currently_disabled = config->_axes->motors_are_disabled();
+                        config->_axes->set_disable(!currently_disabled);
+                        config->_oled->refresh_display();
                     } else { // all other machines do homing cycle
                         Machine::Homing::run_cycles(Machine::Homing::AllCycles);
                         

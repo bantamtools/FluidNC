@@ -62,6 +62,8 @@ namespace Machine {
     }
 
     void IRAM_ATTR Axes::set_disable(bool disable) {
+        _motors_disabled = disable;  // Update the single source of truth
+
         for (int axis = 0; axis < _numberAxis; axis++) {
             set_disable(axis, disable);
         }

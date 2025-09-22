@@ -89,7 +89,6 @@ private: // AIDAN
 
     bool _popup = false;
 
-    bool _motors_on = true; // to track toggle for EggBot; assume motors powered on startup
 
     bool _pause_requested = false;  // Tracks if pause has been requested
     
@@ -188,8 +187,6 @@ public:
 
 	void set_file_awaiting_homing(const char *path) { _file_awaiting_homing = path; }
 
-	bool get_motors_on() { return _motors_on; }
-	void set_motors_on(bool val) { _motors_on = val; refresh_display(); }
 
 	// public version so we can call straight from GCode.cpp without using logging/channels
     void parse_gcode_comment_report(std::string report);

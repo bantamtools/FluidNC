@@ -835,8 +835,18 @@ Error gc_execute_line(char* line) {
                         //log_info("E " << gc_block.values.e);
                         break;
                     case 'F':
-                        axis_word_bit     = GCodeWord::F;
-                        gc_block.values.f = value;
+                        if (value <= 0.0 && gc_state.feed_rate > 0.0) {
+                            // F0 or negative feed rate but we have a valid existing rate
+                            // Log warning and use existing feed rate
+                            log_warn("F" << value << " ignored, using F" << gc_state.feed_rate);
+                            gc_block.values.f = gc_state.feed_rate;
+                            // Don't set axis_word_bit, which prevents it from being added to value_words
+                            continue;  // Skip the value_words update below
+                        } else {
+                            // Normal case or no valid feed rate exists
+                            axis_word_bit     = GCodeWord::F;
+                            gc_block.values.f = value;
+                        }
                         break;
                     // case 'H': // Not supported
                     case 'I':

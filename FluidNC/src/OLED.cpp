@@ -387,11 +387,16 @@ void OLED::show_state() {
     } else {
         // Normal state display path
         clearHeaderWithSeparator();
-        
-        std::string display_text = (_state == "Idle" && _menu != nullptr) 
-            ? _menu->get_current_menu_title() 
-            : _state;
-            
+
+        std::string display_text;
+        if (_popup && _error) {
+            display_text = "Error";  // Show "Error" header for error popups
+        } else if (_state == "Idle" && _menu != nullptr) {
+            display_text = _menu->get_current_menu_title();
+        } else {
+            display_text = _state;
+        }
+
         show_state_text(display_text);
     }
 }
@@ -837,10 +842,10 @@ void OLED::show_home_layout(int hightlight) {
         _oled->fillRect(50, 18, 28, 28);
         _oled->setColor(BLACK);
         if (config->getMachineType() == Machine::MachineType::EggBot) { // motor lock/unlock icon for Eggbot
-            if (_motors_on) {
-                _oled->drawXbm(52, 20, 24, 24, lock_icon_bits);
-            } else {
+            if (config->_axes->motors_are_disabled()) {
                 _oled->drawXbm(52, 20, 24, 24, unlock_icon_bits);
+            } else {
+                _oled->drawXbm(52, 20, 24, 24, lock_icon_bits);
             }
         } else { // home icon for everything else
             _oled->drawXbm(52, 20, 24, 24, home_icon_bits);
@@ -848,10 +853,10 @@ void OLED::show_home_layout(int hightlight) {
         _oled->setColor(WHITE);
     } else {
         if (config->getMachineType() == Machine::MachineType::EggBot) { // motor lock icon for Eggbot
-            if (_motors_on) {
-                _oled->drawXbm(52, 20, 24, 24, lock_icon_bits);
-            } else {
+            if (config->_axes->motors_are_disabled()) {
                 _oled->drawXbm(52, 20, 24, 24, unlock_icon_bits);
+            } else {
+                _oled->drawXbm(52, 20, 24, 24, lock_icon_bits);
             }
         } else { // home icon for everything else
             _oled->drawXbm(52, 20, 24, 24, home_icon_bits);
@@ -880,10 +885,10 @@ void OLED::show_home_layout(int hightlight) {
     // homed indication
     if (hightlight == 2) { // home icon selected
         if(config->getMachineType() == Machine::MachineType::EggBot) { // special motor indication for Eggbot
-            if (_motors_on) {
-                show(bottomRightLayout, "(motors on)");
-            } else {
+            if (config->_axes->motors_are_disabled()) {
                 show(bottomRightLayout, "(motors off)");
+            } else {
+                show(bottomRightLayout, "(motors on)");
             }
         } else { // standard homed check for all other machines
             if(config->_axes->_homed) {
@@ -1073,6 +1078,7 @@ void OLED::clear() {
 void OLED::clear_popup() {
     log_info("OLED clear popup called");
     _popup = false;
+    _error = false;
     refresh_display();
 }
 
@@ -1341,15 +1347,22 @@ void OLED::parse_error_report() {
     pos = nextpos + 1; // past MSG
     nextpos  = _report.find_last_of("]"); // report end in a bracket
     _report = _report.substr(pos, nextpos - pos); // trim MSG and bracket
-    nextpos = _report.find_first_of(":", pos);
-    pos = nextpos + 1; // past ERR
-    _report = _report.substr(pos); // trim ERR
+    // Skip past "ERR: " prefix
+    if (_report.substr(0, 5) == "ERR: ") {
+        _report = _report.substr(5); // trim "ERR: " prefix
+    }
     _popup = true;
-    show_error("Error " + _report); // popup error report until next button click
+    _error = true; // Mark as error popup to prevent WiFi overwrite
+    show_error(_report); // popup error report until next button click
 }
 
 // [MSG:INFO: Connecting to STA:SSID foo]
 void OLED::parse_STA() {
+    // Don't overwrite active error popup
+    if (_popup && _error) {
+        return;
+    }
+
     size_t start = strlen("[MSG:INFO: Connecting to STA SSID:");
     _radio_info  = _report.substr(start, _report.size() - start - 1);
 
@@ -1360,6 +1373,11 @@ void OLED::parse_STA() {
 
 // [MSG:INFO: Connected - IP is 192.168.68.134]
 void OLED::parse_IP() {
+    // Don't overwrite active error popup
+    if (_popup && _error) {
+        return;
+    }
+
     size_t start = _report.rfind(" ") + 1;
     _radio_addr  = _report.substr(start, _report.size() - start - 1);
 
@@ -1374,6 +1392,11 @@ void OLED::parse_IP() {
 
 // [MSG:INFO: AP SSID foo IP 192.168.68.134 mask foo channel foo]
 void OLED::parse_AP() {
+    // Don't overwrite active error popup
+    if (_popup && _error) {
+        return;
+    }
+
     size_t start    = strlen("[MSG:INFO: AP SSID ");
     size_t ssid_end = _report.rfind(" IP ");
     size_t ip_end   = _report.rfind(" mask ");

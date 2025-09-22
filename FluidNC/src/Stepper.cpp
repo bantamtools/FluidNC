@@ -656,6 +656,12 @@ void Stepper::prep_buffer() {
         float time_var = dt_max;                                    // Time worker variable
         float mm_var;                                               // mm-Distance worker variable
         float speed_var;                                            // Speed worker variable
+
+        // Safety check in case pl_block was cleared by terminal commands during execution
+        if (pl_block == NULL) {
+            return;  // Block was cleared during execution, exit safely
+        }
+
         float mm_remaining = pl_block->millimeters;                 // New segment distance from end of block.
         float minimum_mm   = mm_remaining - prep.req_mm_increment;  // Guarantee at least one step.
 
