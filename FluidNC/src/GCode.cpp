@@ -1745,6 +1745,14 @@ Error gc_execute_line(char* line) {
     }
     // [15. Coordinate system selection ]:
     if (gc_state.modal.coord_select != gc_block.modal.coord_select) {
+        // Clear calibration state when coordinate system changes (G54→G55 etc.)
+        extern volatile bool rcServoZCal;
+        extern float rcServoZOriginalPos;
+        if (rcServoZCal) {
+            rcServoZCal = false;
+            rcServoZOriginalPos = -99999.0f;
+        }
+
         gc_state.modal.coord_select = gc_block.modal.coord_select;
         copyAxes(gc_state.coord_system, block_coord_system);
         gc_wco_changed();

@@ -36,6 +36,9 @@ Menu::Menu() {
     // Set main menu as current
     _current_menu = _main_menu;
 
+    // Initialize saved directory pointer
+    _saved_directory_menu = nullptr;
+
     // Initialize menu titles
     strcpy(_main_menu->title, "Main Menu");
     strcpy(_files_menu->title, "Select G-code file");
@@ -284,7 +287,80 @@ void Menu::go_to_homing_choice_menu() {
         config->_oled->refresh_display();
     }
 }
- 
+
+bool Menu::is_descendant_of(ListType* menu, ListType* ancestor) {
+    if (!menu || !ancestor) {
+        return false;
+    }
+    ListType* current = menu;
+    while (current && current != ancestor) {
+        current = current->parent;
+    }
+    return (current == ancestor);
+}
+
+bool Menu::is_in_files_hierarchy() {
+    return (_current_menu == _files_menu || is_descendant_of(_current_menu, _files_menu));
+}
+
+void Menu::save_current_directory() {
+    // Only save if we're in files menu or subdirectory
+    if (is_in_files_hierarchy()) {
+        _saved_directory_menu = _current_menu;
+
+        // Build path for logging by traversing parent chain
+        std::string path = "";
+        ListType* menu = _current_menu;
+        while (menu && menu != _files_menu) {
+            if (path.empty()) {
+                path = menu->title;
+            } else {
+                path = std::string(menu->title) + "/" + path;
+            }
+            menu = menu->parent;
+        }
+
+        log_info("Saved directory: /" << (path.empty() ? "(root)" : path.c_str()));
+    }
+}
+
+void Menu::go_to_saved_directory() {
+    // Validate saved directory is still valid
+    if (_saved_directory_menu &&
+        _saved_directory_menu->head &&  // Has entries
+        is_descendant_of(_saved_directory_menu, _files_menu)) {
+        _current_menu = _saved_directory_menu;
+
+        // Reset selection to top of directory (not a specific file)
+        if (_current_menu->head) {
+            // Clear all selections
+            ListNodeType* entry = _current_menu->head;
+            while (entry) {
+                entry->selected = false;
+                entry = entry->next;
+            }
+            // Select first entry (usually "< Back")
+            _current_menu->head->selected = true;
+            _current_menu->active_head = _current_menu->head;
+        }
+
+        log_info("Restored to saved directory");
+    } else {
+        // Fallback to root files menu if available
+        if (_files_menu) {
+            _current_menu = _files_menu;
+            log_info("Restored to files root (saved directory invalid)");
+        } else {
+            log_error("Cannot restore directory - files menu not available");
+        }
+        _saved_directory_menu = nullptr;  // Clear invalid pointer
+    }
+
+    if(config->_oled){
+        config->_oled->refresh_display();
+    }
+}
+
 // Helper function to return the active tail
 struct ListNodeType *Menu::get_active_tail(ListType *menu, int max_active_entries) {
 
@@ -403,6 +479,7 @@ bool Menu::add_sd_file(char *path, bool isBin, bool isCfg) {
 
 // Helper function to prep for updated SD file list
 void Menu::prep_for_sd_update(void) {
+    _saved_directory_menu = nullptr;  // Clear saved directory as menu structure will be rebuilt
     prep(_files_menu);
     prep(_firmware_menu);
     prep(_config_menu);
@@ -524,7 +601,8 @@ void Menu::build(void) {
     } else {
         add_entry(_settings_menu, _jogging_menu, NULL, "Turn WiFi ON");
     } */
-    if (config->getMachineType() == Machine::MachineType::EggBot) {
+    if (config->getMachineType() == Machine::MachineType::EggBot ||
+        config->getMachineType() == Machine::MachineType::WaterColorBot) {
         // special Z-calib command for EggBot, used to assemble servo arm
         add_entry(_settings_menu, NULL, NULL, "Z Calibration Position");
     }
@@ -571,6 +649,8 @@ void Menu::build(void) {
 
 // Rebuilds the menu system (e.g., after machine type is determined)
 void Menu::rebuild(void) {
+    _saved_directory_menu = nullptr;  // Clear saved directory as menu structure will be rebuilt
+
     // Clear all existing menu entries first
     remove_entries(_main_menu);
     remove_entries(_files_menu);

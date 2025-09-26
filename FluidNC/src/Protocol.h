@@ -60,6 +60,10 @@ extern volatile bool rtCycleStop;
 
 extern volatile bool runLimitLoop;
 
+// RC servo calibration variables
+extern volatile bool rcServoZCal;
+extern float rcServoZOriginalPos;
+
 // Alarm codes.
 enum class ExecAlarm : uint8_t {
     None                  = 0,

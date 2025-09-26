@@ -2,6 +2,7 @@
 #include "Logging.h"
 #include "Machine/MachineConfig.h"
 #include "WebUI/WifiConfig.h"  // wifi_config.Hostname()
+#include "Protocol.h"  // For rcServoZCal access
 
 // Static variables
 static float* saved_axes = NULL;   // Saved dro values for refreshing display
@@ -1555,11 +1556,19 @@ uint16_t OLED::calculate_text_width(const std::string& text, font_t font) {
 }
 
 void OLED::show_state_text(const std::string& text) {
+    // Add calibration indicator if active
+    std::string displayText = text;
+    if (rcServoZCal &&
+        (config->getMachineType() == Machine::MachineType::EggBot ||
+         config->getMachineType() == Machine::MachineType::WaterColorBot)) {
+        displayText += " *";
+    }
+
     // Calculate and save the width of the text we're about to display
-    _last_state_width = calculate_text_width(text, DejaVu_Sans_10);
-    
+    _last_state_width = calculate_text_width(displayText, DejaVu_Sans_10);
+
     // Display the text
-    show(stateLayout, text);
+    show(stateLayout, displayText);
 }
 
 void OLED::clearScreenFast() {

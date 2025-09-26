@@ -12,6 +12,12 @@ InputFile::InputFile(const char* defaultFs, const char* path, WebUI::Authenticat
     FileStream(path, "r", defaultFs), _auth_level(auth_level), _out(out), _line_num(0)  {
     log_info("Run file opened");  // Used by OLED for elapsed time
     gc_saw_program_end = false; // clear flag for truncated file checking
+
+    // Clear RC servo calibration state when starting a file
+    extern volatile bool rcServoZCal;
+    extern float rcServoZOriginalPos;
+    rcServoZCal = false;
+    rcServoZOriginalPos = -99999.0f;
     
     // Clear comments when opening new file
     if (config && config->_oled) {

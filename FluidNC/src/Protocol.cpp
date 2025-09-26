@@ -63,7 +63,8 @@ static char comment[LINE_BUFFER_SIZE];  // Line to be executed. Zero-terminated.
 // static uint8_t char_counter         = 0;
 // static uint8_t comment_char_counter = 0;
 
-static volatile bool eggZCalib = false;
+volatile bool rcServoZCal = false;
+float rcServoZOriginalPos = -99999.0f;
 
 // Spindle stop override control states.
 struct SpindleStopBits {
@@ -537,6 +538,12 @@ static void protocol_do_alarm() {
     if (rtAlarm == ExecAlarm::None) {
         return;
     }
+
+    // Clear RC servo calibration state on any alarm
+    rcServoZCal = false;
+    rcServoZOriginalPos = -99999.0f;
+    log_info("RC servo calibration cleared due to alarm");
+
     if (spindle->_off_on_alarm) {
         spindle->stop();
     }
@@ -1289,7 +1296,7 @@ static void protocol_do_card_detect(void* arg) {
 
 static void protocol_do_enter() {
     log_info("Button press detected");
-    
+
     // Check if parking is in progress
     if (sys.parkingInProgress) {
         log_info("Button dismissed during parking operation");
@@ -1423,7 +1430,12 @@ static void protocol_do_enter() {
             
                 // Home command
                 if (strcmp(config->_oled->_menu->get_selected()->display_name, "Home") == 0) {
-                    if (config->getMachineType() == Machine::MachineType::EggBot) { // motor power toggle for EggBot only
+                    if (config->getMachineType() == Machine::MachineType::EggBot ||
+                        config->getMachineType() == Machine::MachineType::WaterColorBot) { // motor power toggle for EggBot and WaterColorBot
+                        // Clear calibration state when toggling motor lock
+                        rcServoZCal = false;
+                        rcServoZOriginalPos = -99999.0f;
+
                         bool currently_disabled = config->_axes->motors_are_disabled();
                         config->_axes->set_disable(!currently_disabled);
                         config->_oled->refresh_display();
@@ -1573,13 +1585,33 @@ static void protocol_do_enter() {
                     }
 
                 } else if (strcmp(config->_oled->_menu->get_selected()->display_name, "Z Calibration Position") == 0) {
-                    // special calib function for EggBot Z servo
-                    if (eggZCalib) {
-                        gc_execute_line((char*)"G1 Z0 F1000");
-                        eggZCalib = false;
+                    // RC servo Z calibration for EggBot and WaterColorBot
+                    // Note: This executes in State::Idle, so motion is already complete
+                    if (rcServoZCal) {
+                        // Exiting calibration - restore original position using machine coordinates
+                        if (rcServoZOriginalPos > -99000.0f) {
+                            char cmd[64];
+                            snprintf(cmd, sizeof(cmd), "G53 G1 Z%.3f F1000", rcServoZOriginalPos);
+                            gc_execute_line(cmd);
+                            log_info("RC servo calibration exited, returning to Z" << rcServoZOriginalPos);
+                        }
+                        // Reset calibration state
+                        rcServoZCal = false;
+                        rcServoZOriginalPos = -99999.0f;
                     } else {
-                        gc_execute_line((char*)"G1 Z8.75 F1000");
-                        eggZCalib = true;
+                        // Entering calibration - save current Z position (machine coordinates)
+                        // System is in State::Idle so position is stable
+                        float* mpos = get_mpos();
+                        rcServoZOriginalPos = mpos[Z_AXIS];  // Save machine Z position (replaces NAN)
+                        log_info("RC servo calibration entered, saved position Z" << rcServoZOriginalPos);
+
+                        // Move to calibration position based on machine type
+                        if (config->getMachineType() == Machine::MachineType::EggBot) {
+                            gc_execute_line((char*)"G1 Z8.75 F1000");
+                        } else if (config->getMachineType() == Machine::MachineType::WaterColorBot) {
+                            gc_execute_line((char*)"G1 Z6 F1000");
+                        }
+                        rcServoZCal = true;
                     }
 
                 } else if (strcmp(config->_oled->_menu->get_selected()->display_name, "Draw Bounds") == 0) {
@@ -1605,7 +1637,13 @@ static void protocol_do_enter() {
                     config->_oled->_menu->return_to_run_menu();
                 // Back button
                 } else if (strcmp(config->_oled->_menu->get_selected()->display_name, "< Back") == 0) {
-                    config->_oled->_menu->exit_submenu();
+                    // Special handling for postrun menu - go directly to saved directory
+                    if (config->_oled->_menu->is_postrun_menu()) {
+                        log_info("Postrun Back button - going to saved directory");
+                        config->_oled->_menu->go_to_saved_directory();
+                    } else {
+                        config->_oled->_menu->exit_submenu();
+                    }
                 // install FW if firmware menu
                 } else if(config->_oled->_menu->is_firmware_menu()) {
                     std::string fw_file = config->_oled->_menu->get_selected()->display_name;
@@ -1623,11 +1661,9 @@ static void protocol_do_enter() {
                 } else if (config->_oled->_menu->is_files_menu()) {
 
                     ListNodeType *selected_entry = config->_oled->_menu->get_selected();
-                    char *name_copy = strdup(selected_entry->display_name);
 
                     // Check if the selected entry is a folder (has a child submenu)
                     if (selected_entry->child != NULL) { // this works now after setup fixes
-                //    if (strstr(name_copy, ".gcode") == NULL) { // name does not end in .gcode, probably is a folder
                         // It's a folder, enter the submenu
                         log_info("Entering submenu");
                         config->_oled->_menu->enter_submenu();
@@ -1648,6 +1684,7 @@ static void protocol_do_enter() {
                             Machine::Homing::run_cycles(Machine::Homing::AllCycles);
                         } else {
                             log_info("Passing path to InputFile: " << selected_entry->path);
+                            config->_oled->_menu->save_current_directory(); // save directory before running file
                             config->_oled->_menu->set_completed_file(selected_entry->path); // store run file path
                             InputFile *infile = new InputFile("sd", selected_entry->path, WebUI::AuthenticationLevel::LEVEL_ADMIN, allChannels);
                             allChannels.registration(infile);
@@ -1663,13 +1700,19 @@ static void protocol_do_enter() {
                 } else if (!(config->_oled->_menu->is_settings_menu() || config->_oled->_menu->is_version_menu())) {
                     // treat other unlabeled menus as files_menu because it's probably a files subfolder
                     ListNodeType *selected_entry = config->_oled->_menu->get_selected();
-                    char *name_copy = strdup(selected_entry->display_name);
 
                     // Check if the selected entry is a folder (has a child submenu)
                     if (selected_entry->child != NULL) {
-                        // It's a folder, enter the submenu
-                        log_info("Entering submenu");
-                        config->_oled->_menu->enter_submenu();
+                        // Check if we're entering the files menu specifically
+                        if (selected_entry->child == config->_oled->_menu->files_menu()) {
+                            // This is "Browse Files" from main menu - try to go to saved directory
+                            log_info("Browse Files selected - restoring to saved directory");
+                            config->_oled->_menu->go_to_saved_directory();
+                        } else {
+                            // It's a regular folder, enter the submenu normally
+                            log_info("Entering submenu");
+                            config->_oled->_menu->enter_submenu();
+                        }
                     } else {
                         // It's a file, execute the file
 
@@ -1685,6 +1728,7 @@ static void protocol_do_enter() {
                             Machine::Homing::run_cycles(Machine::Homing::AllCycles);
                         } else {
                             log_info("Passing path to InputFile: " << selected_entry->path);
+                            config->_oled->_menu->save_current_directory(); // save directory before running file
                             config->_oled->_menu->set_completed_file(selected_entry->path); // store run file path
                             InputFile *infile = new InputFile("sd", selected_entry->path, WebUI::AuthenticationLevel::LEVEL_ADMIN, allChannels);
                             allChannels.registration(infile);

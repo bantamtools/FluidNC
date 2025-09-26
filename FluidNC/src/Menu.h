@@ -10,6 +10,7 @@ class Menu : public List {
 private:
 
     ListType *_main_menu, *_files_menu, *_jogging_menu, *_rss_menu, *_settings_menu, *_version_menu, *_run_menu, *_postrun_menu, *_current_menu, *_firmware_menu, *_config_menu, *_confirm_menu, *_homing_choice_menu;
+    ListType* _saved_directory_menu;  // Pointer to directory where file was selected
     std::string _recent_file_path;
     std::string _recent_file_name;
     bool _recent_file_is_new_upload;
@@ -61,11 +62,16 @@ public:
     void go_to_postrun_menu();
     void go_to_files_menu();
     void go_to_homing_choice_menu();
+    void save_current_directory();
+    void go_to_saved_directory();
+    bool is_descendant_of(ListType* menu, ListType* ancestor);
+    bool is_in_files_hierarchy();
     void update_selection(int max_active_entries, int enc_diff);
     bool is_full_width();
     void rebuild();
 
     ListType* firmware_menu() { return _firmware_menu; };
     ListType* config_menu() { return _config_menu; };
+    ListType* files_menu() { return _files_menu; };
     const char* get_current_menu_title();
 };

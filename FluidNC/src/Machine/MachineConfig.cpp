@@ -305,6 +305,8 @@ namespace Machine {
         // Determine machine type from name
         if (strncmp(_name.c_str(), "Bantam Tools EggBot", 19) == 0) {
             _machine_type = MachineType::EggBot;
+        } else if (strncmp(_name.c_str(), "WaterColorBot", 13) == 0) {
+            _machine_type = MachineType::WaterColorBot;
         }
         // Add future machine type checks here
         

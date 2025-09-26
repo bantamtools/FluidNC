@@ -1,6 +1,6 @@
 name: "Bantam Tools EggBot"
 board: "Serama Hen, Rev D"
-meta: "0.0.18"
+meta: "0.2.0"
 
 # Updated by WHO, 2025-08-20
 # Incorporating better hardware Z calibration
@@ -56,9 +56,9 @@ axes:
 
   a:
     steps_per_mm: 17.7778
-    max_rate_mm_per_min: 10000
-    acceleration_mm_per_sec2: 20000
-    rapid_acceleration_mm_per_sec2: 2000
+    max_rate_mm_per_min: 25000
+    acceleration_mm_per_sec2: 15000
+    rapid_acceleration_mm_per_sec2: 20000
     max_travel_mm: 360
     soft_limits: false
     homing:
@@ -91,9 +91,9 @@ axes:
 
   b:
     steps_per_mm: 17.7778
-    max_rate_mm_per_min: 10000
-    acceleration_mm_per_sec2: 2000
-    rapid_acceleration_mm_per_sec2: 2000
+    max_rate_mm_per_min: 9500
+    acceleration_mm_per_sec2: 10000
+    rapid_acceleration_mm_per_sec2: 20000
     max_travel_mm: 92
     soft_limits: false
     homing:
@@ -107,7 +107,7 @@ axes:
         uart_num: 1
         addr: 1
         r_sense_ohms: 0.100
-        run_amps: 0.500
+        run_amps: 0.700
         hold_amps: 0.500
         microsteps: 32
         stallguard: 0
@@ -125,10 +125,10 @@ axes:
       null_motor:
 
   z:
-    steps_per_mm: 15.000
-    max_rate_mm_per_min: 20250.000
-    acceleration_mm_per_sec2: 20000.000
-    rapid_acceleration_mm_per_sec2: 55000
+    steps_per_mm: 30.000
+    max_rate_mm_per_min: 12500.000
+    acceleration_mm_per_sec2: 100000
+    rapid_acceleration_mm_per_sec2: 100000
     max_travel_mm: 20.25
     soft_limits: false
     homing:

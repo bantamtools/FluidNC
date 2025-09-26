@@ -39,6 +39,7 @@ namespace Machine {
     enum class MachineType {
         Default = 0,
         EggBot,
+        WaterColorBot,
         // Add future machine types here
     };
     
