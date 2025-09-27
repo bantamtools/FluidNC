@@ -292,6 +292,13 @@ void OLED::init() {
 
     _oled->display();
 
+    // Force immediate display update since polling hasn't started yet
+    // This ensures the logo is actually sent to the OLED hardware
+    SSD1306_I2C* ssd1306 = static_cast<SSD1306_I2C*>(_oled);
+    if (ssd1306) {
+        ssd1306->performDisplayUpdate();
+    }
+
     // Pre-render jog mode headers for fast swapping
     initJogHeaders();
 

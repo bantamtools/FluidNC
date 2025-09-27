@@ -1,21 +1,24 @@
 name: "Bantam Tools EggBot"
 board: "Serama Hen, Rev D"
-meta: "0.2.0"
+meta: "0.3.0"
 
-# Updated by WHO, 2025-08-20
-# Incorporating better hardware Z calibration
+# Updated by WHO, 2025-09-27
+# Incorporating hardware Z calibration
 # Axis A, or motor 1, is the "Egg" motor, which turns the ball.
 # Axis B, or motor 2, is the "Pen" motor, which rotates the pen arm.
 #   Units for A, B are controlled as though they were millimeters, where 1 mm
 #   corresponds to 1 degree of rotation: 360 mm <-> 360 degrees of rotation.
 # Axis Z, servo motor, is the pen-lift motor. 
-# Servo initializes at its "maximum up" position, which is called Z = 0.
-# The total Z range available is from Z = 0 to Z = -20.25
-# There is also a "calibration" position, Z = -11.5, fixed in the firmware,
+# Servo initializes at its "maximum up" position, which is called Z = 20.25.
+# The total Z range available is from Z = 0 to Z = 20.25
+# There is also a "calibration" position, Z = 8.75, fixed in the firmware,
 #   Which is where the servo arm is roughly horizontal.
+#
+# Wifi currently disabled by setting `wifi_mode: 0`, pending further
+#   firmware changes for reliability in some edge cases.
 
 
-
+wifi_mode: 0
 planner_blocks: 16
 
 start:

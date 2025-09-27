@@ -32,6 +32,7 @@ extern const char* const roosterRecoveryYAML;
 #include "../Pins/GPIOPinDetail.h"
 #include "../Pin.h"
 #include "../Pins/ProtectedPinTracker.h"
+#include "../WebUI/WifiConfig.h"  // For WebUI::wifi_mode
 
 #include <cstdio>
 #include <cstring>
@@ -218,6 +219,9 @@ namespace Machine {
         handler.item("enable_parking_override_control", _enableParkingOverrideControl);
         handler.item("use_line_numbers", _useLineNumbers);
         handler.item("planner_blocks", _planner_blocks, 10, 120);
+
+        // Handle optional WiFi mode setting from config
+        handler.item("wifi_mode", _wifiMode, -1, 3);  // Accept -1 to 3
     }
 
     void MachineConfig::afterParse() {

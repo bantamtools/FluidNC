@@ -6,7 +6,6 @@
 #include <algorithm>
 #include <cstring>  // For memcpy in safe buffer implementation
 
-#define OLEDDISPlAY_DOUBLE_BUFFER
 #define OLED_USE_SAFE_BUFFER  // Comment out this line to use original buffer[-1] method
 
 using namespace Machine;

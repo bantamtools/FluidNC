@@ -228,10 +228,25 @@ void setup() {
         sys.state = State::ConfigAlarm;
     }
 
-    // Try Bluetooth first so its memory can be released if it is disabled 
+    // Try Bluetooth first so its memory can be released if it is disabled
     if (!WebUI::bt_config.begin()) {
-        if(!config->_wifiOnLaunch){
-            WebUI::wifi_mode->setStringValue((char*)"Off");
+        // Apply WiFi mode from config if specified
+        if (config->_wifiMode >= 0) {
+            int currentMode = WebUI::wifi_mode->get();
+            if (currentMode != config->_wifiMode) {
+                log_info("Config: Setting WiFi mode to " << config->_wifiMode);
+                // Note: wifi_mode expects a string for setStringValue
+                const char* modeStr = nullptr;
+                switch(config->_wifiMode) {
+                    case 0: modeStr = "Off"; break;
+                    case 1: modeStr = "STA"; break;
+                    case 2: modeStr = "AP"; break;
+                    case 3: modeStr = "STA>AP"; break;
+                }
+                if (modeStr) {
+                    WebUI::wifi_mode->setStringValue((char*)modeStr);
+                }
+            }
         }
         WebUI::wifi_config.begin();
     }

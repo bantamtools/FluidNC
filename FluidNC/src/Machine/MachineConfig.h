@@ -100,7 +100,7 @@ namespace Machine {
         bool  _verboseErrors        = false;
         bool  _reportInches         = false;
 
-        bool _wifiOnLaunch          = true; // Hard set for if we are allowing hosting of/connecting to APs. This will be migrated to config.yaml eventually.
+        int32_t _wifiMode = -1;  // -1 = not set, 0-3 = WiFi mode values
         bool _systemIsInitialized   = false;
 
         size_t _planner_blocks = 16;
