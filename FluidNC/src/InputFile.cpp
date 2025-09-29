@@ -19,6 +19,10 @@ InputFile::InputFile(const char* defaultFs, const char* path, WebUI::Authenticat
     rcServoZCal = false;
     rcServoZOriginalPos = -99999.0f;
     
+    // Clear G4 dwell flag when starting a new file
+    extern bool g4_dwell_active;
+    g4_dwell_active = false;
+
     // Clear comments when opening new file
     if (config && config->_oled) {
         config->_oled->set_comment("", false);  // Clear immediate

@@ -308,13 +308,18 @@ Channel* AllChannels::pollLine(char* line) {
             return _lastChannel;
         }
     }
+
+    // Make a local copy of _lastChannel while still holding the mutex
+    // to avoid race condition with deregistration
+    Channel* lastChannel = _lastChannel;
     _mutex.unlock();
+
     // If no other channel returned a line, try the last one
-    if (_lastChannel && _lastChannel->pollLine(line)) {
-        return _lastChannel;
+    if (lastChannel && lastChannel->pollLine(line)) {
+        return lastChannel;
     }
     _lastChannel = nullptr;
-    return _lastChannel;
+    return nullptr;
 }
 
 AllChannels allChannels;

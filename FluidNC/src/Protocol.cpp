@@ -973,7 +973,10 @@ if (sys.step_control.executeHold) {
     }
 
     // log_debug("End Cycle Stop");
-    config->_oled->refresh_display(); // AIDAN
+    // Skip display refresh during G4 dwell to prevent flickering
+    if (!g4_dwell_active) {
+        config->_oled->refresh_display(); // AIDAN
+    }
 }
 
 static void update_velocities() {

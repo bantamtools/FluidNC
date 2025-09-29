@@ -467,6 +467,10 @@ void mpos_to_wpos(float* position) {
 const char* state_name() {
     switch (sys.state) {
         case State::Idle:
+            // During G4 dwell, report as "Run" even though state is Idle
+            if (g4_dwell_active) {
+                return "Run";
+            }
             return "Idle";
         case State::Cycle:
             return "Run";

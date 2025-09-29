@@ -15,6 +15,9 @@ enum class DwellMode : uint8_t {
     SysSuspend = 1,  //G92.1 (Do not alter value)
 };
 
+// Global flag to track if G4 dwell is active
+extern bool g4_dwell_active;
+
 const float SOME_LARGE_VALUE = 1.0E+38f;
 
 static inline int toMotor2(int axis) {

@@ -259,8 +259,18 @@ bool mc_dwell(int32_t milliseconds) {
     if (milliseconds <= 0 || sys.state == State::CheckMode) {
         return false;
     }
+
+    // Set flag BEFORE buffer sync so it's active when motion completes
+    g4_dwell_active = true;
+
     protocol_buffer_synchronize();
-    return delay_msec(milliseconds, DwellMode::Dwell);
+
+    // Keep flag set during the actual dwell delay
+    bool result = delay_msec(milliseconds, DwellMode::Dwell);
+
+    g4_dwell_active = false;
+
+    return result;
 }
 
 volatile ProbeState probeState;
@@ -377,6 +387,7 @@ void mc_override_ctrl_update(Override override_state) {
 // done quickly is handled later when Protocol.cpp responds to rtReset.
 void mc_reset() {
     sys.pauseRequested = false;  // Clear on system reset
+    g4_dwell_active = false;     // Clear G4 dwell flag on reset
     // Only this function can set the system reset. Helps prevent multiple kill calls.
     if (!rtReset) {
         rtReset = true;
