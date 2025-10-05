@@ -69,13 +69,14 @@ namespace Configuration {
                         if (isOverlayMode()) {
                             // Check if this is a critical section that should be protected
                             std::string sectionName(name);
-                            bool isCriticalSection = (sectionName == "control" || 
-                                                    sectionName == "i2c0" || 
-                                                    sectionName == "oled" || 
-                                                    sectionName == "encoder" || 
-                                                    sectionName == "sdcard" || 
+
+                            bool isCriticalSection = (sectionName == "control" ||
+                                                    sectionName == "i2c0" ||
+                                                    sectionName == "oled" ||
+                                                    sectionName == "encoder" ||
+                                                    sectionName == "sdcard" ||
                                                     sectionName == "extenders");
-                            
+
                             if (isCriticalSection) {
                                 // Warn about protected sections - not duplicates, just protected
                                 log_warn("User config section '" + std::string(name) + "' ignored (using board defaults)");

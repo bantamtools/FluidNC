@@ -432,6 +432,9 @@ namespace Machine {
         // Clear homed flag
         config->_axes->_homed = false;
 
+        // Clear RC servo calibration state when homing starts
+        clearRcServoCalibration();
+
         if (!config->_kinematics->canHome(axisMask)) {
             sys.state = State::Alarm;
             return;

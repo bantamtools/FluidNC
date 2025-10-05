@@ -24,6 +24,26 @@ namespace CriticalPins {
         constexpr int SD_D3 = 12;
         constexpr int SD_FREQUENCY = 5000000;
         constexpr int SD_WIDTH = 4;
+
+        // C axis snippet for G4 dwell injection into user configs
+        // This is NOT included in recovery YAML below to save flash space.
+        // Recovery mode does not support G-code execution.
+        static const char C_AXIS_YAML[] = R"YAML(  c:
+    # C axis configuration (automatically added into the config file by the firmware)
+    # The C axis is reserved for managing G4 dwell commands, which are treated as
+    # moves in the sequence of G-code commands but do not move any physical motors.
+    steps_per_mm: 1000
+    max_rate_mm_per_min: 60
+    acceleration_mm_per_sec2: 100000
+    max_travel_mm: 10000000
+    soft_limits: false
+    homing:
+      cycle: -1
+    motor0:
+      null_motor:
+
+)YAML";
+
         // Full recovery YAML
         extern const char henRecoveryYAML[];
     }
@@ -46,6 +66,26 @@ namespace CriticalPins {
         constexpr int SD_D3 = 10;
         constexpr int SD_FREQUENCY = 5000000;
         constexpr int SD_WIDTH = 4;
+
+        // C axis snippet for G4 dwell injection into user configs
+        // This is NOT included in recovery YAML below to save flash space.
+        // Recovery mode does not support G-code execution.
+        static const char C_AXIS_YAML[] = R"YAML(  c:
+    # C axis configuration (automatically added into the config file by the firmware)
+    # The C axis is reserved for managing G4 dwell commands, which are treated as
+    # moves in the sequence of G-code commands but do not move any physical motors.
+    steps_per_mm: 1000
+    max_rate_mm_per_min: 60
+    acceleration_mm_per_sec2: 100000
+    max_travel_mm: 10000000
+    soft_limits: false
+    homing:
+      cycle: -1
+    motor0:
+      null_motor:
+
+)YAML";
+
         // Full recovery YAML
         extern const char roosterRecoveryYAML[];
     }

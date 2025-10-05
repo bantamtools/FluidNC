@@ -174,6 +174,12 @@ void sd_populate_files_menu() {
     char recent_file_path[LIST_NAME_MAX_PATH];
     recent_file_path[0] = '\0';
 
+    // Maximum number of files to load from SD card to prevent memory exhaustion
+    const int MAX_SD_FILES = 1000;
+    uint32_t file_count = 0;
+    bool limit_reached = false;
+    bool scan_error = false;
+
     // No display, bail
     if (!config->_oled) {
         return;
@@ -184,77 +190,162 @@ void sd_populate_files_menu() {
     // Clear the file list to start
     config->_oled->_menu->prep_for_sd_update();
 
+    // Only scan if card is actually mounted
+    if (!sd_is_mounted) {
+        log_info("SD card not mounted, skipping file scan");
+        config->_oled->_menu->finish_sd_update();
+        config->_oled->refresh_display(true);
+        return;
+    }
+
     // Iterate through files if no errors (i.e. SD not found or corrupt)
     if (sd_is_mounted) {
         log_info("SD is mounted");
-        // Iterate through the top level directory
-        auto iter = std::filesystem::recursive_directory_iterator { fpath, ec };
-        if (!ec) {
-            std::filesystem::recursive_directory_iterator end;
-            while (iter != end) {
-                const auto& dir_entry = *iter;
-                std::string filename = dir_entry.path().filename().string();
+        try {
+            // Iterate through the top level directory
+            auto iter = std::filesystem::recursive_directory_iterator { fpath, ec };
+            if (!ec) {
+                std::filesystem::recursive_directory_iterator end;
+                while (iter != end) {
+                    const auto& dir_entry = *iter;
+                    std::string filename = dir_entry.path().filename().string();
 
-                // Skip hidden files and directories
-                if (!filename.empty() && filename[0] == '.') {
-                    if (dir_entry.is_directory()) {
-                        iter.disable_recursion_pending();
+                    // Skip hidden files and directories
+                    if (!filename.empty() && filename[0] == '.') {
+                        if (dir_entry.is_directory()) {
+                            iter.disable_recursion_pending();
+                        }
+                        ++iter;
+                        continue; // Skip cond
                     }
-                    ++iter; 
-                    continue; // Skip cond
-                }
 
-                // Get the file extension and convert to lowercase
-                std::string extension = dir_entry.path().extension().string();
-                std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
+                    // Get the file extension and convert to lowercase
+                    std::string extension = dir_entry.path().extension().string();
+                    std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
 
-                bool added = false;
+                    bool added = false;
 
-                // Check if the file extension is in the allowed file extensions
-                if (allowed_file_ext.count(extension) > 0) {
-                    std::string full_path = dir_entry.path().string();
-                    std::string short_path = full_path.substr(strlen(base_path));
+                    // Check if the file extension is in the allowed file extensions
+                    if (allowed_file_ext.count(extension) > 0) {
+                        std::string full_path = dir_entry.path().string();
+                        std::string short_path = full_path.substr(strlen(base_path));
 
-                    strncpy(file_path, short_path.c_str(), LIST_NAME_MAX_PATH);
-                    added = config->_oled->_menu->add_sd_file(file_path, false); // Flag for adding G-code file
+                        strncpy(file_path, short_path.c_str(), LIST_NAME_MAX_PATH);
+                        added = config->_oled->_menu->add_sd_file(file_path, false); // Flag for adding G-code file
+                        if (added) {
+                            file_count++;
+                        }
 
-                    // Update most recent file if necessary
-                    if (added && dir_entry.last_write_time() > most_recent_time) {
-                        most_recent_time = dir_entry.last_write_time();
-                        strncpy(recent_file_path, short_path.c_str(), LIST_NAME_MAX_PATH);
+                        // Update most recent file if necessary
+                        if (added) {
+                            try {
+                                auto file_time = dir_entry.last_write_time();
+                                if (file_time > most_recent_time) {
+                                    most_recent_time = file_time;
+                                    strncpy(recent_file_path, short_path.c_str(), LIST_NAME_MAX_PATH);
+                                }
+                            } catch (...) {
+                                // SD card I/O error during file time access - skip this file
+                                log_warn("Failed to get file time for: " << short_path);
+                            }
+                        }
+
+                        // Log heap status and check memory limit every 20 files
+                        if (file_count % 20 == 0) {
+                            uint32_t current_heap = ESP.getFreeHeap();
+                            log_info("Files read: " << file_count << ", Heap: " << current_heap << " bytes");
+
+                            // Show loading progress (starting at 40 files)
+                            if (file_count > 39) {
+                                char msg[55];
+                                snprintf(msg, sizeof(msg), "microSD Card:           Reading %d files...", file_count);
+                                config->_oled->show_persistent_msg(msg);
+                                config->_oled->processDisplayRefresh(); // Force display update
+                            }
+
+                            // Stop if heap drops below safe threshold (65 kB)
+                            if (current_heap < 65000) {
+                                log_warn("Memory limit reached: " << file_count << " files read; stopping scan (heap: " << current_heap << " bytes)");
+                                config->_oled->clear_popup();  // Clear loading message first
+                                char msg[55];
+                                snprintf(msg, sizeof(msg), "File limit reached: Read %d files from microSD.", file_count);
+                                config->_oled->show_persistent_msg(msg);
+                                limit_reached = true;
+                                break;
+                            }
+                        }
                     }
+
+                    // Check if the file extension is in the allowed binary extensions
+                    else if (allowed_binary_ext.count(extension) > 0) {
+                        std::string full_path = dir_entry.path().string();
+                        std::string short_path = full_path.substr(strlen(base_path));
+
+                        strncpy(file_path, short_path.c_str(), LIST_NAME_MAX_PATH);
+                        if (config->_oled->_menu->add_sd_file(file_path, true)) { // Flag for adding binary file
+                            file_count++;
+                        }
+                        //SAVE CONFIG PATH TO CONFIG
+                    }
+
+                    // Check if the file extension is in the allowed config extensions
+                    else if (allowed_config_ext.count(extension) > 0) {
+                        std::string full_path = dir_entry.path().string();
+                        std::string short_path = full_path.substr(strlen(base_path));
+
+                        strncpy(file_path, short_path.c_str(), LIST_NAME_MAX_PATH);
+                        if (config->_oled->_menu->add_sd_file(file_path, false, true)) { // Flag for adding config file
+                            file_count++;
+                        }
+                    }
+
+                    // Check if we've reached the absolute file limit
+                    if (file_count >= MAX_SD_FILES) {
+                        log_warn("Absolute file limit reached: " << file_count << " files read, stopping scan");
+                        config->_oled->clear_popup();  // Clear loading message first
+                        char msg[55];
+                        snprintf(msg, sizeof(msg), "File limit reached: Read %d files from microSD.", file_count);
+                        config->_oled->show_persistent_msg(msg);
+                        limit_reached = true;
+                        break;
+                    }
+
+                    ++iter; // Advance the iterator
                 }
 
-                // Check if the file extension is in the allowed binary extensions
-                else if (allowed_binary_ext.count(extension) > 0) {
-                    std::string full_path = dir_entry.path().string();
-                    std::string short_path = full_path.substr(strlen(base_path));
-
-                    strncpy(file_path, short_path.c_str(), LIST_NAME_MAX_PATH);
-                    config->_oled->_menu->add_sd_file(file_path, true); // Flag for adding binary file
-                    //SAVE CONFIG PATH TO CONFIG
+                if(recent_file_path[0] != '\0'){
+                    config->_oled->_menu->set_recent_file(recent_file_path);
+                } else {
+                    log_info("No Files Detected on SD");
                 }
 
-                // Check if the file extension is in the allowed config extensions
-                else if (allowed_config_ext.count(extension) > 0) {
-                    std::string full_path = dir_entry.path().string();
-                    std::string short_path = full_path.substr(strlen(base_path));
-
-                    strncpy(file_path, short_path.c_str(), LIST_NAME_MAX_PATH);
-                    config->_oled->_menu->add_sd_file(file_path, false, true); // Flag for adding config file
-                }
-
-                ++iter; // Advance the iterator
             }
-
-            if(recent_file_path[0] != '\0'){
-                config->_oled->_menu->set_recent_file(recent_file_path);
+        } catch (const std::exception& e) {
+            std::string err_msg = e.what();
+            // Extract just the error type from verbose filesystem error messages
+            if (err_msg.find("Bad file number") != std::string::npos) {
+                log_error("microSD I/O error. Please restart machine. [bad file number]");
             } else {
-                log_info("No Files Detected on SD");
+                log_error("microSD I/O error. Please restart machine. [" << err_msg << "]");
             }
-            
+            scan_error = true;
+        } catch (...) {
+            log_error("microSD I/O error. Please restart machine. [unknown error]");
+            scan_error = true;
         }
     }
+
+    // Report final file count
+    log_info("File scan complete: " << file_count << " files read");
+    log_debug("Total file_count = " << file_count);
+
+    // Clear loading progress message (unless we hit a limit or error and are showing that message)
+    if (!limit_reached && !scan_error) {
+        config->_oled->clear_popup();
+    }
+
+    // Log final memory usage after all files loaded
+    config->_oled->_menu->finish_sd_update();
 
     // Refresh the menu
     config->_oled->refresh_display(true);

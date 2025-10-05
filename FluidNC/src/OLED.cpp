@@ -3,6 +3,7 @@
 #include "Machine/MachineConfig.h"
 #include "WebUI/WifiConfig.h"  // wifi_config.Hostname()
 #include "Protocol.h"  // For rcServoZCal access
+#include "System.h"    // For sys.parkingInProgress access
 
 // Static variables
 static float* saved_axes = NULL;   // Saved dro values for refreshing display
@@ -399,6 +400,8 @@ void OLED::show_state() {
         std::string display_text;
         if (_popup && _error) {
             display_text = "Error";  // Show "Error" header for error popups
+        } else if (_menu->is_home_menu() && _state != "Home") {
+            display_text = config->_name;  // Show machine name on home menu
         } else if (_state == "Idle" && _menu != nullptr) {
             display_text = _menu->get_current_menu_title();
         } else {
@@ -578,18 +581,18 @@ void OLED::show_file() {
         show(percentLayout64, std::to_string(pct) + '%');
     }
 
-    // Clear immediate comment when not in Run state
-    if (_state != "Run" && _comment_countdown > 0) {
+    // Clear immediate comment when not in Run/Hold/Decel states
+    if (_state != "Run" && _state != "Hold" && _state != "Decel" && _comment_countdown > 0) {
         _comment_countdown = 0;  // Clear immediate display on state exit
     }
 
     // Display pause/resume message at bottom OR comments if present
     if (_comment_countdown > 0) {
-        // Immediate display comment active
+        // Immediate display comment active (e.g., "Resuming...")
         wrapped_draw_string(40, _comment, DejaVu_Sans_10);
-    } else if (!_saved_m0_comment.empty() && 
+    } else if (!_saved_m0_comment.empty() &&
                gc_state.modal.program_flow == ProgramFlow::Paused &&
-               sys.state == State::Hold && 
+               sys.state == State::Hold &&
                sys.suspend.bit.holdComplete &&
                (!config->_parking->park_on_feedhold() || sys.suspend.bit.retractComplete)) {
         // M0 pause fully stopped with saved comment, and parking is complete (if enabled)
@@ -599,26 +602,29 @@ void OLED::show_file() {
         }
         wrapped_draw_string(40, _saved_m0_comment, DejaVu_Sans_10);
     } else if (!_download_mode) {
-        // Default messages (keep existing code)
+        // Default messages
         if (_state == "Run") {
             if (_pause_requested) {
                 _oled->drawString(0, 46, "Pause requested...");
             } else {
                 _oled->drawString(0, 46, "Click to PAUSE");
             }
-} else if (_state == "Decel") {  // Hold:1 - decelerating
+        } else if (_state == "Decel") {  // Hold:1 - decelerating
             _oled->drawString(0, 46, "Pausing, please wait...");
         } else if (_state == "Hold") {    // Hold:0 - fully stopped
-            // Only show resume message if parking is disabled OR parking is complete
-            if (!config->_parking->park_on_feedhold() || sys.suspend.bit.retractComplete) {
-                // Clear the message area before drawing new text
+            // Check for unparking state - show "Resuming..." message
+            if (sys.suspend.bit.initiateRestore) {
+                _oled->drawString(0, 46, "Resuming...");
+            } else if (!config->_parking->park_on_feedhold() || sys.suspend.bit.retractComplete) {
+                // Only show resume message if parking is disabled OR parking is complete
                 clearLowerContentFast();  // Clear Y=40 to Y=63 efficiently
                 _oled->drawString(0, 40, "Click to RESUME");
                 _oled->drawString(0, 52, "HOLD to CANCEL");
-            } else {
+            } else if (sys.parkingInProgress) {
+                // Show "Pausing" only when actively parking (not after unpark completes)
                 _oled->drawString(0, 46, "Pausing, please wait...");
             }
-}
+        }
     }
 
     // Add a method to cleanup all drawn stuff to clear corruption?
@@ -885,20 +891,24 @@ void OLED::show_home_layout(int hightlight) {
     int i = 0;
     while (entry && entry->display_name && i < 4) {
         if (entry->selected) {
-            show(bottomTextLayout, entry->display_name);
+            // For EggBot, show the action you can take (Lock/Unlock) instead of Home
+            if (config->getMachineType() == Machine::MachineType::EggBot &&
+                strcmp(entry->display_name, "Home") == 0) {
+                if (config->_axes->motors_are_disabled()) {
+                    show(bottomTextLayout, "Lock motors");
+                } else {
+                    show(bottomTextLayout, "Unlock motors");
+                }
+            } else {
+                show(bottomTextLayout, entry->display_name);
+            }
         }
         entry = entry->next;
         i++;
     }
     // homed indication
     if (hightlight == 2) { // home icon selected
-        if(config->getMachineType() == Machine::MachineType::EggBot) { // special motor indication for Eggbot
-            if (config->_axes->motors_are_disabled()) {
-                show(bottomRightLayout, "(motors off)");
-            } else {
-                show(bottomRightLayout, "(motors on)");
-            }
-        } else { // standard homed check for all other machines
+        if(config->getMachineType() != Machine::MachineType::EggBot) { // standard homed check for non-EggBot machines
             if(config->_axes->_homed) {
                 show(bottomRightLayout, "(homed)");
             } else {

@@ -85,7 +85,15 @@ static const int axesStringLen  = coordStringLen * MAX_N_AXIS;
 static std::string report_util_axis_values(const float* axis_value) {
     std::ostringstream msg;
     auto               n_axis = config->_axes->_numberAxis;
+    bool               first = true;
     for (size_t idx = 0; idx < n_axis; idx++) {
+        if (idx == C_AXIS) continue;  // Skip internal dwell axis
+
+        if (!first) {
+            msg << ",";
+        }
+        first = false;
+
         int   decimals;
         float value = axis_value[idx];
         if (idx >= A_AXIS && idx <= C_AXIS) {
@@ -103,9 +111,6 @@ static std::string report_util_axis_values(const float* axis_value) {
             }
         }
         msg << std::fixed << std::setprecision(decimals) << value;
-        if (idx < (n_axis - 1)) {
-            msg << ",";
-        }
     }
     return msg.str();
 }
@@ -467,10 +472,6 @@ void mpos_to_wpos(float* position) {
 const char* state_name() {
     switch (sys.state) {
         case State::Idle:
-            // During G4 dwell, report as "Run" even though state is Idle
-            if (g4_dwell_active) {
-                return "Run";
-            }
             return "Idle";
         case State::Cycle:
             return "Run";

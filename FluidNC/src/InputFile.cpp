@@ -14,14 +14,7 @@ InputFile::InputFile(const char* defaultFs, const char* path, WebUI::Authenticat
     gc_saw_program_end = false; // clear flag for truncated file checking
 
     // Clear RC servo calibration state when starting a file
-    extern volatile bool rcServoZCal;
-    extern float rcServoZOriginalPos;
-    rcServoZCal = false;
-    rcServoZOriginalPos = -99999.0f;
-    
-    // Clear G4 dwell flag when starting a new file
-    extern bool g4_dwell_active;
-    g4_dwell_active = false;
+    clearRcServoCalibration();
 
     // Clear comments when opening new file
     if (config && config->_oled) {
@@ -95,22 +88,50 @@ Channel* InputFile::pollLine(char* line) {
             _progress = s.str();
         }
             return &allChannels;
-        case Error::Eof:
+        case Error::Eof: {
             _progress = "";
             _notifyf("File job done", "%s file job succeeded", path());
             log_msg(path() << " file job succeeded");
+            uint32_t heap_free = ESP.getFreeHeap();
+            float heap_kb = heap_free / 1024.0;
+
+#ifdef DEBUG_STACK_USAGE
+            const uint32_t STACK_TOTAL_WORDS = 6144; // From ARDUINO_LOOP_STACK_SIZE in main.cpp
+            uint32_t stack_words = uxTaskGetStackHighWaterMark(NULL);
+            float stack_kb = (stack_words * 4) / 1024.0;
+            float stack_total_kb = (STACK_TOTAL_WORDS * 4) / 1024.0;
+            uint32_t stack_used_pct = ((STACK_TOTAL_WORDS - stack_words) * 100) / STACK_TOTAL_WORDS;
+            log_info("File completed - Stack: " << stack_kb << " kB free / " << stack_total_kb << " kB total (" << stack_used_pct << "% peak used) | Heap: " << heap_kb << " kB free");
+#else
+            log_info("File completed - Heap: " << heap_kb << " kB free");
+#endif
             config->_oled->_menu->set_completed_file(path().c_str());
             config->_oled->_menu->set_last_file_succeeded(true);
             if (gc_saw_program_end == false) { config->_oled->show_persistent_msg("Warning: Program ended unexpectedly"); }
             allChannels.kill(this);
             return nullptr;
-        default:
+        }
+        default: {
             _progress = "";
             log_error(static_cast<int>(err) << " (" << errorString(err) << ") in " << path() << " at line " << getLineNumber());
+            uint32_t heap_free = ESP.getFreeHeap();
+            float heap_kb = heap_free / 1024.0;
+
+#ifdef DEBUG_STACK_USAGE
+            const uint32_t STACK_TOTAL_WORDS = 6144; // From ARDUINO_LOOP_STACK_SIZE in main.cpp
+            uint32_t stack_words = uxTaskGetStackHighWaterMark(NULL);
+            float stack_kb = (stack_words * 4) / 1024.0;
+            float stack_total_kb = (STACK_TOTAL_WORDS * 4) / 1024.0;
+            uint32_t stack_used_pct = ((STACK_TOTAL_WORDS - stack_words) * 100) / STACK_TOTAL_WORDS;
+            log_info("File failed - Stack: " << stack_kb << " kB free / " << stack_total_kb << " kB total (" << stack_used_pct << "% peak used) | Heap: " << heap_kb << " kB free");
+#else
+            log_info("File failed - Heap: " << heap_kb << " kB free");
+#endif
             config->_oled->_menu->set_completed_file(path().c_str());
             config->_oled->_menu->set_last_file_succeeded(false);
             allChannels.kill(this);
             return nullptr;
+        }
     }
 }
 
@@ -118,6 +139,19 @@ void InputFile::stopJob() {
     //Report print stopped
     _notifyf("File print canceled", "Reset during file job at line: %d", getLineNumber());
     log_info("Reset during file job at line: " << getLineNumber());
+    uint32_t heap_free = ESP.getFreeHeap();
+    float heap_kb = heap_free / 1024.0;
+
+#ifdef DEBUG_STACK_USAGE
+    const uint32_t STACK_TOTAL_WORDS = 6144; // From ARDUINO_LOOP_STACK_SIZE in main.cpp
+    uint32_t stack_words = uxTaskGetStackHighWaterMark(NULL);
+    float stack_kb = (stack_words * 4) / 1024.0;
+    float stack_total_kb = (STACK_TOTAL_WORDS * 4) / 1024.0;
+    uint32_t stack_used_pct = ((STACK_TOTAL_WORDS - stack_words) * 100) / STACK_TOTAL_WORDS;
+    log_info("File stopped - Stack: " << stack_kb << " kB free / " << stack_total_kb << " kB total (" << stack_used_pct << "% peak used) | Heap: " << heap_kb << " kB free");
+#else
+    log_info("File stopped - Heap: " << heap_kb << " kB free");
+#endif
     config->_oled->_menu->set_completed_file(path().c_str());
     config->_oled->_menu->set_last_file_succeeded(false);
     allChannels.kill(this);

@@ -163,6 +163,78 @@ retry_write:
     esp_restart();
 }
 
+namespace {
+    // Helper to inject C axis at end of axes section in user config
+    // Returns true on success, false on failure (logs reason)
+    bool injectCAxisIntoUserConfig(std::string& config, Machine::BoardType board) {
+        // Get C axis YAML snippet from flash (board-specific)
+        const char* cAxisYaml = nullptr;
+        if (board == Machine::BoardType::Hen) {
+            cAxisYaml = Machine::CriticalPins::Hen::C_AXIS_YAML;
+        } else if (board == Machine::BoardType::Rooster) {
+            cAxisYaml = Machine::CriticalPins::Rooster::C_AXIS_YAML;
+        } else {
+            // Unknown board, no injection
+            return false;
+        }
+
+        // Check if snippet is empty
+        if (!cAxisYaml || cAxisYaml[0] == '\0') {
+            log_warn("No C axis definition available for board type");
+            return false;
+        }
+
+        // Find "axes:" section
+        size_t axes_pos = config.find("\naxes:");
+        if (axes_pos == std::string::npos) {
+            // Try at start of file
+            if (config.find("axes:") == 0) {
+                axes_pos = 0;
+            } else {
+                // No axes section, cannot inject
+                log_info("User config has no axes section - C axis injection skipped");
+                return false;
+            }
+        }
+
+        // Find end of axes section:
+        // First line at column 0 with non-whitespace, or end of file
+        size_t search_start = axes_pos + (axes_pos == 0 ? 5 : 6);  // After "axes:" or "\naxes:"
+        size_t inject_pos = std::string::npos;
+
+        // Search for \n followed by non-whitespace at column 0
+        for (size_t i = search_start; i < config.length(); i++) {
+            if (config[i] == '\n') {
+                // Check next character
+                if (i + 1 < config.length()) {
+                    char next = config[i + 1];
+                    // Non-whitespace at column 0 = new top-level section
+                    if (next != ' ' && next != '\t' && next != '\n' && next != '\r') {
+                        inject_pos = i + 1;  // After the \n
+                        break;
+                    }
+                }
+            }
+        }
+
+        // If not found, inject at end of file
+        if (inject_pos == std::string::npos) {
+            inject_pos = config.length();
+            // Ensure file ends with newline
+            if (!config.empty() && config.back() != '\n') {
+                config += '\n';
+                inject_pos = config.length();
+            }
+        }
+
+        // Insert C axis YAML snippet (modifies config in-place)
+        config.insert(inject_pos, cAxisYaml);
+        log_info("Injected C axis for G4 dwell support into user config");
+
+        return true;
+    }
+}
+
 // Print out reset reason at boot
 #define DEBUG_RESET_REASON
 
@@ -398,15 +470,42 @@ namespace Machine {
                 return false;
             }
 
-            auto buffer      = std::make_unique<char[]>(filesize + 1);
-            buffer[filesize] = '\0';
-            auto actual      = file.read(buffer.get(), filesize);
+            // Pre-calculate total size needed to avoid reallocation during injection
+            std::string configStr;
+            if (!clearPins) {
+                // Overlay mode - will inject C axis, so pre-allocate extra space
+                const char* cAxisYaml = nullptr;
+                if (detectedBoard == BoardType::Hen) {
+                    cAxisYaml = Machine::CriticalPins::Hen::C_AXIS_YAML;
+                } else if (detectedBoard == BoardType::Rooster) {
+                    cAxisYaml = Machine::CriticalPins::Rooster::C_AXIS_YAML;
+                }
+
+                size_t cAxisLength = (cAxisYaml && cAxisYaml[0] != '\0') ? strlen(cAxisYaml) : 0;
+                // Reserve file size + C axis size + small buffer for safety
+                configStr.reserve(filesize + cAxisLength + 16);
+            }
+
+            configStr.resize(filesize);
+            auto actual = file.read(&configStr[0], filesize);
             if (actual != filesize) {
                 log_info("Configuration file:" << filename << " read error");
                 return false;
             }
-            // Trimming the overall config file could influence indentation, hence false
-            return load_yaml(std::string_view { buffer.get(), filesize }, detectedBoard, clearPins);
+
+            // If overlay mode (user config), inject C axis at end of axes section
+            // clearPins=false means overlay mode (user config)
+            // clearPins=true means base mode (recovery config - but recovery doesn't use load_file)
+            if (!clearPins) {
+                if (!injectCAxisIntoUserConfig(configStr, detectedBoard)) {
+                    log_warn("Failed to inject C axis into user config");
+                    // Continue anyway - not a fatal error
+                }
+            }
+
+            // Parse modified config
+            return load_yaml(std::string_view { configStr.data(), configStr.length() },
+                            detectedBoard, clearPins);
         } catch (...) {
             log_warn("Cannot open configuration file:" << filename);
             return false;

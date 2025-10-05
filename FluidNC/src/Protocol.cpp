@@ -66,6 +66,11 @@ static char comment[LINE_BUFFER_SIZE];  // Line to be executed. Zero-terminated.
 volatile bool rcServoZCal = false;
 float rcServoZOriginalPos = -99999.0f;
 
+void clearRcServoCalibration() {
+    rcServoZCal = false;
+    rcServoZOriginalPos = -99999.0f;
+}
+
 // Spindle stop override control states.
 struct SpindleStopBits {
     uint8_t enabled : 1;
@@ -540,8 +545,7 @@ static void protocol_do_alarm() {
     }
 
     // Clear RC servo calibration state on any alarm
-    rcServoZCal = false;
-    rcServoZOriginalPos = -99999.0f;
+    clearRcServoCalibration();
     log_info("RC servo calibration cleared due to alarm");
 
     if (spindle->_off_on_alarm) {
@@ -804,11 +808,7 @@ static void protocol_do_initiate_cycle() {
             log_info("Cleared stale deferred pause on resume to " << state_name());
             sys.deferredPauseRequest = false;
         }
-        
-        // Clear "Resuming..." message now that motion is actually starting
-        if (config && config->_oled) {
-            config->_oled->set_comment("", false);  // Clear comment
-        }
+
         Stepper::prep_buffer();  // Initialize step segment buffer before beginning cycle.
         Stepper::wake_up();
     } else {  // Otherwise, do nothing. Set and resume IDLE state.
@@ -862,6 +862,10 @@ static void protocol_do_cycle_start() {
                             config->_oled->clear_m0_comment();
                         }
                         sys.suspend.bit.initiateRestore = true;
+                        // Force display refresh to show "Resuming..." before unpark blocks
+                        if (config && config->_oled) {
+                            config->_oled->refresh_display();
+                        }
                     // Otherwise, resume
                     } else {
                         // Clear M0 comment when resuming
@@ -973,10 +977,7 @@ if (sys.step_control.executeHold) {
     }
 
     // log_debug("End Cycle Stop");
-    // Skip display refresh during G4 dwell to prevent flickering
-    if (!g4_dwell_active) {
-        config->_oled->refresh_display(); // AIDAN
-    }
+    config->_oled->refresh_display(); // AIDAN
 }
 
 static void update_velocities() {
@@ -1363,10 +1364,6 @@ static void protocol_do_enter() {
         } else {
             // Short press - Resume
             log_info("Resume requested during hold");
-            // Show "Resuming..." message immediately if parking is enabled
-            if (config && config->_oled && config->_parking && config->_parking->park_on_feedhold()) {
-                config->_oled->set_comment("Resuming...", false);
-            }
             config->_control->lock_enter();
             protocol_send_event(&cycleStartEvent);
             protocol_execute_realtime();
@@ -1433,11 +1430,9 @@ static void protocol_do_enter() {
             
                 // Home command
                 if (strcmp(config->_oled->_menu->get_selected()->display_name, "Home") == 0) {
-                    if (config->getMachineType() == Machine::MachineType::EggBot ||
-                        config->getMachineType() == Machine::MachineType::WaterColorBot) { // motor power toggle for EggBot and WaterColorBot
+                    if (config->getMachineType() == Machine::MachineType::EggBot) { // motor power toggle for EggBot only
                         // Clear calibration state when toggling motor lock
-                        rcServoZCal = false;
-                        rcServoZOriginalPos = -99999.0f;
+                        clearRcServoCalibration();
 
                         bool currently_disabled = config->_axes->motors_are_disabled();
                         config->_axes->set_disable(!currently_disabled);
@@ -1599,8 +1594,7 @@ static void protocol_do_enter() {
                             log_info("RC servo calibration exited, returning to Z" << rcServoZOriginalPos);
                         }
                         // Reset calibration state
-                        rcServoZCal = false;
-                        rcServoZOriginalPos = -99999.0f;
+                        clearRcServoCalibration();
                     } else {
                         // Entering calibration - save current Z position (machine coordinates)
                         // System is in State::Idle so position is stable

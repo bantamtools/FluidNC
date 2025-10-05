@@ -49,6 +49,7 @@ public:
     ListType* add_directory(char *path, bool isBin = false, bool isCfg = false);
     bool add_sd_file(char *path, bool isBin = false, bool isCfg = false); // return whether we actually added it (hidden/trash files discarded)
     void prep_for_sd_update();
+    void finish_sd_update();
     void set_recent_file(char *path, bool from_upload = false);
     std::string get_recent_file_path() { return _recent_file_path; }
     std::string get_recent_file_name() { return _recent_file_name; }

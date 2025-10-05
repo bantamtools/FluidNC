@@ -94,9 +94,6 @@ bool read_float(const char* line, size_t* char_counter, float* float_ptr) {
     return true;
 }
 
-// Global flag to track if G4 dwell is active
-bool g4_dwell_active = false;
-
 void delay_ms(uint16_t ms) {
     vTaskDelay(ms / portTICK_PERIOD_MS);
 }

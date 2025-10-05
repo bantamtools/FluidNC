@@ -1,8 +1,9 @@
 name: "WaterColorBot"
-board: "Serama Hen"
-meta: "0.0.18"
+board: "Serama Hen D"
+meta: "0.5.0" 
 
-planner_blocks: 32
+planner_blocks: 16
+wifi_mode: -1
 
 start:
   must_home: false
@@ -10,6 +11,13 @@ start:
 control:
   enter_pin: gpio.36:low
   long_press_ms: 1000
+
+# Stepper UART
+uart1:
+  txd_pin: gpio.43
+  rxd_pin: gpio.44
+  baud: 115200
+  mode: 8N1
 
 stepping:
   engine: TIMED
@@ -30,7 +38,7 @@ parking:
 axes:
   shared_stepper_disable_pin: NO_PIN
   shared_stepper_reset_pin: NO_PIN
-  
+
   x:
     steps_per_mm: 80
     max_rate_mm_per_min: 20000
@@ -44,16 +52,31 @@ axes:
       positive_direction: false
       feed_mm_per_min: 500
       seek_mm_per_min: 2000
-    
+
     motor0:
-      limit_neg_pin: gpio.1:high
-      pulloff_mm: 3
-      stepstick:
-        disable_pin: gpio.15:low
-        direction_pin: gpio.16:low
-        step_pin: gpio.17
+      limit_neg_pin: gpio.3:high
+      tmc_2209:
+        uart_num: 1
+        addr: 1
+        r_sense_ohms: 0.100
+        run_amps: 0.700
+        hold_amps: 0.500
+        microsteps: 16
+        stallguard: 0
+        stallguard_debug: false
+        toff_disable: 0
+        toff_stealthchop: 3
+        toff_coolstep: 15
+        run_mode: StealthChop
+        homing_mode: StealthChop
+        use_enable: true
+        direction_pin: gpio.21:low
+        step_pin: gpio.26
+        disable_pin: gpio.18:high
     motor1:
       null_motor:
+
+
 
   y:
     steps_per_mm: 80
@@ -70,14 +93,29 @@ axes:
       seek_mm_per_min: 2000
 
     motor0:
-      limit_neg_pin: gpio.2:high
-      pulloff_mm: 0.9
-      stepstick:
-        disable_pin: gpio.18:low
-        direction_pin: gpio.21:high
-        step_pin: gpio.26
+      limit_neg_pin: gpio.2:high:pu
+      pulloff_mm: 2
+      tmc_2209:
+        uart_num: 1
+        addr: 0
+        r_sense_ohms: 0.100
+        run_amps: 0.700
+        hold_amps: 0.500
+        microsteps: 16
+        stallguard: 0
+        stallguard_debug: false
+        toff_disable: 0
+        toff_stealthchop: 3
+        toff_coolstep: 15
+        run_mode: StealthChop
+        homing_mode: StealthChop
+        use_enable: true
+        direction_pin: gpio.16:high
+        step_pin: gpio.17
+        disable_pin: gpio.15:high
     motor1:
       null_motor:
+
 
   z:
     steps_per_mm: 10.000
@@ -102,6 +140,7 @@ axes:
         # 1000 Maps to Z=15 (top position; max_pulse_us)
         # Initialize Servo physically at 15 mm (top)
 
+
 # OLED
 i2c0:
    sda_pin: gpio.41
@@ -119,6 +158,7 @@ oled:
 encoder:
   a_pin: gpio.35
   b_pin: gpio.48
+  old_scroll_behavior: false  # Optional, defaults to false  
 
 # Configure SD card in SDMMC mode
 sdcard:
@@ -131,3 +171,11 @@ sdcard:
  d2_pin: gpio.13
  d3_pin: gpio.12
  cd_pin: gpio.14
+
+macros:
+  startup_line0:
+  startup_line1:
+  macro0:
+  macro1:
+  macro2:
+  macro3:

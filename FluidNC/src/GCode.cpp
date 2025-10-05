@@ -1721,7 +1721,7 @@ Error gc_execute_line(char* line) {
 
     // [10. Dwell ]:
     if (gc_block.non_modal_command == NonModal::Dwell) {
-        mc_dwell(int32_t(gc_block.values.p * 1000.0f));
+        mc_dwell_move(gc_block.values.p);  // Pass P value directly as seconds
     }
     // [11. Set active plane ]:
     gc_state.modal.plane_select = gc_block.modal.plane_select;
@@ -1747,10 +1747,8 @@ Error gc_execute_line(char* line) {
     if (gc_state.modal.coord_select != gc_block.modal.coord_select) {
         // Clear calibration state when coordinate system changes (G54→G55 etc.)
         extern volatile bool rcServoZCal;
-        extern float rcServoZOriginalPos;
         if (rcServoZCal) {
-            rcServoZCal = false;
-            rcServoZOriginalPos = -99999.0f;
+            clearRcServoCalibration();
         }
 
         gc_state.modal.coord_select = gc_block.modal.coord_select;

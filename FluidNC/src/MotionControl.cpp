@@ -14,6 +14,7 @@
 #include "I2SOut.h"          // i2s_out_reset
 #include "Platform.h"        // WEAK_LINK
 #include "Settings.h"        // coords
+#include "GCode.h"           // gc_state
 
 #include <cmath>
 
@@ -254,21 +255,71 @@ void mc_arc(float*            target,
     mc_linear(target, pl_data, previous_position);
 }
 
-// Execute dwell in seconds.
+// Legacy dwell implementation - REPLACED by mc_dwell_move()
+// This implementation causes Cycle -> Idle state transition and disrupts motion planning.
+// Kept commented out for reference.
+/*
 bool mc_dwell(int32_t milliseconds) {
     if (milliseconds <= 0 || sys.state == State::CheckMode) {
         return false;
     }
-
-    // Set flag BEFORE buffer sync so it's active when motion completes
-    g4_dwell_active = true;
-
     protocol_buffer_synchronize();
+    return delay_msec(milliseconds, DwellMode::Dwell);
+}
+*/
 
-    // Keep flag set during the actual dwell delay
-    bool result = delay_msec(milliseconds, DwellMode::Dwell);
+// Execute dwell using null motor motion on axis C
+// This keeps the system in Cycle state during the dwell and enforces proper sequencing
+bool mc_dwell_move(float seconds) {
+    if (seconds <= 0 || sys.state == State::CheckMode) {
+        return false;  // G4 P0 and negative values treated as no-op
+    }
 
-    g4_dwell_active = false;
+    // Check if axis C exists and is configured
+    if (!config || !config->_axes) {
+        log_error("mc_dwell_move: config or axes is null!");
+        return false;
+    }
+
+    auto n_axis = config->_axes->_numberAxis;
+
+    if (C_AXIS >= n_axis) {
+        log_error("G-code execution not supported in recovery mode.");
+        return false;
+    }
+
+    if (config->_axes->_axis[C_AXIS] == nullptr) {
+        log_error("G-code execution not supported in recovery mode.");
+        return false;
+    }
+
+    // Minimum 1ms (gives at least 1 step)
+    float time_seconds = std::max(seconds, 0.001f);
+
+    // Distance equals time in seconds (gives constant 60 mm/min feed rate)
+    float distance = time_seconds;  // mm
+    float feed_rate = 60.0f;  // mm/min (constant!)
+
+    float target[MAX_N_AXIS];
+    copyAxes(target, gc_state.position);
+
+    // Oscillate around zero to keep position bounded
+    // Use standard incremental pattern: target = current + signed_distance
+    float signed_distance = (gc_state.position[C_AXIS] > 0) ? -distance : distance;
+    target[C_AXIS] = gc_state.position[C_AXIS] + signed_distance;
+
+    plan_line_data_t pl_data = {};
+    pl_data.feed_rate = feed_rate;
+    pl_data.motion.noFeedOverride = 1;  // Ignore feed rate overrides
+    pl_data.spindle_speed = gc_state.spindle_speed;
+    pl_data.spindle = gc_state.modal.spindle;
+    pl_data.coolant = gc_state.modal.coolant;
+    pl_data.line_number = gc_state.line_number;
+
+    bool result = mc_move_motors(target, &pl_data);
+
+    // Update parser position (standard pattern)
+    gc_state.position[C_AXIS] = target[C_AXIS];
 
     return result;
 }
@@ -387,7 +438,6 @@ void mc_override_ctrl_update(Override override_state) {
 // done quickly is handled later when Protocol.cpp responds to rtReset.
 void mc_reset() {
     sys.pauseRequested = false;  // Clear on system reset
-    g4_dwell_active = false;     // Clear G4 dwell flag on reset
     // Only this function can set the system reset. Helps prevent multiple kill calls.
     if (!rtReset) {
         rtReset = true;

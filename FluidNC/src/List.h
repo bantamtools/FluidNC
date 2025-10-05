@@ -2,6 +2,7 @@
 
 #include "Config.h"
 
+// Legacy defines kept for compatibility with stack-allocated buffers
 #define LIST_NAME_MAX_STR   40
 #define LIST_NAME_MAX_PATH  255
 
@@ -14,9 +15,12 @@ typedef struct ListNodeType
     // Submenu attributes
     struct ListType *child;
 
-    // List entry characteristics
-    char display_name[LIST_NAME_MAX_STR];
-    char path[LIST_NAME_MAX_PATH];
+    // List entry characteristics - optimized for memory efficiency
+    // IMPORTANT: For file entries, display_name points into path string (after last '/'), NOT separately allocated
+    // For static menu entries (path=NULL), display_name is separately allocated
+    // Both become invalid when path is freed - always null both together in cleanup
+    char *display_name;  // Points into path string for files, or separately allocated for static entries
+    char *path;          // Separately allocated full path for files, NULL for static entries
     bool selected;
     bool updated; // optional updated flag (used for RSS updates, etc)
 
@@ -34,8 +38,9 @@ class List {
 protected:
 
     void init(ListType *list, ListType *parent);
-    void add_entry(ListType *list, ListType *sublist, const char *path, const char *display_name, bool updated = false);
+    bool add_entry(ListType *list, ListType *sublist, const char *path, const char *display_name, bool updated = false);
     void remove_entries(ListType *list);
+    void remove_entries_recursive(ListType *list);
     void prep(ListType *list, bool add_back_btn = true);
 
 public:

@@ -46,8 +46,11 @@ void mc_arc(float*            target,
             bool              is_clockwise_arc,
             int               pword_rotations);
 
-// Dwell for a specific number of seconds
-bool mc_dwell(int32_t milliseconds);
+// Legacy dwell - REPLACED by mc_dwell_move()
+// bool mc_dwell(int32_t milliseconds);
+
+// Dwell for a specific number of seconds using null motor motion
+bool mc_dwell_move(float seconds);
 
 // Perform tool length probe cycle. Requires probe switch.
 GCUpdatePos mc_probe_cycle(float* target, plan_line_data_t* pl_data, bool away, bool no_error, uint8_t offsetAxis, float offset);

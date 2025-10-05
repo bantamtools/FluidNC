@@ -1,6 +1,7 @@
 #include "Menu.h"
 #include "Machine/MachineConfig.h"
 #include "WebUI/WifiConfig.h"
+#include <Esp.h>
 
 // Constructor
 Menu::Menu() {
@@ -67,9 +68,9 @@ Menu::~Menu() {
     // Remove all the menu nodes
     remove_entries(_version_menu);
     remove_entries(_jogging_menu);
-    remove_entries(_files_menu);
-    remove_entries(_firmware_menu);
-    remove_entries(_config_menu);
+    remove_entries_recursive(_files_menu);     // Use recursive for dynamic directories
+    remove_entries_recursive(_firmware_menu);  // Use recursive for dynamic directories
+    remove_entries_recursive(_config_menu);    // Use recursive for dynamic directories
     remove_entries(_settings_menu);
     remove_entries(_run_menu);
     remove_entries(_main_menu);
@@ -427,13 +428,25 @@ ListType* Menu::add_directory(char *path, bool isBin, bool isCfg) {
         //if (!found && strstr(token, ".gcode") == NULL) { // only make new menu if we're not at the .gcode file at the end
         if (!found && token != NULL) { // only make new menu if we're not at the file at the end
             ListType *new_menu = new ListType;
+
+            // Check for allocation failure
+            if (new_menu == NULL) {
+                log_error("Failed to allocate directory menu (heap: " << ESP.getFreeHeap() << " bytes)");
+                return current_menu;  // Return current menu instead of NULL to handle gracefully
+            }
+
             init(new_menu, current_menu);
             // Set folder name as title (without trailing slash)
             strcpy(new_menu->title, folder_name);
             // Add a "Back" button at the start of each new submenu
             prep(new_menu);
 //            log_info("Adding menu entry for folder: " << token_copy);
-            add_entry(current_menu, new_menu, NULL, token_copy);
+            if (!add_entry(current_menu, new_menu, NULL, token_copy)) {
+                // Failed to add entry, clean up and return
+                remove_entries(new_menu);  // Free the "< Back" entry first
+                delete new_menu;
+                return current_menu;
+            }
             current_menu = new_menu;
         }
 
@@ -458,8 +471,19 @@ bool Menu::add_sd_file(char *path, bool isBin, bool isCfg) {
 
     // Create directory structure in the menu
     char *path_copy = strdup(path);
+    if (path_copy == NULL) {
+        log_warn("Failed to allocate memory for path copy");
+        return false;
+    }
+
     ListType *file_menu = add_directory(path_copy, isBin, isCfg);
     free(path_copy);
+
+    // Check if directory creation succeeded
+    if (file_menu == NULL) {
+        log_warn("Failed to create directory structure for: " << path);
+        return false;
+    }
 
     // Extract the display name from the full path
     char *filename = strrchr(path, '/') + 1;
@@ -472,17 +496,84 @@ bool Menu::add_sd_file(char *path, bool isBin, bool isCfg) {
 
 //    log_info("Adding menu entry for filepath: " << path);
     // Add the file to the correct submenu
-    add_entry(file_menu, NULL, path, filename);
+    if (!add_entry(file_menu, NULL, path, filename)) {
+        log_warn("Failed to add file to menu: " << path);
+        return false;
+    }
 //    add_entry(_files_menu, NULL, path, filename);
     return true;
 }
 
 // Helper function to prep for updated SD file list
 void Menu::prep_for_sd_update(void) {
+    uint32_t heap_start = ESP.getFreeHeap();
+    float heap_kb_start = heap_start / 1024.0;
+
+#ifdef DEBUG_STACK_USAGE
+    const uint32_t STACK_TOTAL_WORDS = 6144; // From ARDUINO_LOOP_STACK_SIZE in main.cpp
+    uint32_t stack_words_start = uxTaskGetStackHighWaterMark(NULL);
+    float stack_kb_start = (stack_words_start * 4) / 1024.0;
+    float stack_total_kb = (STACK_TOTAL_WORDS * 4) / 1024.0;
+    uint32_t stack_used_pct = ((STACK_TOTAL_WORDS - stack_words_start) * 100) / STACK_TOTAL_WORDS;
+    log_info("SD file list load START - Stack: " << stack_kb_start << " kB free / " << stack_total_kb << " kB total (" << stack_used_pct << "% used) | Heap: " << heap_kb_start << " kB free");
+#else
+    log_info("SD file list load START - Heap: " << heap_kb_start << " kB free");
+#endif
+
     _saved_directory_menu = nullptr;  // Clear saved directory as menu structure will be rebuilt
-    prep(_files_menu);
-    prep(_firmware_menu);
-    prep(_config_menu);
+
+    // If currently in any file-browsing menu tree, reset to safe location before destroying dynamic menus
+    if (is_in_files_hierarchy() && _current_menu != _files_menu) {
+        _current_menu = _files_menu;
+    } else if (is_firmware_menu() || is_descendant_of(_current_menu, _firmware_menu)) {
+        _current_menu = _firmware_menu;
+    } else if (is_config_menu() || is_descendant_of(_current_menu, _config_menu)) {
+        _current_menu = _config_menu;
+    }
+
+    // Use recursive cleanup for all file-browsing menus to free dynamic directory structures
+    if (_files_menu->head) {
+        remove_entries_recursive(_files_menu);
+    }
+    add_entry(_files_menu, NULL, NULL, "< Back");
+
+    if (_firmware_menu->head) {
+        remove_entries_recursive(_firmware_menu);
+    }
+    add_entry(_firmware_menu, NULL, NULL, "< Back");
+
+    if (_config_menu->head) {
+        remove_entries_recursive(_config_menu);
+    }
+    add_entry(_config_menu, NULL, NULL, "< Back");
+
+    uint32_t heap_cleared = ESP.getFreeHeap();
+    float heap_kb_cleared = heap_cleared / 1024.0;
+
+#ifdef DEBUG_STACK_USAGE
+    uint32_t stack_words_cleared = uxTaskGetStackHighWaterMark(NULL);
+    float stack_kb_cleared = (stack_words_cleared * 4) / 1024.0;
+    uint32_t stack_used_pct_cleared = ((STACK_TOTAL_WORDS - stack_words_cleared) * 100) / STACK_TOTAL_WORDS;
+    log_info("SD file list CLEARED - Stack: " << stack_kb_cleared << " kB free / " << stack_total_kb << " kB total (" << stack_used_pct_cleared << "% used) | Heap: " << heap_kb_cleared << " kB free");
+#else
+    log_info("SD file list CLEARED - Heap: " << heap_kb_cleared << " kB free");
+#endif
+}
+
+void Menu::finish_sd_update(void) {
+    uint32_t heap_end = ESP.getFreeHeap();
+    float heap_kb_end = heap_end / 1024.0;
+
+#ifdef DEBUG_STACK_USAGE
+    const uint32_t STACK_TOTAL_WORDS = 6144;
+    uint32_t stack_words_end = uxTaskGetStackHighWaterMark(NULL);
+    float stack_kb_end = (stack_words_end * 4) / 1024.0;
+    float stack_total_kb = (STACK_TOTAL_WORDS * 4) / 1024.0;
+    uint32_t stack_used_pct_end = ((STACK_TOTAL_WORDS - stack_words_end) * 100) / STACK_TOTAL_WORDS;
+    log_info("SD file list load END - Stack: " << stack_kb_end << " kB free / " << stack_total_kb << " kB total (" << stack_used_pct_end << "% used) | Heap: " << heap_kb_end << " kB free");
+#else
+    log_info("SD file list load END - Heap: " << heap_kb_end << " kB free");
+#endif
 }
 
 // Store path and filename of most recent file on SD card
@@ -651,19 +742,26 @@ void Menu::build(void) {
 void Menu::rebuild(void) {
     _saved_directory_menu = nullptr;  // Clear saved directory as menu structure will be rebuilt
 
+    // If currently in any menu tree with dynamic directories, reset to main menu before destroying them
+    if (is_in_files_hierarchy() ||
+        is_firmware_menu() || is_descendant_of(_current_menu, _firmware_menu) ||
+        is_config_menu() || is_descendant_of(_current_menu, _config_menu)) {
+        _current_menu = _main_menu;
+    }
+
     // Clear all existing menu entries first
     remove_entries(_main_menu);
-    remove_entries(_files_menu);
+    remove_entries_recursive(_files_menu);     // Use recursive to free dynamic directory menus
     remove_entries(_jogging_menu);
     remove_entries(_settings_menu);
     remove_entries(_version_menu);
     remove_entries(_run_menu);
     remove_entries(_postrun_menu);
-    remove_entries(_firmware_menu);
-    remove_entries(_config_menu);
+    remove_entries_recursive(_firmware_menu);  // Use recursive to free dynamic directory menus
+    remove_entries_recursive(_config_menu);    // Use recursive to free dynamic directory menus
     remove_entries(_confirm_menu);
     remove_entries(_homing_choice_menu);
-    
+
     // Rebuild the menu structure with current config
     build();
 }
