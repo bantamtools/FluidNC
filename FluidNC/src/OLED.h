@@ -66,7 +66,6 @@ private: // AIDAN
     bool        _file_job_running = false;
     uint32_t    _run_start_time = 0;
     uint32_t    _prev_run_time = 0;
-    bool        _job_just_started = false;
     uint32_t    _saved_run_time = 0;
 
     std::string _comment;

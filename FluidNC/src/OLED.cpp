@@ -311,7 +311,6 @@ void OLED::init() {
     setReportInterval(250);
 
     _file_job_running = false;
-    _job_just_started = false;
 
     _active = true;
 }
@@ -522,18 +521,6 @@ void OLED::show_file() {
         _prev_run_time = 0;
         return;
     }
-    
-    // Save off previous run time during a pause
-    if ((_state == "Hold:0" || _state == "Hold:1") && (_run_start_time != 0)) {
-        if (!_job_just_started) {
-            _prev_run_time += (millis() - _run_start_time);
-            _run_start_time = 0;
-            //return;  // go ahead and draw the file running interface, in case run started with a Hold
-        } else {
-            _run_start_time = 0;
-            _prev_run_time = 0;
-        }
-    }
 
 // Exit if file/download not running, no filename or have one last SD report
     if ((!_file_job_running && !_download_mode) || /*(!_download_mode && _run_start_time == 0) ||*/ (_filename.length() == 0) || (_state != "Run" && pct == 100)) {
@@ -559,10 +546,7 @@ void OLED::show_file() {
 
             // Calculate and display the elapsed time
             uint32_t elapsed_time = (millis() - _run_start_time + _prev_run_time) / 1000;
-            if (_job_just_started) { // edge case handling Hold on start
-                elapsed_time = 0;
-                _job_just_started = false;
-            } else if ((_state == "Hold:0" || _state == "Hold:1")) {
+            if (_state == "Hold" || _state == "Decel") {
                 elapsed_time = _prev_run_time / 1000;
             }
             //elapsed_time += 35995; // temp test
@@ -973,7 +957,7 @@ void OLED::show_postrun_layout(int hightlight) {  // run menu
     log_info("Show postrun layout");
     // clear run timer here to make sure it gets reset between repeated runs
     if (_saved_run_time == 0) {
-        _prev_run_time = (millis() - _run_start_time);
+        _prev_run_time += (millis() - _run_start_time);
         _saved_run_time = _prev_run_time / 1000;
         //log_info("Calc'd run time in postrun: " << _saved_run_time);
     }
@@ -1138,13 +1122,43 @@ void OLED::parse_status_report() {
     // Now the string is a sequence of field|field|field
     size_t pos     = 0;
     auto   nextpos = _report.find_first_of("|", pos);
-_state = _report.substr(pos + 1, nextpos - pos - 1);
-    
+
+    // Track file job transitions to detect when new job starts
+    static bool prev_file_job_running = false;
+
+    // Detect new file job starting - reset accumulated time
+    if (_file_job_running && !prev_file_job_running) {
+        _prev_run_time = 0;
+    }
+    prev_file_job_running = _file_job_running;
+
+    // Save previous state before parsing new state
+    std::string old_state = _state;
+
+    _state = _report.substr(pos + 1, nextpos - pos - 1);
+
     // Map internal state names to user-friendly display names
-if (_state == "Hold:1") {
+    if (_state == "Hold:1") {
         _state = "Decel";  // Decelerating
     } else if (_state == "Hold:0") {
         _state = "Hold";   // Fully stopped
+    }
+
+    // Handle timer state transitions (only when running a file job)
+    if (_file_job_running) {
+
+        // Transition: Entering Run state
+        if (_state == "Run" && old_state != "Run") {
+            _run_start_time = millis();
+        }
+
+        // Transition: Entering Hold state (full stop)
+        if (_state == "Hold" && old_state != "Hold") {
+            // Only accumulate if we've actually been running
+            if (_run_start_time != 0) {
+                _prev_run_time += (millis() - _run_start_time);
+            }
+        }
     }
     // check for finished homing
     if (was_homing && _state != "Home") {
@@ -1514,9 +1528,7 @@ void OLED::parse_report() {
     }
     if (_report.rfind("[MSG:INFO: Run file opened]", 0) == 0) {
         _file_job_running = true;
-        _job_just_started = true;
         _saved_run_time = 0;
-        _prev_run_time = 0;
         return;
     }
     if (_report.rfind("[MSG:INFO: Run file closed]", 0) == 0) { // Moved directly to the ~InputFile() to avoid reporting inconsistencies.
