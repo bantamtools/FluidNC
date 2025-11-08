@@ -172,9 +172,13 @@ InputFile::~InputFile() {
     if(config->_oled){
         // Wait for all motion to complete and state to become Idle
         protocol_buffer_synchronize();
-        
+
         config->_oled->set_file_job_running(false);
         config->_oled->_menu->go_to_postrun_menu();
         // config->_oled->refresh_display();  // Makes sure we clear the elapsed time display
     }
+
+    // Sync position from motor steps, then normalize rotary axes
+    gc_sync_position();
+    gc_reset_winding_offsets();
 }

@@ -14,6 +14,7 @@
 #include "MotionControl.h"        // mc_override_ctrl_update
 #include "Machine/UserOutputs.h"  // setAnalogPercent
 #include "Platform.h"             // WEAK_LINK
+#include "Planner.h"              // plan_sync_position
 
 #include "Machine/MachineConfig.h"
 
@@ -62,6 +63,73 @@ void gc_clear_m0_comment() {
 // limit pull-off routines.
 void gc_sync_position() {
     motor_steps_to_mpos(gc_state.position, get_motor_steps());
+
+    // Reset winding offsets and cache unwinding config when position is synchronized
+    // This happens after homing, reset, or other position-reset events
+    auto n_axis = config->_axes->_numberAxis;
+    gc_state.unwind_axis_mask = 0;
+
+    for (size_t idx = 0; idx < n_axis; idx++) {
+        gc_state.winding_offset[idx] = 0.0f;
+        gc_state.normalization_error[idx] = 0.0f;
+
+        auto axis = config->_axes->_axis[idx];
+        if (axis) {
+            float period = axis->unwindG0();
+            if (period > 0.0f) {
+                int32_t steps_per_period = lroundf(period * axis->_stepsPerMm);
+                if (steps_per_period > 0) {
+                    gc_state.unwind_period[idx] = period;
+                    gc_state.unwind_half_period[idx] = period * 0.5f;
+                    gc_state.unwind_axis_mask |= (1 << idx);
+                } else {
+                    char axis_name = config->_axes->axisName(idx);
+                    log_error("Unwinding disabled for axis " << axis_name
+                              << ": invalid configuration (period=" << period
+                              << ", steps/mm=" << axis->_stepsPerMm << ")");
+                }
+            }
+        }
+    }
+}
+
+// Reset rotary axis winding offsets and normalize position (called at file end)
+void gc_reset_winding_offsets() {
+    auto n_axis = config->_axes->_numberAxis;
+    bool position_changed = false;
+
+    for (size_t idx = 0; idx < n_axis; idx++) {
+        if (bitnum_is_true(gc_state.unwind_axis_mask, idx)) {
+            int32_t old_steps = get_axis_motor_steps(idx);
+            float old_pos = steps_to_mpos(old_steps, idx);
+            auto axis = config->_axes->_axis[idx];
+            float period = gc_state.unwind_period[idx];
+
+            int32_t steps_per_period = lroundf(period * axis->_stepsPerMm);
+            int32_t normalized_steps = old_steps % steps_per_period;
+            if (normalized_steps < 0) {
+                normalized_steps += steps_per_period;
+            }
+
+            float normalized_pos = steps_to_mpos(normalized_steps, idx);
+            float target_pos = normalized_pos + gc_state.normalization_error[idx];
+            int32_t final_steps = mpos_to_steps(target_pos, idx);
+            float actual_pos = steps_to_mpos(final_steps, idx);
+
+            gc_state.normalization_error[idx] = target_pos - actual_pos;
+            set_motor_steps(idx, final_steps);
+            gc_state.position[idx] = actual_pos;
+            gc_state.winding_offset[idx] = 0.0f;
+            position_changed = true;
+
+            char axis_name = config->_axes->axisName(idx);
+            log_info("Unwinding axis " << axis_name << " from " << old_pos << " to " << actual_pos);
+        }
+    }
+
+    if (position_changed) {
+        plan_sync_position();
+    }
 }
 
 static void gcode_comment_msg(char* comment) {
@@ -326,6 +394,55 @@ static void gc_wco_changed() {
         protocol_buffer_synchronize();
     }
     allChannels.notifyWco();
+}
+
+// Apply G0 unwinding to rotary axes with unwind_g0 > 0
+// Modifies gc_block.values.xyz[] and updates winding_offset
+// G0 moves always take the shortest rotational path when unwinding is enabled
+static void apply_g0_unwinding(parser_block_t& gc_block,
+                                 parser_state_t& gc_state,
+                                 size_t axis_words,
+                                 size_t n_axis,
+                                 bool is_rapid) {
+    // Note: Early exit checks now handled at call site for better performance
+
+    // Apply accumulated winding offset to all unwinding axes in this move
+    // For rapids (G0), also check if wrapping is needed to take shortest path
+    for (size_t idx = 0; idx < n_axis; idx++) {
+        if (!bitnum_is_true(axis_words, idx)) {
+            continue;
+        }
+        if (!bitnum_is_true(gc_state.unwind_axis_mask, idx)) {
+            continue;
+        }
+
+        // Always apply current winding offset first (required for both rapid and non-rapid)
+        gc_block.values.xyz[idx] += gc_state.winding_offset[idx];
+
+        // For G0 rapids, check if wrapping is needed to take shortest path
+        if (is_rapid) {
+            float delta = gc_block.values.xyz[idx] - gc_state.position[idx];
+            float half_period = gc_state.unwind_half_period[idx];
+
+            // Fast path: delta already in range, no wrapping needed
+            if (delta >= -half_period && delta <= half_period) {
+                continue;
+            }
+
+            // Calculate shortest rotational path
+            float period = gc_state.unwind_period[idx];
+            float wrapped_delta = fmodf(delta + half_period, period);
+            if (wrapped_delta < 0.0f) {
+                wrapped_delta += period;  // fmod can return negative
+            }
+            wrapped_delta -= half_period;
+
+            // Apply correction for wrapping
+            float correction = wrapped_delta - delta;
+            gc_state.winding_offset[idx] += correction;
+            gc_block.values.xyz[idx] += correction;
+        }
+    }
 }
 
 // Executes one line of NUL-terminated G-Code.
@@ -1250,6 +1367,16 @@ Error gc_execute_line(char* line) {
                             }
                         }
                     }
+                }
+
+                // Apply G0 unwinding for rotary axes
+                // Only for motion mode commands (not G10, G28, G30, G92, etc.)
+                // Early exit inline: skip function call if no unwinding configured or no unwinding axes commanded
+                if (axis_command == AxisCommand::MotionMode &&
+                    gc_state.unwind_axis_mask != 0 &&
+                    (axis_words & gc_state.unwind_axis_mask) != 0) {
+                    bool is_rapid = (gc_block.modal.motion == Motion::Seek);
+                    apply_g0_unwinding(gc_block, gc_state, axis_words, n_axis, is_rapid);
                 }
             }
             // Check remaining non-modal commands for errors.

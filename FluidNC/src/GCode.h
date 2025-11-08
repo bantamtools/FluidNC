@@ -282,6 +282,13 @@ struct parser_state_t {
     float coord_offset[MAX_N_AXIS];  // Retains the G92 coordinate offset (work coordinates) relative to
     // machine zero in mm. Non-persistent. Cleared upon reset and boot.
     float tool_length_offset;  // Tracks tool length offset value when enabled.
+
+    // Rotary axis unwinding state and configuration
+    float    winding_offset[MAX_N_AXIS];         // Accumulated winding offset per axis
+    float    unwind_period[MAX_N_AXIS];          // Period for each axis (0 if disabled)
+    float    unwind_half_period[MAX_N_AXIS];     // Pre-calculated half period for range checks
+    uint8_t  unwind_axis_mask;                   // Bitmask of axes with unwinding enabled
+    float    normalization_error[MAX_N_AXIS] = {};  // Accumulated rounding error from normalizations
 };
 
 static const int maxLine = 255;
@@ -317,6 +324,9 @@ void collapseGCode(char* line);
 
 // Set g-code parser position. Input in steps.
 void gc_sync_position();
+
+// Reset rotary axis winding offsets and normalize position (called at file end)
+void gc_reset_winding_offsets();
 
 void user_tool_change(uint32_t new_tool);
 void user_m30();

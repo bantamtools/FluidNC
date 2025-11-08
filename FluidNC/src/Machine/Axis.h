@@ -36,6 +36,7 @@ namespace Machine {
         float _rapid_acceleration = _acceleration;
         float _maxTravel    = 1000.0f;
         bool  _softLimits   = false;
+        float _unwindG0     = -1.0f;  // G0 unwinding period (e.g., 360 for degrees). <=0 = disabled
 
         // Configuration system helpers:
         void group(Configuration::HandlerBase& handler) override;
@@ -47,6 +48,7 @@ namespace Machine {
 
         float commonPulloff();
         float extraPulloff();
+        float unwindG0() const { return _unwindG0; }
 
         void init();
         void config_motors();
