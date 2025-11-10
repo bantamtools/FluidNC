@@ -845,6 +845,11 @@ void Stepper::prep_buffer() {
         segment_next_head   = segment_next_head >= (config->_stepping->_segments - 1) ? 0 : segment_next_head + 1;
         segment_buffer_head = lastseg;
 
+        // Safety check in case pl_block was cleared by terminal commands during execution
+        if (pl_block == NULL) {
+            return;  // Block was cleared during execution, exit safely
+        }
+
         // Update the appropriate planner and segment data.
         pl_block->millimeters = mm_remaining;
         prep.steps_remaining  = n_steps_remaining;

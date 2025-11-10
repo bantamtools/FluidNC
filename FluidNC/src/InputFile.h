@@ -29,6 +29,7 @@ private:
 
     uint32_t _line_num;  // the most recent line number read
     bool     _readyNext = true;
+    bool     _hadError = false;  // Track if file processing encountered an error
 
 public:
     static std::string _progress;

@@ -145,6 +145,13 @@ void limits_soft_check(float* cartesian) {
         }
         mc_reset();                      // Issue system reset and ensure spindle and coolant are shutdown.
         rtAlarm = ExecAlarm::SoftLimit;  // Indicate soft limit critical event
+
+        // Set machine to unhomed state on soft limit error
+        // Only for machines that have real homing cycles (not for machines without homing capability)
+        if (config->_axes->hasRealHomingCycles()) {
+            config->_axes->set_unhomed();
+        }
+
         protocol_execute_realtime();     // Execute to enter critical event loop and system abort
     }
 }

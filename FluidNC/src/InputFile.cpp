@@ -64,7 +64,8 @@ void InputFile::ack(Error status) {
         if (status != Error::GcodeUnsupportedCommand) {
             // Do not stop on unsupported commands because most senders do not
             // Stop the file job on other errors
-            _notifyf("File job error", "Error:%d in %s at line: %d", status, path(), getLineNumber());
+            _hadError = true;
+            _notifyf("File job error", "Error:%d in %s at line: %d", status, path().c_str(), getLineNumber());
             config->_oled->_menu->set_last_file_succeeded(false);
             allChannels.kill(this);
             return;
@@ -90,7 +91,7 @@ Channel* InputFile::pollLine(char* line) {
             return &allChannels;
         case Error::Eof: {
             _progress = "";
-            _notifyf("File job done", "%s file job succeeded", path());
+            _notifyf("File job done", "%s file job succeeded", path().c_str());
             log_msg(path() << " file job succeeded");
             uint32_t heap_free = ESP.getFreeHeap();
             float heap_kb = heap_free / 1024.0;
@@ -112,6 +113,7 @@ Channel* InputFile::pollLine(char* line) {
             return nullptr;
         }
         default: {
+            _hadError = true;
             _progress = "";
             log_error(static_cast<int>(err) << " (" << errorString(err) << ") in " << path() << " at line " << getLineNumber());
             uint32_t heap_free = ESP.getFreeHeap();
@@ -137,6 +139,7 @@ Channel* InputFile::pollLine(char* line) {
 
 void InputFile::stopJob() {
     //Report print stopped
+    _hadError = true;
     _notifyf("File print canceled", "Reset during file job at line: %d", getLineNumber());
     log_info("Reset during file job at line: " << getLineNumber());
     uint32_t heap_free = ESP.getFreeHeap();
@@ -170,8 +173,11 @@ InputFile::~InputFile() {
     _progress = "";
 
     if(config->_oled){
-        // Wait for all motion to complete and state to become Idle
-        protocol_buffer_synchronize();
+        // Only wait for motion to complete if the file job completed successfully
+        // If there was an error, motion may never have started, so skip synchronization
+        if (!_hadError) {
+            protocol_buffer_synchronize();
+        }
 
         config->_oled->set_file_job_running(false);
         config->_oled->_menu->go_to_postrun_menu();
