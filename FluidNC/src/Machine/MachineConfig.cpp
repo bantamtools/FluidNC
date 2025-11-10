@@ -34,6 +34,9 @@ extern const char* const roosterRecoveryYAML;
 #include "../Pins/ProtectedPinTracker.h"
 #include "../WebUI/WifiConfig.h"  // For WebUI::wifi_mode
 
+#include <nvs.h>        // For nvs_open, nvs_get_u16, nvs_set_u16, nvs_close
+#include <nvs_flash.h>  // For nvs_handle_t, esp_err_t, ESP_OK
+
 #include <cstdio>
 #include <cstring>
 #include <atomic>
@@ -294,6 +297,10 @@ namespace Machine {
 
         // Handle optional WiFi mode setting from config
         handler.item("wifi_mode", _wifiMode, -1, 3);  // Accept -1 to 3
+
+        // Handle optional USB VID/PID settings from config
+        handler.item("usb_vid", _usbVid);
+        handler.item("usb_pid", _usbPid);
     }
 
     void MachineConfig::afterParse() {
@@ -385,7 +392,93 @@ namespace Machine {
             _machine_type = MachineType::WaterColorBot;
         }
         // Add future machine type checks here
-        
+
+        // Handle USB VID/PID configuration
+        if (_usbVid > 0xFFFF || _usbPid > 0xFFFF) {
+            // Either not specified (0xFFFFFFFF) or invalid - don't write to NVS
+            // This handles:
+            // - Neither field specified (both 0xFFFFFFFF)
+            // - Only one field specified (other is 0xFFFFFFFF)
+            // - Invalid values exceeding 16-bit range
+
+            // Only log if user actually tried to configure USB (not both at default)
+            if (_usbVid != 0xFFFFFFFF || _usbPid != 0xFFFFFFFF) {
+                if (_usbVid > 0xFFFF && _usbVid != 0xFFFFFFFF) {
+                    log_error("USB: Invalid usb_vid " << to_hex(_usbVid)
+                             << " (must be 0x0000-0xFFFF)");
+                }
+                if (_usbPid > 0xFFFF && _usbPid != 0xFFFFFFFF) {
+                    log_error("USB: Invalid usb_pid " << to_hex(_usbPid)
+                             << " (must be 0x0000-0xFFFF)");
+                }
+                if ((_usbVid <= 0xFFFF && _usbPid == 0xFFFFFFFF) ||
+                    (_usbPid <= 0xFFFF && _usbVid == 0xFFFFFFFF)) {
+                    log_error("USB: Both usb_vid and usb_pid must be specified together");
+                }
+            }
+            return;
+        }
+
+        // Both values valid (and specified) - check if they changed
+        uint16_t vid16 = static_cast<uint16_t>(_usbVid);
+        uint16_t pid16 = static_cast<uint16_t>(_usbPid);
+
+        // Read current values from NVS
+        uint16_t storedVid = 0;
+        uint16_t storedPid = 0;
+        bool hasStoredValues = false;
+
+        nvs_handle_t handle;
+        esp_err_t err = nvs_open("FluidNC", NVS_READONLY, &handle);
+        if (err == ESP_OK) {
+            bool hasVid = (nvs_get_u16(handle, "usb_vid", &storedVid) == ESP_OK);
+            bool hasPid = (nvs_get_u16(handle, "usb_pid", &storedPid) == ESP_OK);
+            hasStoredValues = hasVid && hasPid;
+            nvs_close(handle);
+        }
+
+        // Check if values changed
+        if (hasStoredValues && storedVid == vid16 && storedPid == pid16) {
+            log_info("USB: VID=" << to_hex(vid16) << " PID=" << to_hex(pid16)
+                     << " (unchanged)");
+            return;
+        }
+
+        // Values changed or not previously stored - write to NVS
+        err = nvs_open("FluidNC", NVS_READWRITE, &handle);
+        if (err != ESP_OK) {
+            log_error("USB: Failed to open NVS for writing VID/PID");
+            return;
+        }
+
+        // Write VID
+        err = nvs_set_u16(handle, "usb_vid", vid16);
+        if (err != ESP_OK) {
+            log_error("USB: Failed to write VID to NVS");
+            nvs_close(handle);
+            return;
+        }
+
+        // Write PID
+        err = nvs_set_u16(handle, "usb_pid", pid16);
+        if (err != ESP_OK) {
+            log_error("USB: Failed to write PID to NVS");
+            nvs_close(handle);
+            return;
+        }
+
+        // Commit changes
+        err = nvs_commit(handle);
+        if (err != ESP_OK) {
+            log_error("USB: Failed to commit USB settings to NVS");
+            nvs_close(handle);
+            return;
+        }
+
+        log_info("USB: VID=" << to_hex(vid16) << " PID=" << to_hex(pid16)
+                 << " saved (reboot to apply)");
+
+        nvs_close(handle);
     }
 
     // const char defaultConfig[] = "name: Default (Test Drive)\nboard: None\n";

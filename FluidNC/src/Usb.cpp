@@ -13,7 +13,11 @@ Usb::Usb() : _usb_num(0) {}
 
 void Usb::begin() {
     Serial.setRxBufferSize(2048);  // Increase from default 256 to 2048 bytes
+#if ARDUINO_USB_MODE
+    // HWCDC (ROM JTAG) has setTxBufferSize
     Serial.setTxBufferSize(2048);  // Also increase TX buffer for symmetry
+#endif
+    // USBCDC (TinyUSB) doesn't have setTxBufferSize method
     Serial.begin(115200);
 }
 

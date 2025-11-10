@@ -101,6 +101,11 @@ namespace Machine {
         bool  _reportInches         = false;
 
         int32_t _wifiMode = -1;  // -1 = not set, 0-3 = WiFi mode values
+
+        // USB VID/PID configuration (0xFFFFFFFF = not specified)
+        uint32_t _usbVid = 0xFFFFFFFF;
+        uint32_t _usbPid = 0xFFFFFFFF;
+
         bool _systemIsInitialized   = false;
 
         size_t _planner_blocks = 16;
