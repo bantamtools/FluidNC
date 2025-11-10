@@ -138,7 +138,7 @@ flashsize = "4m"
 
 mcu = "esp32"
 for mcu in ['esp32']:
-    for envName in ['wifi_s3-2436', 'wifi_s3-1824', 'wifi_s3']:
+    for envName in ['wifi_s3', 'wifi_s3_usb-otg']:
         if buildEnv(envName, verbose=verbose) != 0:
             sys.exit(1)
         buildDir = os.path.join('.pio', 'build', envName)
@@ -211,15 +211,10 @@ def makeManifest():
     addInstallable(firmware_update, False, ["esp32-wifi_s3-firmware"])
     addInstallable(filesystem_update, False, ["esp32-wifi_s3-4m-filesystem"])
 
-    addVariant("wifi_s3-2436", "Supports WiFi and WebUI on the esp32_s3", "Installation type")
-    addInstallable(fresh_install, True, ["esp32-wifi_s3-2436-4m_s3-partitions", "esp32-wifi_s3-2436_s3-bootloader", "esp32-wifi_s3-2436_s3-bootapp", "esp32-wifi_s3-2436-firmware", "esp32-wifi_s3-2436-4m-filesystem"])
-    addInstallable(firmware_update, False, ["esp32-wifi_s3-2436-firmware"])
-    addInstallable(filesystem_update, False, ["esp32-wifi_s3-2436-4m-filesystem"])
-
-    addVariant("wifi_s3-1824", "Supports WiFi and WebUI on the esp32_s3", "Installation type")
-    addInstallable(fresh_install, True, ["esp32-wifi_s3-1824-4m_s3-partitions", "esp32-wifi_s3-1824_s3-bootloader", "esp32-wifi_s3-1824_s3-bootapp", "esp32-wifi_s3-1824-firmware", "esp32-wifi_s3-1824-4m-filesystem"])
-    addInstallable(firmware_update, False, ["esp32-wifi_s3-1824-firmware"])
-    addInstallable(filesystem_update, False, ["esp32-wifi_s3-1824-4m-filesystem"])
+    addVariant("wifi_s3_usb-otg", "Supports WiFi and WebUI on the esp32_s3 with runtime USB configuration", "Installation type")
+    addInstallable(fresh_install, True, ["esp32-wifi_s3_usb-otg-4m_s3-partitions", "esp32-wifi_s3_usb-otg_s3-bootloader", "esp32-wifi_s3_usb-otg_s3-bootapp", "esp32-wifi_s3_usb-otg-firmware", "esp32-wifi_s3_usb-otg-4m-filesystem"])
+    addInstallable(firmware_update, False, ["esp32-wifi_s3_usb-otg-firmware"])
+    addInstallable(filesystem_update, False, ["esp32-wifi_s3_usb-otg-4m-filesystem"])
 
 makeManifest()
 
@@ -238,7 +233,7 @@ with open(os.path.join(manifestRelPath, "manifest.json"), "w") as manifest_file:
         addToUpdateZip(updateZip, os.path.join('FluidNC', 'data', 'index.html.gz'), os.path.join('update', 'index.html.gz'))
         
         # Add firmware.bin for each environment with envName appended
-        for envName in ['wifi_s3-2436', 'wifi_s3-1824', 'wifi_s3']:
+        for envName in ['wifi_s3', 'wifi_s3_usb-otg']:
             firmwarePath = os.path.join('.pio', 'build', envName, 'firmware.bin')
         # Append envName to the destination path in the update zip
             destinationPath = os.path.join('update', f'{envName}_firmware.bin')
