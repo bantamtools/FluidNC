@@ -402,7 +402,14 @@ void OLED::show_state() {
         } else if (_menu->is_home_menu() && _state != "Home") {
             display_text = config->_name;  // Show machine name on home menu
         } else if (_state == "Idle" && _menu != nullptr) {
-            display_text = _menu->get_current_menu_title();
+            // During buffer sync (e.g., G54/G59 coordinate system changes), state briefly
+            // transitions to Idle even though file/download is still active. Show "Run" to
+            // avoid confusing menu flash.
+            if (_file_job_running || _download_mode) {
+                display_text = "Run";
+            } else {
+                display_text = _menu->get_current_menu_title();
+            }
         } else {
             display_text = _state;
         }
@@ -957,7 +964,10 @@ void OLED::show_postrun_layout(int hightlight) {  // run menu
     log_info("Show postrun layout");
     // clear run timer here to make sure it gets reset between repeated runs
     if (_saved_run_time == 0) {
-        _prev_run_time += (millis() - _run_start_time);
+        // Only accumulate if timer was actually running (not stopped in Hold/Alarm)
+        if (_run_start_time != 0) {
+            _prev_run_time += (millis() - _run_start_time);
+        }
         _saved_run_time = _prev_run_time / 1000;
         //log_info("Calc'd run time in postrun: " << _saved_run_time);
     }
@@ -1132,33 +1142,46 @@ void OLED::parse_status_report() {
     }
     prev_file_job_running = _file_job_running;
 
-    // Save previous state before parsing new state
+    // Save previous MAPPED state from last call
+    // NOTE: old_state contains the mapped display name (e.g., "Decel" not "Hold:1")
     std::string old_state = _state;
 
-    _state = _report.substr(pos + 1, nextpos - pos - 1);
+    // Get raw state from status report
+    std::string raw_state = _report.substr(pos + 1, nextpos - pos - 1);
 
-    // Map internal state names to user-friendly display names
-    if (_state == "Hold:1") {
-        _state = "Decel";  // Decelerating
-    } else if (_state == "Hold:0") {
-        _state = "Hold";   // Fully stopped
-    }
-
-    // Handle timer state transitions (only when running a file job)
+    // Handle timer state transitions BEFORE mapping (using raw state values)
+    // Only when running a file job
     if (_file_job_running) {
 
-        // Transition: Entering Run state
-        if (_state == "Run" && old_state != "Run") {
+        // Entering Hold:0 (fully stopped) or Alarm - accumulate elapsed time and stop timer
+        if ((raw_state == "Hold:0" || raw_state == "Alarm") &&
+            (old_state != "Hold" && old_state != "Alarm")) {
+            if (_run_start_time != 0) {
+                _prev_run_time += (millis() - _run_start_time);
+                _run_start_time = 0;  // Clear timer while stopped
+            }
+        }
+
+        // Leaving Hold or Alarm - restart timer
+        if ((old_state == "Hold" || old_state == "Alarm") &&
+            (raw_state != "Hold:0" && raw_state != "Alarm")) {
             _run_start_time = millis();
         }
 
-        // Transition: Entering Hold state (full stop)
-        if (_state == "Hold" && old_state != "Hold") {
-            // Only accumulate if we've actually been running
-            if (_run_start_time != 0) {
-                _prev_run_time += (millis() - _run_start_time);
-            }
+        // Defensive: Start timer on first Run state if not already started
+        // Handles race condition where state="Run" arrives before "Run file opened" message
+        if (raw_state == "Run" && _run_start_time == 0) {
+            _run_start_time = millis();
         }
+    }
+
+    // Map internal state names to user-friendly display names for _state
+    if (raw_state == "Hold:1") {
+        _state = "Decel";  // Decelerating
+    } else if (raw_state == "Hold:0") {
+        _state = "Hold";   // Fully stopped
+    } else {
+        _state = raw_state;
     }
     // check for finished homing
     if (was_homing && _state != "Home") {
@@ -1529,6 +1552,8 @@ void OLED::parse_report() {
     if (_report.rfind("[MSG:INFO: Run file opened]", 0) == 0) {
         _file_job_running = true;
         _saved_run_time = 0;
+        _run_start_time = 0;  // Ensure clean start for new file
+        _prev_run_time = 0;   // Reset accumulated time for new file
         return;
     }
     if (_report.rfind("[MSG:INFO: Run file closed]", 0) == 0) { // Moved directly to the ~InputFile() to avoid reporting inconsistencies.
