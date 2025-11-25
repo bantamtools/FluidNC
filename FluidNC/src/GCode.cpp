@@ -243,8 +243,11 @@ static void gcode_comment_msg(char* comment) {
             // Find colon quickly
             const char* colon = strchr(accel_ptr, ':');
             if (colon) {
+                const char* numStart = colon + 1;
+                while (*numStart == ' ' || *numStart == '\t') numStart++;
+
                 // Use read_float for parsing
-                size_t char_counter = colon - comment + 1;  // Position after colon
+                size_t char_counter = numStart - comment;
                 float accel;
                 if (read_float(comment, &char_counter, &accel) && accel >= 10) {
                     // Determine target axis from single character

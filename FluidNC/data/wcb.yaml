@@ -1,6 +1,6 @@
 name: "WaterColorBot"
 board: "Serama Hen Rev D"
-meta: "0.7.0" 
+meta: "1.0.0" 
 
 planner_blocks: 16
 wifi_mode: -1
@@ -41,7 +41,7 @@ axes:
 
   x:
     steps_per_mm: 80
-    max_rate_mm_per_min: 20000
+    max_rate_mm_per_min: 15000
     acceleration_mm_per_sec2: 5000
     rapid_acceleration_mm_per_sec2: 7000
     max_travel_mm: 370.5
@@ -80,14 +80,14 @@ axes:
 
   y:
     steps_per_mm: 80
-    max_rate_mm_per_min: 20000
+    max_rate_mm_per_min: 15000
     acceleration_mm_per_sec2: 5000
     rapid_acceleration_mm_per_sec2: 7000
-    max_travel_mm: 228.6
+    max_travel_mm: 227.6
     soft_limits: true
     homing:
       cycle: 1
-      mpos_mm: 228.6
+      mpos_mm: 227.6
       positive_direction: true
       feed_mm_per_min: 500
       seek_mm_per_min: 2000
