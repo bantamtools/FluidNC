@@ -424,6 +424,10 @@ bool Coordinates::load() {
 };
 
 void Coordinates::set(float value[MAX_N_AXIS]) {
+    // Skip write if values haven't changed (flash wear reduction)
+    if (memcmp(&_currentValue, value, sizeof(_currentValue)) == 0) {
+        return;
+    }
     memcpy(&_currentValue, value, sizeof(_currentValue));
     if (FORCE_BUFFER_SYNC_DURING_NVS_WRITE) {
         protocol_buffer_synchronize();
