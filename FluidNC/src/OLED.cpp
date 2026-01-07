@@ -143,16 +143,24 @@ static void jog_timer_cb(void* arg)
     // Enter jogging mode
     jog_state = JogState::Jogging;
 
-    // Construct and run jog command
+    // Construct and run jog command using G53 (machine coordinates)
+    // Convert WPos to MPos inline if needed
+    float* wco = get_wco();
     String jog_command;
     switch (axis[0]) {
-        case 'X': jog_command = "$J=X" + String(saved_axes[X_AXIS], 3) + " F" + String(JOG_FEEDRATE, 3); break;
-        case 'Y': jog_command = "$J=Y" + String(saved_axes[Y_AXIS], 3) + " F" + String(JOG_FEEDRATE, 3); break;
-        case 'Z': jog_command = "$J=Z" + String(saved_axes[Z_AXIS], 3) + " F" + String(JOG_FEEDRATE, 3); break;
-        case 'A': jog_command = "$J=A" + String(saved_axes[A_AXIS], 3) + " F" + String(JOG_FEEDRATE, 3); break;
-        case 'B': jog_command = "$J=B" + String(saved_axes[B_AXIS], 3) + " F" + String(JOG_FEEDRATE, 3); break;
-        case 'C': jog_command = "$J=C" + String(saved_axes[C_AXIS], 3) + " F" + String(JOG_FEEDRATE, 3); break;
-        default: 
+        // case 'X': jog_command = "$J=X" + String(saved_axes[X_AXIS], 3) + " F" + String(JOG_FEEDRATE, 3); break;
+        case 'X': jog_command = "$J=G53 X" + String(saved_isMpos ? saved_axes[X_AXIS] : (saved_axes[X_AXIS] + wco[X_AXIS]), 3) + " F" + String(JOG_FEEDRATE, 3); break;
+        // case 'Y': jog_command = "$J=Y" + String(saved_axes[Y_AXIS], 3) + " F" + String(JOG_FEEDRATE, 3); break;
+        case 'Y': jog_command = "$J=G53 Y" + String(saved_isMpos ? saved_axes[Y_AXIS] : (saved_axes[Y_AXIS] + wco[Y_AXIS]), 3) + " F" + String(JOG_FEEDRATE, 3); break;
+        // case 'Z': jog_command = "$J=Z" + String(saved_axes[Z_AXIS], 3) + " F" + String(JOG_FEEDRATE, 3); break;
+        case 'Z': jog_command = "$J=G53 Z" + String(saved_isMpos ? saved_axes[Z_AXIS] : (saved_axes[Z_AXIS] + wco[Z_AXIS]), 3) + " F" + String(JOG_FEEDRATE, 3); break;
+        // case 'A': jog_command = "$J=A" + String(saved_axes[A_AXIS], 3) + " F" + String(JOG_FEEDRATE, 3); break;
+        case 'A': jog_command = "$J=G53 A" + String(saved_isMpos ? saved_axes[A_AXIS] : (saved_axes[A_AXIS] + wco[A_AXIS]), 3) + " F" + String(JOG_FEEDRATE, 3); break;
+        // case 'B': jog_command = "$J=B" + String(saved_axes[B_AXIS], 3) + " F" + String(JOG_FEEDRATE, 3); break;
+        case 'B': jog_command = "$J=G53 B" + String(saved_isMpos ? saved_axes[B_AXIS] : (saved_axes[B_AXIS] + wco[B_AXIS]), 3) + " F" + String(JOG_FEEDRATE, 3); break;
+        // case 'C': jog_command = "$J=C" + String(saved_axes[C_AXIS], 3) + " F" + String(JOG_FEEDRATE, 3); break;
+        case 'C': jog_command = "$J=G53 C" + String(saved_isMpos ? saved_axes[C_AXIS] : (saved_axes[C_AXIS] + wco[C_AXIS]), 3) + " F" + String(JOG_FEEDRATE, 3); break;
+        default:
             jog_state = JogState::Scrolling;
             jog_timer_active = false;
             return;
@@ -194,7 +202,7 @@ OLED::Layout OLED::stateLayout          = { 0, 0, 0, DejaVu_Sans_10, TEXT_ALIGN_
 OLED::Layout OLED::elapsedTimeLayout    = { 63, 0, 128, DejaVu_Sans_10, TEXT_ALIGN_CENTER };
 OLED::Layout OLED::percentLayout128     = { 128, 0, 128, DejaVu_Sans_10, TEXT_ALIGN_RIGHT };
 OLED::Layout OLED::percentLayout64      = { 64, 0, 64, DejaVu_Sans_10, TEXT_ALIGN_RIGHT };
-OLED::Layout OLED::posLabelLayout       = { 105, 15, 128, DejaVu_Sans_10, TEXT_ALIGN_RIGHT };
+OLED::Layout OLED::posLabelLayout       = { 128, 15, 128, DejaVu_Sans_10, TEXT_ALIGN_RIGHT };
 OLED::Layout OLED::radioAddrLayout      = { 128, 0, 128, DejaVu_Sans_10, TEXT_ALIGN_RIGHT };
 OLED::Layout OLED::connectWifiLayout    = { 63, 52, 128, DejaVu_Sans_10, TEXT_ALIGN_CENTER };
 OLED::Layout OLED::bottomTextLayout     = { 0, 52, 0, DejaVu_Sans_10, TEXT_ALIGN_LEFT };
@@ -650,7 +658,8 @@ void OLED::show_dro(float* axes, bool isMpos, bool* limits) {
     _oled->fillRect(64, _header_height, 64, _height);
     _oled->setColor(WHITE);
 
-    show(posLabelLayout, isMpos ? "Position" : "Offset");
+    // show(posLabelLayout, isMpos ? "Position" : "Offset");
+    show(posLabelLayout, "Position G53");
 
     // Define preferred axis order per machine type (same as jog menu)
     int axis_order[3];
@@ -702,7 +711,8 @@ void OLED::show_dro(float* axes, bool isMpos, bool* limits) {
             _oled->drawString(68 + 0, oled_y_pos, axis_msg.c_str());
 
             _oled->setTextAlignment(TEXT_ALIGN_RIGHT);
-            snprintf(axisVal, 20 - 1, "%.3f", axes[axis]);
+            // snprintf(axisVal, 20 - 1, "%.3f", axes[axis]);
+            snprintf(axisVal, 20 - 1, "%.3f", isMpos ? axes[axis] : (axes[axis] + get_wco()[axis]));
             _oled->drawString((_width == 128) ? 68 + 60 : 68 + 63, oled_y_pos, axisVal);
             
             display_count++;

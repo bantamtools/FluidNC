@@ -133,178 +133,179 @@ void gc_reset_winding_offsets() {
 }
 
 static void gcode_comment_msg(char* comment) {
-    char         msg[80];
-    const size_t offset = 4;  // ignore "MSG_" part of comment
-    size_t       index  = offset;
-
     // Skip leading whitespace
     char* text = comment;
     while (*text == ' ' || *text == '\t') text++;
-    
-    // Efficient switch-based comment routing for OLED
-    if (config && config->_oled) {
-        // Use first character for fast dispatch
-        switch (text[0]) {
-            case '!':
-                if (text[1] == '!') {
-                    // Use local pointer to avoid modifying text
-                    const char* content = text + 2;
-                    while (*content == ' ' || *content == '\t') content++;
-                    if (*content != '\0') {  // Only if non-empty
-                        config->_oled->set_comment(content, false);
-                    }
-                }
-                break;
-                
-            case '#':
-                if (text[1] == '#') {
-                    // M0 comment - save for later instead of setting immediately
-                    const char* content = text + 2;
-                    while (*content == ' ' || *content == '\t') content++;
-                    if (*content != '\0') {
-                        strncpy(pending_m0_comment, content, 64);
-                        pending_m0_comment[64] = '\0';  // Ensure null termination
-                        // If truncated, add ellipsis
-                        if (strlen(content) > 64) {
-                            strcpy(pending_m0_comment + 61, "...");
-                        }
-                        // DON'T call set_comment here anymore
-                    }
-                }
-                break;
-                
-            case 'I':
-                // Check for "Install Tool"
-                if (strncmp(text + 1, "nstall Tool", 11) == 0) {
-                    // M0 comment - save for later
-                    strncpy(pending_m0_comment, text, 64);
-                    pending_m0_comment[64] = '\0';  // Ensure null termination
-                    // If truncated, add ellipsis
-                    if (strlen(text) > 64) {
-                        strcpy(pending_m0_comment + 61, "...");
-                    }
-                    // DON'T call set_comment here anymore
-                }
-                break;
-                
-            case 'T':
-                // Check for "Toolchange"
-                if (strncmp(text + 1, "oolchange", 9) == 0) {
-                    // M0 comment - save for later
-                    strncpy(pending_m0_comment, text, 64);
-                    pending_m0_comment[64] = '\0';  // Ensure null termination
-                    // If truncated, add ellipsis
-                    if (strlen(text) > 64) {
-                        strcpy(pending_m0_comment + 61, "...");
-                    }
-                    // DON'T call set_comment here anymore
-                }
-                break;
-                
-            case 'C':
-                // Check for exact "CLEAR" only
-                if (text[1] == 'L' && text[2] == 'E' && 
-                    text[3] == 'A' && text[4] == 'R') {
-                    // Verify it's exactly "CLEAR" (nothing after except whitespace)
-                    const char* after = text + 5;
-                    while (*after == ' ' || *after == '\t') after++;
-                    if (*after == '\0') {
-                        // Let OLED handle what to clear based on its state
-                        config->_oled->process_clear_command();
-                    }
-                }
-                break;
-        }
-    }
-    // Also using comments to set some config vars dynamically
-    if (strstr(comment, "Install Height")) {
-        std::string cmt(comment);
-        size_t pos     = 0;
-        size_t nextpos = cmt.find_first_of(":", pos);
-        pos = nextpos + 1; // past label
-        cmt = cmt.substr(pos); // trim label
-        log_info("-- parsed Install Height contents: " << cmt);
-        config->_parking->_target_mpos = std::stof(cmt);
-        log_info("--- set config->_parking->_target_mpos to " << std::stof(cmt));
-    }
+
     // Define which axes are set by bare "Accel:" command
-    // These can be changed for different machine types
     const int DEFAULT_ACCEL_AXIS_1 = 0;  // X_AXIS by default
     const int DEFAULT_ACCEL_AXIS_2 = 1;  // Y_AXIS by default
 
-    // Fast check - most comments won't have "Accel"
-    const char* accel_ptr = strstr(comment, "Accel");
-    if (accel_ptr) {
-        // Check if next char is valid (X,Y,Z,A,B,C,:)
-        char axis_char = accel_ptr[5];
-        if (axis_char == ':' || axis_char == 'X' || axis_char == 'Y' || 
-            axis_char == 'Z' || axis_char == 'A' || axis_char == 'B' || axis_char == 'C') {
-            
-            // Find colon quickly
-            const char* colon = strchr(accel_ptr, ':');
-            if (colon) {
-                const char* numStart = colon + 1;
-                while (*numStart == ' ' || *numStart == '\t') numStart++;
+    // Efficient switch-based comment routing
+    // Use first character for fast dispatch, then verify remaining chars
+    switch (text[0]) {
+        case '!':
+            // Check for "!!" OLED immediate display
+            if (config && config->_oled && text[1] == '!') {
+                const char* content = text + 2;
+                while (*content == ' ' || *content == '\t') content++;
+                if (*content != '\0') {
+                    config->_oled->set_comment(content, false);
+                }
+                return;
+            }
+            break;
 
-                // Use read_float for parsing
-                size_t char_counter = numStart - comment;
-                float accel;
-                if (read_float(comment, &char_counter, &accel) && accel >= 10) {
-                    // Determine target axis from single character
-                    int axis1 = -1;
-                    int axis2 = -1;  // Only used for default case
-
-                    switch (axis_char) {
-                        case 'X': axis1 = X_AXIS; break;
-                        case 'Y': axis1 = Y_AXIS; break;
-                        case 'Z': axis1 = Z_AXIS; break;
-                        case 'A': axis1 = A_AXIS; break;
-                        case 'B': axis1 = B_AXIS; break;
-                        case 'C': axis1 = C_AXIS; break;
-                        case ':': 
-                            axis1 = DEFAULT_ACCEL_AXIS_1;
-                            axis2 = DEFAULT_ACCEL_AXIS_2;
-                            break;
-                        default: return;
-                    }
-
-                    // Track if we actually applied any acceleration
-                    bool applied = false;
-
-                    // Apply to first axis (always present)
-                    if (axis1 >= 0 && axis1 < config->_axes->_numberAxis) {
-                        float max_accel = config->_axes->_axis[axis1]->_rapid_acceleration;
-                        if (accel <= max_accel) {
-                            config->_axes->_axis[axis1]->_acceleration = accel;
-                            applied = true;
-                        }
-                    }
-
-                    // Apply to second axis if default case
-                    if (axis2 >= 0 && axis2 < config->_axes->_numberAxis) {
-                        float max_accel = config->_axes->_axis[axis2]->_rapid_acceleration;
-                        if (accel <= max_accel) {
-                            config->_axes->_axis[axis2]->_acceleration = accel;
-                            applied = true;
-                        }
-                    }
-
-                    // Log the original comment if successful
-                    if (applied) {
-                        log_info(comment);
+        case '#':
+            // Check for "##" M0 comment
+            if (config && config->_oled && text[1] == '#') {
+                const char* content = text + 2;
+                while (*content == ' ' || *content == '\t') content++;
+                if (*content != '\0') {
+                    strncpy(pending_m0_comment, content, 64);
+                    pending_m0_comment[64] = '\0';
+                    if (strlen(content) > 64) {
+                        strcpy(pending_m0_comment + 61, "...");
                     }
                 }
+                return;
             }
-        }
-    }
+            break;
 
-    if (strstr(comment, "MSG")) {
-        while (index < strlen(comment)) {
-            msg[index - offset] = comment[index];
-            index++;
-        }
-        msg[index - offset] = 0;  // null terminate
-        log_info("GCode Comment..." << msg);
+        case 'I':
+            // Check for "Install Tool" (M0 comment)
+            if (config && config->_oled && strncmp(text + 1, "nstall Tool", 11) == 0) {
+                strncpy(pending_m0_comment, text, 64);
+                pending_m0_comment[64] = '\0';
+                if (strlen(text) > 64) {
+                    strcpy(pending_m0_comment + 61, "...");
+                }
+                return;
+            }
+            // Check for "Install Height" (deprecated, use Park Height)
+            if (strncmp(text + 1, "nstall Height", 13) == 0) {
+                const char* colon = strchr(text, ':');
+                if (colon) {
+                    log_warn("Install Height is deprecated; use Park Height instead");
+                    config->_parking->_target_mpos = std::stof(colon + 1);
+                }
+                return;
+            }
+            break;
+
+        case 'T':
+            // Check for "Toolchange" (M0 comment)
+            if (config && config->_oled && strncmp(text + 1, "oolchange", 9) == 0) {
+                strncpy(pending_m0_comment, text, 64);
+                pending_m0_comment[64] = '\0';
+                if (strlen(text) > 64) {
+                    strcpy(pending_m0_comment + 61, "...");
+                }
+                return;
+            }
+            break;
+
+        case 'C':
+            // Check for exact "CLEAR" only
+            if (config && config->_oled &&
+                text[1] == 'L' && text[2] == 'E' && text[3] == 'A' && text[4] == 'R') {
+                const char* after = text + 5;
+                while (*after == ' ' || *after == '\t') after++;
+                if (*after == '\0') {
+                    config->_oled->process_clear_command();
+                }
+                return;
+            }
+            break;
+
+        case 'P':
+            // Check for "Park Height"
+            if (strncmp(text + 1, "ark Height", 10) == 0) {
+                const char* colon = strchr(text, ':');
+                if (colon) {
+                    float height = std::stof(colon + 1);
+                    log_info("Park Height: " << height);
+                    config->_parking->_target_mpos = height;
+                }
+                return;
+            }
+            break;
+
+        case 'A':
+            // Check for "Accel" (Accel:, AccelX:, AccelY:, etc.)
+            if (text[1] == 'c' && text[2] == 'c' && text[3] == 'e' && text[4] == 'l') {
+                char axis_char = text[5];
+                if (axis_char == ':' || axis_char == 'X' || axis_char == 'Y' ||
+                    axis_char == 'Z' || axis_char == 'A' || axis_char == 'B' || axis_char == 'C') {
+
+                    const char* colon = strchr(text, ':');
+                    if (colon) {
+                        const char* numStart = colon + 1;
+                        while (*numStart == ' ' || *numStart == '\t') numStart++;
+
+                        size_t char_counter = numStart - comment;
+                        float accel;
+                        if (read_float(comment, &char_counter, &accel) && accel >= 10) {
+                            int axis1 = -1;
+                            int axis2 = -1;
+
+                            switch (axis_char) {
+                                case 'X': axis1 = X_AXIS; break;
+                                case 'Y': axis1 = Y_AXIS; break;
+                                case 'Z': axis1 = Z_AXIS; break;
+                                case 'A': axis1 = A_AXIS; break;
+                                case 'B': axis1 = B_AXIS; break;
+                                case 'C': axis1 = C_AXIS; break;
+                                case ':':
+                                    axis1 = DEFAULT_ACCEL_AXIS_1;
+                                    axis2 = DEFAULT_ACCEL_AXIS_2;
+                                    break;
+                                default: return;
+                            }
+
+                            bool applied = false;
+
+                            if (axis1 >= 0 && axis1 < config->_axes->_numberAxis) {
+                                float max_accel = config->_axes->_axis[axis1]->_rapid_acceleration;
+                                if (accel <= max_accel) {
+                                    config->_axes->_axis[axis1]->_acceleration = accel;
+                                    applied = true;
+                                }
+                            }
+
+                            if (axis2 >= 0 && axis2 < config->_axes->_numberAxis) {
+                                float max_accel = config->_axes->_axis[axis2]->_rapid_acceleration;
+                                if (accel <= max_accel) {
+                                    config->_axes->_axis[axis2]->_acceleration = accel;
+                                    applied = true;
+                                }
+                            }
+
+                            if (applied) {
+                                log_info(comment);
+                            }
+                        }
+                    }
+                }
+                return;
+            }
+            break;
+
+        case 'M':
+            // Check for "MSG"
+            if (text[1] == 'S' && text[2] == 'G') {
+                char msg[80];
+                const size_t offset = 4;  // skip "MSG " part
+                size_t index = offset;
+                while (index < strlen(comment)) {
+                    msg[index - offset] = comment[index];
+                    index++;
+                }
+                msg[index - offset] = 0;
+                log_info("GCode Comment..." << msg);
+                return;
+            }
+            break;
     }
 }
 

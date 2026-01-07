@@ -1,6 +1,6 @@
 name: "Bantam Tools EggBot"
 board: "Serama Hen, Rev D"
-meta: "1.1.0"
+meta: "1.1.1"
 
 # Updated by WHO, 2025-09-27
 # Incorporating hardware Z calibration
@@ -51,7 +51,7 @@ parking:
   axis: Z
   pullout_distance_mm: 0
   pullout_rate_mm_per_min: 100
-  target_mpos_mm: 0
+  target_mpos_mm: 20.25
   rate_mm_per_min: 200
   park_on_feedhold: true
 

@@ -1,9 +1,9 @@
 name: "WaterColorBot"
 board: "Serama Hen Rev D"
-meta: "1.0.0" 
+meta: "1.1.2" 
 
 planner_blocks: 16
-wifi_mode: -1
+wifi_mode: 0
 
 start:
   must_home: false
@@ -31,7 +31,7 @@ parking:
   axis: Z
   pullout_distance_mm: 0
   pullout_rate_mm_per_min: 1000
-  target_mpos_mm: 0
+  target_mpos_mm: 15
   rate_mm_per_min: 2000
   park_on_feedhold: true
 
@@ -39,12 +39,13 @@ axes:
   shared_stepper_disable_pin: NO_PIN
   shared_stepper_reset_pin: NO_PIN
 
+
   x:
     steps_per_mm: 80
     max_rate_mm_per_min: 15000
     acceleration_mm_per_sec2: 5000
     rapid_acceleration_mm_per_sec2: 7000
-    max_travel_mm: 370.5
+    max_travel_mm: 368
     soft_limits: true
     homing:
       cycle: 1
@@ -55,6 +56,7 @@ axes:
 
     motor0:
       limit_neg_pin: gpio.3:high
+      pulloff_mm: 1.5
       tmc_2209:
         uart_num: 1
         addr: 1
@@ -75,7 +77,7 @@ axes:
         disable_pin: gpio.15:high
     motor1:
       null_motor:
-
+    # X Travel is 368 mm, with 63 mm media tray area. 
 
 
   y:
@@ -83,7 +85,7 @@ axes:
     max_rate_mm_per_min: 15000
     acceleration_mm_per_sec2: 5000
     rapid_acceleration_mm_per_sec2: 7000
-    max_travel_mm: 227.6
+    max_travel_mm: 227.5
     soft_limits: true
     homing:
       cycle: 1
@@ -94,7 +96,7 @@ axes:
 
     motor0:
       limit_neg_pin: gpio.2:high:pu
-      pulloff_mm: 2
+      pulloff_mm: 1.5
       tmc_2209:
         uart_num: 1
         addr: 0
