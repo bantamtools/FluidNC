@@ -49,6 +49,20 @@ size_t FileStream::position() {
 }
 
 void FileStream::setup(const char* mode) {
+    // When creating a file, ensure parent directories exist (mkdir -p).
+    // This makes file writes work regardless of whether the caller
+    // pre-created the directory, giving consistent behavior across
+    // XModem (USB) and HTTP (Wi-Fi) upload paths.
+    if (!strcmp(mode, "w")) {
+        auto parent = _fpath.parent_path();
+        if (!parent.empty()) {
+            std::error_code ec;
+            stdfs::create_directories(parent, ec);
+            // Ignore ec — if directory creation fails, the fopen below
+            // will also fail and we'll report that error instead.
+        }
+    }
+
     _fd = fopen(_fpath.c_str(), mode);
 
     if (!_fd) {
