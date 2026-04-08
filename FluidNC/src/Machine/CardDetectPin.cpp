@@ -2,6 +2,7 @@
 #include "src/Machine/EventPin.h"
 #include "src/Machine/MachineConfig.h"  // config
 #include "src/Protocol.h"  // protocol_send_event_from_ISR()
+#include "src/WifiSetupFile.h"
 
 namespace Machine {
     CardDetectPin::CardDetectPin(Pin& pin) :
@@ -27,8 +28,10 @@ namespace Machine {
             sd_unmount();
         } else {
             sd_mount();
+            // Check for wifi_setup.txt after mount (may reboot)
+            check_wifi_setup_file();
         }
-        
+
         // Update the files menu based on SD listing
         sd_populate_files_menu();
     }

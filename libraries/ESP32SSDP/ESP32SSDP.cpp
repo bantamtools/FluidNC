@@ -355,7 +355,7 @@ void SSDPClass::_update(){
       }
     }
   }
-  if(packetBuffer) delete packetBuffer;
+  if(packetBuffer) delete[] packetBuffer;
   if(_pending && (millis() - _process_time) > _delay){
     _pending = false; _delay = 0;
 #ifdef DEBUG_SSDP

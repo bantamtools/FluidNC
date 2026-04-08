@@ -2,6 +2,7 @@
 #include "Machine/MachineConfig.h"
 #include "WebUI/WifiConfig.h"
 #include <Esp.h>
+#include <WiFi.h>
 
 // Constructor
 Menu::Menu() {
@@ -12,6 +13,7 @@ Menu::Menu() {
     _files_menu = new struct ListType;
     _jogging_menu = new struct ListType;
     // _rss_menu is handled by RSSReader
+    _rss_menu = nullptr;
     _settings_menu = new struct ListType;
     _version_menu = new struct ListType;
     _postrun_menu = new struct ListType;
@@ -19,6 +21,7 @@ Menu::Menu() {
     _config_menu = new struct ListType;
     _confirm_menu = new struct ListType;
     _homing_choice_menu = new struct ListType;
+    _wifi_info_menu = new struct ListType;
     // _fw_update_menu = new struct ListType;
 
     // Initialize the menus
@@ -33,6 +36,7 @@ Menu::Menu() {
     init(_config_menu, _settings_menu);
     init(_confirm_menu, _settings_menu);
     init(_homing_choice_menu, _jogging_menu);
+    init(_wifi_info_menu, _settings_menu);
 
     // Set main menu as current
     _current_menu = _main_menu;
@@ -52,6 +56,7 @@ Menu::Menu() {
     strcpy(_confirm_menu->title, "Confirm");
     strcpy(_homing_choice_menu->title, "Machine Not Homed");
     strcpy(_run_menu->title, "Run Menu");
+    strcpy(_wifi_info_menu->title, "WiFi Info");
 
     _recent_file_is_new_upload = false;
 
@@ -77,6 +82,7 @@ Menu::~Menu() {
     remove_entries(_postrun_menu);
     remove_entries(_confirm_menu);
     remove_entries(_homing_choice_menu);
+    remove_entries(_wifi_info_menu);
 
     // Deallocate memory for the menus
     delete(_version_menu);
@@ -90,6 +96,7 @@ Menu::~Menu() {
     delete(_postrun_menu);
     delete(_confirm_menu);
     delete(_homing_choice_menu);
+    delete(_wifi_info_menu);
 }
 
 // Returns true if the current menu is the files menu
@@ -131,6 +138,9 @@ bool Menu::is_confirm_menu(void) {
 }
 bool Menu::is_homing_choice_menu(void) {
     return (_current_menu == _homing_choice_menu);
+}
+bool Menu::is_wifi_info_menu(void) {
+    return (_current_menu == _wifi_info_menu);
 }
 
 bool Menu::should_clear_on_entry(ListType* menu) {
@@ -681,29 +691,10 @@ void Menu::build(void) {
     add_entry(_files_menu, NULL, NULL, "< Back");
 
     // Settings Menu
-    add_entry(_settings_menu, NULL, NULL, "< Back");
-    //add_entry(_settings_menu, NULL, NULL, "Update");  // WebUI already includes OTA functionality
-    add_entry(_settings_menu, _version_menu, NULL, "Version");
-    add_entry(_settings_menu, _confirm_menu, NULL, "Reset Factory Settings");
-    add_entry(_settings_menu, _jogging_menu, NULL, "Jog mode");
-//    add_entry(_settings_menu, NULL, NULL, "WiFi Info");  // off for initial public release
-/*    if( WebUI::wifi_mode->get() != 0 ) { //WebUI::WiFiStartupMode::WiFiOff // temp disabled due to plotting bug
-        add_entry(_settings_menu, _jogging_menu, NULL, "Turn WiFi OFF");
-    } else {
-        add_entry(_settings_menu, _jogging_menu, NULL, "Turn WiFi ON");
-    } */
-    if (config->getMachineType() == Machine::MachineType::EggBot ||
-        config->getMachineType() == Machine::MachineType::WaterColorBot) {
-        // special Z-calib command for EggBot, used to assemble servo arm
-        add_entry(_settings_menu, NULL, NULL, "Z Calibration Position");
-    }
-//    add_entry(_settings_menu, _jogging_menu, NULL, "Draw Bounds");
-//    add_entry(_settings_menu, NULL, NULL, "TEST");
-//    add_entry(_settings_menu, NULL, NULL, "TEST2");
+    build_settings_menu();
 
-    add_entry(_settings_menu, _config_menu, NULL, "Update Config File");
+    // Back buttons for settings submenus (only added once during build)
     add_entry(_config_menu, NULL, NULL, "< Back");
-    add_entry(_settings_menu, _firmware_menu, NULL, "Update Firmware");
     add_entry(_firmware_menu, NULL, NULL, "< Back");
 
     // confirmation for factory reset
@@ -717,25 +708,102 @@ void Menu::build(void) {
     // Version Menu
     char bantam_ver_str[LIST_NAME_MAX_STR] = {"FW Version: "};
     strncat(bantam_ver_str, git_info_short, LIST_NAME_MAX_STR - 13);
-    char fluidnc_ver_str[LIST_NAME_MAX_STR] = {"FluidNC: "};
-    strncat(fluidnc_ver_str, fluidnc_version, LIST_NAME_MAX_STR - 10);
     char config_ver_str[LIST_NAME_MAX_STR] = {"Config: "};
     strncat(config_ver_str, config->_meta.c_str(), LIST_NAME_MAX_STR - 9);
-    char machine_name_str[LIST_NAME_MAX_STR] = {"Machine: "};
-    strncat(machine_name_str, config->_name.c_str(), LIST_NAME_MAX_STR - 10);
-    char board_name_str[LIST_NAME_MAX_STR] = {"Board: "};
-    strncat(board_name_str, config->_board.c_str(), LIST_NAME_MAX_STR - 8);
+    char machine_name_str[LIST_NAME_MAX_STR];
+    strncpy(machine_name_str, config->_name.c_str(), LIST_NAME_MAX_STR - 1);
+    machine_name_str[LIST_NAME_MAX_STR - 1] = '\0';
+    char board_name_str[LIST_NAME_MAX_STR];
+    strncpy(board_name_str, config->_board.c_str(), LIST_NAME_MAX_STR - 1);
+    board_name_str[LIST_NAME_MAX_STR - 1] = '\0';
+    char wifi_mode_str[LIST_NAME_MAX_STR];
+    switch (config->_wifiMode) {
+        case -1: snprintf(wifi_mode_str, sizeof(wifi_mode_str), "WiFi: -1 (user setting)"); break;
+        case 0:  snprintf(wifi_mode_str, sizeof(wifi_mode_str), "WiFi: 0 (Off)"); break;
+        case 1:  snprintf(wifi_mode_str, sizeof(wifi_mode_str), "WiFi: 1 (STA)"); break;
+        case 2:  snprintf(wifi_mode_str, sizeof(wifi_mode_str), "WiFi: 2 (AP)"); break;
+        case 3:  snprintf(wifi_mode_str, sizeof(wifi_mode_str), "WiFi: 3 (STA>AP)"); break;
+        default: snprintf(wifi_mode_str, sizeof(wifi_mode_str), "WiFi: %d", config->_wifiMode); break;
+    }
 
     add_entry(_version_menu, NULL, NULL, "< Back");
     add_entry(_version_menu, NULL, NULL, bantam_ver_str);
-    add_entry(_version_menu, NULL, NULL, fluidnc_ver_str);
-    add_entry(_version_menu, NULL, NULL, config_ver_str);
     add_entry(_version_menu, NULL, NULL, machine_name_str);
+    add_entry(_version_menu, NULL, NULL, config_ver_str);
     add_entry(_version_menu, NULL, NULL, board_name_str);
+    add_entry(_version_menu, NULL, NULL, wifi_mode_str);
 
     // Post-run menu
     add_entry(_postrun_menu, NULL, NULL, "< Back");
     add_entry(_postrun_menu, NULL, NULL, "Run Again"); // special handling to run just-finished file
+}
+
+// Populates _settings_menu entries only. Does not touch child submenu
+// contents (file lists, confirm entries, etc). Safe to call after
+// remove_entries(_settings_menu) for a targeted refresh.
+void Menu::build_settings_menu() {
+    add_entry(_settings_menu, NULL, NULL, "< Back");
+    add_entry(_settings_menu, _version_menu, NULL, "Version");
+    add_entry(_settings_menu, _jogging_menu, NULL, "Jog mode");
+    // WiFi toggle menu item
+    // - Hidden when config enforces WiFi off (wifi_mode: 0)
+    // - When config defers (wifi_mode: -1): user has full on/off control
+    // - When config enforces a mode (1/2/3): user can turn off temporarily
+    if (config->_wifiMode == -1) {
+        if (WebUI::wifi_mode->get() != 0) {
+            add_entry(_settings_menu, NULL, NULL, "Turn WiFi OFF");
+        } else {
+            add_entry(_settings_menu, NULL, NULL, "Turn WiFi ON");
+        }
+    } else if (config->_wifiMode > 0) {
+        if (WebUI::wifi_config.isOn()) {
+            add_entry(_settings_menu, NULL, NULL, "Turn WiFi OFF");
+        } else {
+            add_entry(_settings_menu, NULL, NULL, "WiFi: Reboot to enable");
+        }
+    }
+    // WiFi Info submenu — populated with current connection data
+    if (WebUI::wifi_config.isOn()) {
+        add_entry(_settings_menu, _wifi_info_menu, NULL, "WiFi Info");
+        remove_entries(_wifi_info_menu);
+        add_entry(_wifi_info_menu, NULL, NULL, "< Back");
+        wifi_mode_t wm = WiFi.getMode();
+        char buf[LIST_NAME_MAX_STR];
+        if (wm == WIFI_MODE_AP || wm == WIFI_MODE_APSTA) {
+            add_entry(_wifi_info_menu, NULL, NULL, "WiFi Hotspot:");
+            add_entry(_wifi_info_menu, NULL, NULL, WebUI::wifi_ap_ssid->get());
+            snprintf(buf, sizeof(buf), "Pass: %s", WebUI::wifi_ap_password->get());
+            add_entry(_wifi_info_menu, NULL, NULL, buf);
+            snprintf(buf, sizeof(buf), "IP: %s", IP_string(WiFi.softAPIP()).c_str());
+            add_entry(_wifi_info_menu, NULL, NULL, buf);
+        } else {
+            add_entry(_wifi_info_menu, NULL, NULL, "Joined Network:");
+            add_entry(_wifi_info_menu, NULL, NULL, WiFi.SSID().c_str());
+            snprintf(buf, sizeof(buf), "IP: %s", IP_string(WiFi.localIP()).c_str());
+            add_entry(_wifi_info_menu, NULL, NULL, buf);
+        }
+        snprintf(buf, sizeof(buf), "Host: %s", WebUI::wifi_hostname->get());
+        add_entry(_wifi_info_menu, NULL, NULL, buf);
+    }
+    if (config->getMachineType() == Machine::MachineType::EggBot ||
+        config->getMachineType() == Machine::MachineType::WaterColorBot) {
+        add_entry(_settings_menu, NULL, NULL, "Z Calibration Position");
+    }
+    add_entry(_settings_menu, _config_menu, NULL, "Update Config File");
+    add_entry(_settings_menu, _firmware_menu, NULL, "Update Firmware");
+    add_entry(_settings_menu, _confirm_menu, NULL, "Reset Factory Settings");
+    // Re-link RSS feed if it was previously connected
+    if (_rss_menu) {
+        add_entry(_settings_menu, _rss_menu, NULL, "RSS Feed");
+    }
+}
+
+// Rebuilds only the settings menu entries, preserving file lists
+// and all other menu state. Uses non-recursive remove_entries()
+// which frees link nodes but not child submenus.
+void Menu::rebuild_settings_menu() {
+    remove_entries(_settings_menu);
+    build_settings_menu();
 }
 
 // Rebuilds the menu system (e.g., after machine type is determined)
@@ -761,6 +829,7 @@ void Menu::rebuild(void) {
     remove_entries_recursive(_config_menu);    // Use recursive to free dynamic directory menus
     remove_entries(_confirm_menu);
     remove_entries(_homing_choice_menu);
+    remove_entries(_wifi_info_menu);
 
     // Rebuild the menu structure with current config
     build();

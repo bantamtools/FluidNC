@@ -101,6 +101,10 @@ void IntSetting::load() {
     if (err) {
         _storedValue  = std::numeric_limits<int32_t>::min();
         _currentValue = _defaultValue;
+    } else if (_storedValue < _minValue || _storedValue > _maxValue) {
+        log_warn("NVS setting " << _keyName << " has out-of-range value "
+                 << _storedValue << ", using default");
+        _currentValue = _defaultValue;
     } else {
         _currentValue = _storedValue;
     }
@@ -295,7 +299,22 @@ void EnumSetting::load() {
         _storedValue  = -1;
         _currentValue = _defaultValue;
     } else {
-        _currentValue = _storedValue;
+        // Validate that the stored value matches a known enum option.
+        // NVS may contain stale values from older firmware versions.
+        bool valid = false;
+        for (auto it = _options->begin(); it != _options->end(); ++it) {
+            if (it->second == _storedValue) {
+                valid = true;
+                break;
+            }
+        }
+        if (valid) {
+            _currentValue = _storedValue;
+        } else {
+            log_warn("NVS setting " << _keyName << " has invalid value "
+                     << _storedValue << ", using default");
+            _currentValue = _defaultValue;
+        }
     }
 }
 

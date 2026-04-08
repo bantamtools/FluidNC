@@ -29,8 +29,47 @@
 
 #    include "Encoder.h"
 #    include "Ultrasonic.h"
+#    include "OLED.h"
+#    include "WifiSetupFile.h"
+#    include <cstring>   // strcmp, strlen
+#    include <cctype>    // isalpha, isdigit, tolower
 
 extern void make_user_commands();
+
+// Derive a valid hostname from the config machine name.
+// Lowercase, replace spaces with hyphens, drop invalid chars.
+// Only runs when config name changes (tracked via WiFi/ConfigName NVS).
+static void derive_hostname_from_config() {
+    if (!config || config->_name.empty()) return;
+
+    const char* stored_config_name = WebUI::wifi_config_name->get();
+    if (strcmp(stored_config_name, config->_name.c_str()) == 0) {
+        return;  // config name unchanged, keep current hostname
+    }
+
+    // Config name changed — derive new hostname
+    char hostname[33] = {0};
+    int j = 0;
+    for (int i = 0; i < (int)config->_name.length() && j < 32; i++) {
+        char c = config->_name[i];
+        if (c == ' ') {
+            hostname[j++] = '-';
+        } else if (isalpha(c)) {
+            hostname[j++] = tolower(c);
+        } else if (isdigit(c) || c == '-') {
+            hostname[j++] = c;
+        }
+    }
+    hostname[j] = '\0';
+
+    if (strlen(hostname) > 0) {
+        WebUI::wifi_hostname->setStringValue(hostname);
+        log_info("Hostname derived from config: " << hostname);
+    }
+
+    // Update stored config name
+    WebUI::wifi_config_name->setStringValue((char*)config->_name.c_str());
+}
 
 #ifdef DEBUG_MEMORY
 // DEBUG: Memory management task
@@ -228,27 +267,22 @@ void setup() {
         sys.state = State::ConfigAlarm;
     }
 
+    // Derive hostname from config name if config changed
+    derive_hostname_from_config();
+
     // Try Bluetooth first so its memory can be released if it is disabled
     if (!WebUI::bt_config.begin()) {
-        // Apply WiFi mode from config if specified
-        if (config->_wifiMode >= 0) {
-            int currentMode = WebUI::wifi_mode->get();
-            if (currentMode != config->_wifiMode) {
-                log_info("Config: Setting WiFi mode to " << config->_wifiMode);
-                // Note: wifi_mode expects a string for setStringValue
-                const char* modeStr = nullptr;
-                switch(config->_wifiMode) {
-                    case 0: modeStr = "Off"; break;
-                    case 1: modeStr = "STA"; break;
-                    case 2: modeStr = "AP"; break;
-                    case 3: modeStr = "STA>AP"; break;
-                }
-                if (modeStr) {
-                    WebUI::wifi_mode->setStringValue((char*)modeStr);
-                }
-            }
-        }
         WebUI::wifi_config.begin();
+    }
+
+    // Rebuild settings menu now that WiFi state is known
+    if (config->_oled && config->_oled->_menu) {
+        config->_oled->_menu->rebuild_settings_menu();
+    }
+
+    // Clear WiFi status popup so OLED resumes normal display
+    if (config && config->_oled) {
+        config->_oled->clear_popup();
     }
 
     allChannels.deregistration(&startupLog);

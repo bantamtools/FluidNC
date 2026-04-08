@@ -113,6 +113,8 @@ namespace WebUI {
     extern WiFiConfig wifi_config;
 
     extern EnumSetting* wifi_mode;
+    extern EnumSetting* wifi_on_mode;
+    extern StringSetting* wifi_config_name;
 
     extern StringSetting* wifi_sta_ssid;
     extern StringSetting* wifi_sta_password;

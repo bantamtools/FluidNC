@@ -40,6 +40,7 @@ bool gc_saw_program_end; // for detecting premature file end
 
 std::string comment_msg;
 static char pending_m0_comment[65] = "";  // Static buffer for M0 comment (64 chars + null)
+static bool fw_update_notified = false;  // Show firmware update popup once per boot
 
 #define FAIL(status) return (status);
 
@@ -306,6 +307,51 @@ static void gcode_comment_msg(char* comment) {
                 return;
             }
             break;
+
+        case 'F':
+            // Parse "(FW: 3.4.17 available)" — cold path, once per boot
+            // Expected in G-code header before first G command
+            if (fw_update_notified) return;
+            if (text[1] != 'W') break;
+            {
+                // Skip "FW" then any ':' or spaces to reach digits
+                const char* p = text + 2;
+                while (*p == ':' || *p == ' ') p++;
+
+                // Parse file's version: major.minor.patch using strtol
+                char* end;
+                long f_maj = strtol(p, &end, 10);
+                if (end == p || *end != '.') break;
+                p = end + 1;
+                long f_min = strtol(p, &end, 10);
+                if (end == p || *end != '.') break;
+                p = end + 1;
+                long f_pat = strtol(p, &end, 10);
+                if (end == p) break;
+
+                // Parse our version from git_info_short ("v2.4.1")
+                const char* v = git_info_short;
+                if (*v == 'v' || *v == 'V') v++;
+                long o_maj = strtol(v, &end, 10);
+                if (end == v || *end != '.') break;
+                v = end + 1;
+                long o_min = strtol(v, &end, 10);
+                if (end == v || *end != '.') break;
+                v = end + 1;
+                long o_pat = strtol(v, &end, 10);
+                if (end == v) break;
+
+                // File version newer than ours?
+                if (f_maj > o_maj
+                    || (f_maj == o_maj && f_min > o_min)
+                    || (f_maj == o_maj && f_min == o_min && f_pat > o_pat)) {
+                    if (config && config->_oled) {
+                        config->_oled->show_fw_update_popup();
+                        fw_update_notified = true;
+                    }
+                }
+            }
+            return;
     }
 }
 

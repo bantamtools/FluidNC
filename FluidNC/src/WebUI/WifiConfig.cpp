@@ -28,6 +28,9 @@ WebUI::WiFiConfig wifi_config  __attribute__((init_priority(109))) ;
 #    include <cstring>
 
 #    include <esp_ota_ops.h>
+#    include <esp_timer.h>
+#    include "../OLED.h"
+#    include "../SSD1306_I2C.h"
 
 namespace WebUI {
     enum WiFiStartupMode {
@@ -105,6 +108,8 @@ namespace WebUI {
     };
 
     EnumSetting* wifi_mode;
+    EnumSetting* wifi_on_mode;
+    StringSetting* wifi_config_name;
 
     StringSetting* wifi_sta_ssid;
     StringSetting* wifi_sta_password;
@@ -366,6 +371,8 @@ namespace WebUI {
             new StringSetting("Station SSID", WEBSET, WA, "ESP100", "Sta/SSID", DEFAULT_STA_SSID, MIN_SSID_LENGTH, MAX_SSID_LENGTH, NULL);
 
         wifi_mode = new EnumSetting("WiFi mode", WEBSET, WA, "ESP116", "WiFi/Mode", WiFiFallback, &wifiModeOptions, NULL);
+        wifi_on_mode = new EnumSetting("WiFi restore mode", WEBSET, WA, NULL, "WiFi/OnMode", WiFiFallback, &wifiModeOptions, NULL);
+        wifi_config_name = new StringSetting("Config name tracker", WEBSET, WA, NULL, "WiFi/ConfigName", "", 0, MAX_HOSTNAME_LENGTH, NULL);
 
         new WebCommand(NULL, WEBCMD, WG, "ESP111", "System/IP", showIP);
         new WebCommand("IP=ipaddress MSK=netmask GW=gateway", WEBCMD, WA, "ESP103", "Sta/Setup", showSetStaParams);
@@ -535,6 +542,36 @@ namespace WebUI {
         }
     }
 
+    // --- WiFi init debug breadcrumbs  ---
+    // Displays short status messages on OLED during boot, when the
+    // normal polling loop isn't running.  Each call also logs the
+    // elapsed time since wifi_breadcrumb_init() was called, so we
+    // can see exactly which step is taking the time.
+
+    static int64_t _wifi_debug_t0 = 0;
+
+    static void wifi_breadcrumb_init() {
+        _wifi_debug_t0 = esp_timer_get_time();
+    }
+
+    static void wifi_breadcrumb(const char* msg) {
+        int32_t elapsed_ms = (int32_t)((esp_timer_get_time() - _wifi_debug_t0) / 1000);
+        log_info("WiFi dbg +" << elapsed_ms << "ms: " << msg);
+    }
+    // --- end breadcrumbs ---
+
+    // Show a status message on the OLED during boot, when the normal
+    // polling loop isn't running.  Forces an I2C push to the display.
+    static void wifi_oled_status(const char* msg) {
+        if (config && config->_oled) {
+            config->_oled->show_persistent_msg(std::string(msg));
+            SSD1306_I2C* ssd1306 = static_cast<SSD1306_I2C*>(config->_oled->_oled);
+            if (ssd1306) {
+                ssd1306->performDisplayUpdate();
+            }
+        }
+    }
+
     /*
      * Get WiFi signal strength
      */
@@ -556,15 +593,21 @@ namespace WebUI {
         std::string msg, msg_out;
         uint8_t     dot = 0;
         for (size_t i = 0; i < 10; ++i) {
+            char buf[32];
+            snprintf(buf, sizeof(buf), "STA poll %d/10 s=%d", (int)(i + 1), (int)WiFi.status());
+            wifi_breadcrumb(buf);
             switch (WiFi.status()) {
                 case WL_NO_SSID_AVAIL:
                     log_info("No SSID");
+                    wifi_breadcrumb("STA: no SSID");
                     return false;
                 case WL_CONNECT_FAILED:
                     log_info("Connection failed");
+                    wifi_breadcrumb("STA: connect fail");
                     return false;
                 case WL_CONNECTED:
                     log_info("Connected - IP is " << IP_string(WiFi.localIP()));
+                    wifi_breadcrumb("STA: connected!");
                     return true;
                 default:
                     if ((dot > 3) || (dot == 0)) {
@@ -576,9 +619,16 @@ namespace WebUI {
                     dot++;
                     break;
             }
+            // Update OLED with dot spinner
+            {
+                char oled_buf[40];
+                snprintf(oled_buf, sizeof(oled_buf), "Joining WiFi network%.*s", (int)dot, "....");
+                wifi_oled_status(oled_buf);
+            }
             log_info(msg);
             delay_ms(2000);  // Give it some time to connect
         }
+        wifi_breadcrumb("STA: timeout");
         return false;
     }
 
@@ -587,9 +637,16 @@ namespace WebUI {
      */
 
     bool WiFiConfig::StartSTA() {
+        wifi_breadcrumb("STA: svc end");
         //stop active service
         wifi_services.end();
-        esp_wifi_start();
+
+        // Disable auto-reconnect during our controlled connection
+        // sequence to prevent the Arduino event handler from racing
+        // with ConnectSTA2AP(). Re-enabled in begin() after success.
+        WiFi.setAutoReconnect(false);
+
+        wifi_breadcrumb("STA: cleanup");
         //Sanity check
         if ((WiFi.getMode() == WIFI_STA) || (WiFi.getMode() == WIFI_AP_STA)) {
             WiFi.disconnect();
@@ -616,9 +673,12 @@ namespace WebUI {
         const char* SSID = wifi_sta_ssid->get();
         if (strlen(SSID) == 0) {
             log_info("STA SSID is not set");
+            wifi_breadcrumb("STA: no SSID set");
             return false;
         }
+        wifi_breadcrumb("STA: WiFi.mode");
         WiFi.mode(WIFI_STA);
+        wifi_breadcrumb("STA: mode set");
         WiFi.setMinSecurity(static_cast<wifi_auth_mode_t>(wifi_sta_min_security->get()));
         WiFi.setScanMethod(wifi_fast_scan->get() ? WIFI_FAST_SCAN : WIFI_ALL_CHANNEL_SCAN);
         //Get parameters for STA
@@ -634,11 +694,14 @@ namespace WebUI {
             IPAddress ip(IP), mask(MK), gateway(GW);
             WiFi.config(ip, gateway, mask);
         }
+        wifi_breadcrumb("STA: WiFi.begin");
         if (WiFi.begin(SSID, (strlen(password) > 0) ? password : NULL)) {
             log_info("Connecting to STA SSID:" << SSID);
+            wifi_breadcrumb("STA: connecting");
             return ConnectSTA2AP();
         } else {
             log_info("Starting client failed");
+            wifi_breadcrumb("STA: begin fail");
             return false;
         }
     }
@@ -648,8 +711,8 @@ namespace WebUI {
      */
 
     bool WiFiConfig::StartAP() {
+        wifi_breadcrumb("AP: cleanup");
         //Sanity check
-        esp_wifi_start();
         if ((WiFi.getMode() == WIFI_STA) || (WiFi.getMode() == WIFI_AP_STA)) {
             WiFi.disconnect();
         }
@@ -658,20 +721,14 @@ namespace WebUI {
         }
 
         WiFi.enableSTA(false);
+        wifi_breadcrumb("AP: WiFi.mode");
         WiFi.mode(WIFI_AP);
+        wifi_breadcrumb("AP: mode set");
 
         const char* country = wifi_ap_country->getStringValue();
         if (ESP_OK != esp_wifi_set_country_code(country, true)) {
             log_error("failed to set Wifi regulatory domain to " << country);
         }
-
-        //auto comms = config->_comms;  // _comms is automatically created in afterParse
-        //auto ap    = comms->_apConfig;
-        // ap might be nullpt if there is an explicit comms: with no wifi_ap:
-        // If a _comms node is created automatically, a default AP config is created too
-        // if (!ap) {
-        //     return false;
-        // }
 
         //Get parameters for AP
         //SSID
@@ -697,12 +754,16 @@ namespace WebUI {
         WiFi.softAPConfig(ip, ip, mask);
 
         //Start AP
+        wifi_oled_status("Starting WiFi hotspot...");
+        wifi_breadcrumb("AP: softAP");
         if (WiFi.softAP(SSID, (strlen(password) > 0) ? password : NULL, channel)) {
             log_info("AP started");
+            wifi_breadcrumb("AP: started!");
             return true;
         }
 
         log_info("AP did not start");
+        wifi_breadcrumb("AP: failed");
         return false;
     }
 
@@ -738,24 +799,70 @@ namespace WebUI {
      * begin WiFi setup
      */
     bool WiFiConfig::begin() {
+        wifi_breadcrumb_init();
+
+        // Determine WiFi mode: config is authoritative when it
+        // specifies a mode (0-3). NVS is only consulted when
+        // config defers to user control (-1).
+        int mode;
+        if (config->_wifiMode >= 0) {
+            mode = config->_wifiMode;
+        } else {
+            mode = wifi_mode->get();  // read from NVS
+        }
+
+        // When config enforces a mode (0-3), keep NVS in sync so that
+        // switching to config -1 later inherits the correct value.
+        if (config->_wifiMode >= 0) {
+            if (wifi_mode->get() != config->_wifiMode) {
+                const char* modeStr = "Off";
+                switch (config->_wifiMode) {
+                    case 0: modeStr = "Off"; break;
+                    case 1: modeStr = "STA"; break;
+                    case 2: modeStr = "AP"; break;
+                    case 3: modeStr = "STA>AP"; break;
+                }
+                wifi_mode->setStringValue((char*)modeStr);
+            }
+            // OnMode should match for modes 1-3 (not 0/Off)
+            if (config->_wifiMode > 0 && wifi_on_mode->get() != config->_wifiMode) {
+                const char* modeStr = "STA>AP";
+                switch (config->_wifiMode) {
+                    case 1: modeStr = "STA"; break;
+                    case 2: modeStr = "AP"; break;
+                    case 3: modeStr = "STA>AP"; break;
+                }
+                wifi_on_mode->setStringValue((char*)modeStr);
+            }
+        }
+
+        char modebuf[32];
+        snprintf(modebuf, sizeof(modebuf), "WiFi begin m=%d", mode);
+        wifi_breadcrumb(modebuf);
+
         //stop active services
         wifi_services.end();
 
-        switch (wifi_mode->get()) {
+        switch (mode) {
             case WiFiOff:
                 log_info("WiFi is disabled");
+                wifi_breadcrumb("WiFi: OFF");
                 return false;
             case WiFiSTA:
+                wifi_breadcrumb("WiFi: try STA");
                 if (StartSTA()) {
                     goto wifi_on;
                 }
                 goto wifi_off;
             case WiFiFallback:
+                wifi_breadcrumb("WiFi: try Fallback");
                 if (StartSTA()) {
                     goto wifi_on;
                 }
+                wifi_breadcrumb("WiFi: STA failed, try AP");
                 // fall through to fallback to AP mode
             case WiFiAP:
+                wifi_breadcrumb("WiFi: try AP");
                 if (StartAP()) {
                     goto wifi_on;
                 }
@@ -763,6 +870,7 @@ namespace WebUI {
         }
 
     wifi_off:
+        wifi_breadcrumb("WiFi: OFF final");
         log_info("WiFi off");
         WiFi.mode(WIFI_OFF);
         return false;
@@ -778,8 +886,16 @@ namespace WebUI {
             _events_registered = true;
         }
         esp_wifi_set_ps(WIFI_PS_NONE);
+
+        // WiFi is up — enable auto-reconnect for idle-state recovery.
+        // This will be disabled during plots  to protect motion control.
+        WiFi.setAutoReconnect(true);
+
+        wifi_breadcrumb("WiFi: ON");
         log_info("WiFi on");
+        wifi_breadcrumb("WiFi: svc begin");
         wifi_services.begin();
+        wifi_breadcrumb("WiFi: svc started");
         return true;
     }
 

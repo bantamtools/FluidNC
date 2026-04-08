@@ -1514,17 +1514,54 @@ static void protocol_do_enter() {
                     }
                 
                 // Wifi commands
-                } else if (strcmp(config->_oled->_menu->get_selected()->display_name, "WiFi Info") == 0) {
-                    config->_oled->show_wifi_info();
                 } else if (strcmp(config->_oled->_menu->get_selected()->display_name, "Turn WiFi ON") == 0) {
-                    WebUI::wifi_mode->setStringValue((char*)"STA>AP"); // standard fallback wifi
-                    config->_oled->popup_msg("WiFi set to ON.                  Machine will reboot...", 2000);
-                    config->_oled->show_persistent_msg("Now Rebooting...");
-                    ESP.restart();
-                    while (1) {}
+                    // Only reachable when config->_wifiMode == -1 (user control)
+                    // Restore the mode that was active before WiFi was turned off
+                    const char* restoreMode = "STA>AP";  // default
+                    switch (WebUI::wifi_on_mode->get()) {
+                        case 1: restoreMode = "STA"; break;
+                        case 2: restoreMode = "AP"; break;
+                        case 3: restoreMode = "STA>AP"; break;
+                    }
+                    WebUI::wifi_mode->setStringValue((char*)restoreMode);
+                    WebUI::wifi_config.begin();
+                    if (config->_oled && config->_oled->_menu) {
+                        config->_oled->_menu->rebuild_settings_menu();
+                    }
+                    // Clear any persistent OLED messages left by begin() (e.g., boot status)
+                    config->_oled->clear_popup();
+                    // popup_msg shown after rebuild so it returns to the updated menu
+                    config->_oled->popup_msg("WiFi on");
                 } else if (strcmp(config->_oled->_menu->get_selected()->display_name, "Turn WiFi OFF") == 0) {
-                    WebUI::wifi_mode->setStringValue((char*)"Off");
-                    config->_oled->popup_msg("WiFi set to OFF.                Machine will reboot...", 2000);
+                    // Save current mode for restore-on-toggle, if different
+                    {
+                        int8_t activeMode = (config->_wifiMode >= 0) ? config->_wifiMode : WebUI::wifi_mode->get();
+                        if (activeMode != WebUI::wifi_on_mode->get()) {
+                            const char* modeStr = "STA>AP";  // default
+                            switch (activeMode) {
+                                case 1: modeStr = "STA"; break;
+                                case 2: modeStr = "AP"; break;
+                                case 3: modeStr = "STA>AP"; break;
+                            }
+                            WebUI::wifi_on_mode->setStringValue((char*)modeStr);
+                        }
+                    }
+                    WebUI::wifi_config.end();  // calls StopWiFi()
+                    if (config->_wifiMode == -1) {
+                        // User control: persist to NVS
+                        WebUI::wifi_mode->setStringValue((char*)"Off");
+                    }
+                    if (config->_oled && config->_oled->_menu) {
+                        config->_oled->_menu->rebuild_settings_menu();
+                    }
+                    // popup_msg shown after rebuild so it returns to the updated menu
+                    if (config->_wifiMode == -1) {
+                        config->_oled->popup_msg("WiFi off");
+                    } else {
+                        config->_oled->popup_msg("WiFi off until restart");
+                    }
+                } else if (strcmp(config->_oled->_menu->get_selected()->display_name, "WiFi: Reboot to enable") == 0) {
+                    config->_oled->popup_msg("Rebooting...");
                     config->_oled->show_persistent_msg("Now Rebooting...");
                     ESP.restart();
                     while (1) {}
@@ -1694,7 +1731,7 @@ static void protocol_do_enter() {
 #ifdef ENABLE_WIFI
                     WebUI::rssReader.download_file(config->_oled->_menu->get_selected()->path, config->_oled->_menu->get_selected()->display_name);
 #endif
-                } else if (!(config->_oled->_menu->is_settings_menu() || config->_oled->_menu->is_version_menu())) {
+                } else if (!(config->_oled->_menu->is_settings_menu() || config->_oled->_menu->is_version_menu() || config->_oled->_menu->is_wifi_info_menu())) {
                     // treat other unlabeled menus as files_menu because it's probably a files subfolder
                     ListNodeType *selected_entry = config->_oled->_menu->get_selected();
 
@@ -1710,7 +1747,7 @@ static void protocol_do_enter() {
                             log_info("Entering submenu");
                             config->_oled->_menu->enter_submenu();
                         }
-                    } else {
+                    } else if (selected_entry->path != NULL) {
                         // It's a file, execute the file
 
                         // Auto-home if trying to run unhomed (unless no motors home)

@@ -81,6 +81,7 @@ namespace WebUI {
 
                 log_info("OTA Error(" << error << "):" << errorName);
             });
+        log_info("Starting OTA service");
         ArduinoOTA.begin();
         //no need in AP mode
         if (WiFi.getMode() == WIFI_STA) {
@@ -95,6 +96,7 @@ namespace WebUI {
         }
         webServer.begin();
         telnetServer.begin();
+        log_info("Starting notification and RSS services");
         notificationsService.begin();
         rssReader.begin();
 

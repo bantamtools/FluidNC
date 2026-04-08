@@ -1,6 +1,5 @@
 #pragma once
 
-#include "esp_timer.h"
 #include "Config.h"
 #include "Configuration/Configurable.h"
 #include "Channel.h"
@@ -16,7 +15,6 @@
 #define JOG_A_STEP              1.0
 #define JOG_B_STEP              1.0
 #define JOG_C_STEP              0.5
-#define JOG_TIMER_MS            250
 #define JOG_FEEDRATE            1000.0
 
 typedef const uint8_t* font_t;
@@ -81,6 +79,8 @@ private: // AIDAN
 
     int _enc_diff = 0;
     bool _enc_scroll_lockout = true;
+    char _pending_jog_cmd[64] = {0};  // Jog command awaiting dispatch
+    bool _jog_cmd_ready = false;
 
     uint16_t _last_state_width = 0;  // Pixel width of last state text displayed
 
@@ -103,7 +103,13 @@ private: // AIDAN
 
     int _header_height = 15;
 
+    // Jog DRO cached state for incremental updates
+    char _jog_prev_val[3][20] = {};
+    uint32_t _jog_full_redraw_ms = 0;
+    static constexpr uint32_t JOG_FULL_REDRAW_INTERVAL_MS = 3000;
+
     void encoder_update(int16_t enc_diff);
+    void clearBufferRect(int x0, int y0, int x1, int y1);
     
     void parse_report();
     void parse_status_report();
@@ -123,6 +129,8 @@ private: // AIDAN
     void show_menu();
     void show_file();
     void show_dro(float* axes, bool isMpos, bool* limits);
+    void show_jog_position_full();
+    void show_jog_position_update();
     void show_radio_info();
     void show_error(std::string);
     void show_all(float *axes, bool isMpos, bool *limits);
@@ -166,6 +174,7 @@ public:
     void processDisplayRefresh();  // Process deferred display updates
     void clear();
     void popup_msg(std::string msg, int dly = 2000);
+    void show_fw_update_popup();
     JogState get_jog_state();
     void set_jog_state(JogState);
     bool is_active();
@@ -177,7 +186,6 @@ public:
 	void show_postrun_layout(int highlight = 1);
 
 	void show_persistent_msg(std::string msg);
-	void show_wifi_info();
 	void clear_popup();
 	bool showing_popup() { return _popup; }
 

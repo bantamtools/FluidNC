@@ -4,6 +4,8 @@
 #include "WebUI/WifiConfig.h"  // wifi_config.Hostname()
 #include "Protocol.h"  // For rcServoZCal access
 #include "System.h"    // For sys.parkingInProgress access
+#include <cmath>       // ceilf, floorf
+#include <cstring>     // memcpy, memset
 
 // Static variables
 static float* saved_axes = NULL;   // Saved dro values for refreshing display
@@ -11,9 +13,16 @@ static bool saved_isMpos = false;
 static bool* saved_limits = NULL;
 
 static volatile JogState jog_state;
-static volatile bool jog_timer_active;
 
 static int encoder_scroll_count = 0;
+
+// Jog target accumulator — always in machine coordinates (MPos/G53)
+static float jog_target[MAX_N_AXIS] = {0};
+static bool  jog_target_initialized = false;
+static bool  jog_target_dirty = false;
+static uint32_t jog_last_tick_ms = 0;
+static State jog_prev_sys_state = State::Idle;
+static char  jog_active_axis = '\0';  // Track which axis is being jogged
 
 // Bantam Tools logo (XBM format)
 static uint8_t bantam_logo_bits[] PROGMEM = {
@@ -134,46 +143,6 @@ static uint8_t unlock_icon_bits[] PROGMEM = {
   };
 
 
-// Jogging timer callback
-static void jog_timer_cb(void* arg)
-{
-    // Extract the axis from arguments
-    char *axis = (char*)(arg);
-
-    // Enter jogging mode
-    jog_state = JogState::Jogging;
-
-    // Construct and run jog command using G53 (machine coordinates)
-    // Convert WPos to MPos inline if needed
-    float* wco = get_wco();
-    String jog_command;
-    switch (axis[0]) {
-        // case 'X': jog_command = "$J=X" + String(saved_axes[X_AXIS], 3) + " F" + String(JOG_FEEDRATE, 3); break;
-        case 'X': jog_command = "$J=G53 X" + String(saved_isMpos ? saved_axes[X_AXIS] : (saved_axes[X_AXIS] + wco[X_AXIS]), 3) + " F" + String(JOG_FEEDRATE, 3); break;
-        // case 'Y': jog_command = "$J=Y" + String(saved_axes[Y_AXIS], 3) + " F" + String(JOG_FEEDRATE, 3); break;
-        case 'Y': jog_command = "$J=G53 Y" + String(saved_isMpos ? saved_axes[Y_AXIS] : (saved_axes[Y_AXIS] + wco[Y_AXIS]), 3) + " F" + String(JOG_FEEDRATE, 3); break;
-        // case 'Z': jog_command = "$J=Z" + String(saved_axes[Z_AXIS], 3) + " F" + String(JOG_FEEDRATE, 3); break;
-        case 'Z': jog_command = "$J=G53 Z" + String(saved_isMpos ? saved_axes[Z_AXIS] : (saved_axes[Z_AXIS] + wco[Z_AXIS]), 3) + " F" + String(JOG_FEEDRATE, 3); break;
-        // case 'A': jog_command = "$J=A" + String(saved_axes[A_AXIS], 3) + " F" + String(JOG_FEEDRATE, 3); break;
-        case 'A': jog_command = "$J=G53 A" + String(saved_isMpos ? saved_axes[A_AXIS] : (saved_axes[A_AXIS] + wco[A_AXIS]), 3) + " F" + String(JOG_FEEDRATE, 3); break;
-        // case 'B': jog_command = "$J=B" + String(saved_axes[B_AXIS], 3) + " F" + String(JOG_FEEDRATE, 3); break;
-        case 'B': jog_command = "$J=G53 B" + String(saved_isMpos ? saved_axes[B_AXIS] : (saved_axes[B_AXIS] + wco[B_AXIS]), 3) + " F" + String(JOG_FEEDRATE, 3); break;
-        // case 'C': jog_command = "$J=C" + String(saved_axes[C_AXIS], 3) + " F" + String(JOG_FEEDRATE, 3); break;
-        case 'C': jog_command = "$J=G53 C" + String(saved_isMpos ? saved_axes[C_AXIS] : (saved_axes[C_AXIS] + wco[C_AXIS]), 3) + " F" + String(JOG_FEEDRATE, 3); break;
-        default:
-            jog_state = JogState::Scrolling;
-            jog_timer_active = false;
-            return;
-    }   
-    gc_execute_line((char*)jog_command.c_str());
-
-    // Go back to scrolling mode
-    jog_state = JogState::Scrolling;
-
-    // Clear flag
-    jog_timer_active = false;
-}
-
 // Get the jogging state
 JogState OLED::get_jog_state(void) {
     return jog_state;
@@ -181,6 +150,20 @@ JogState OLED::get_jog_state(void) {
 
 // Set the jogging state
 void OLED::set_jog_state(JogState state) {
+    if (state == JogState::Scrolling) {
+        jog_target_initialized = false;
+        jog_target_dirty = false;
+        jog_active_axis = '\0';
+        _jog_cmd_ready = false;
+        memset(_jog_prev_val, 0, sizeof(_jog_prev_val));
+        _jog_full_redraw_ms = 0;  // Force full redraw on first update
+    }
+    if (state == JogState::Idle) {
+        // Exiting jog mode: clear pending command, let in-progress
+        // move finish naturally (no jog cancel)
+        _jog_cmd_ready = false;
+        jog_target_dirty = false;
+    }
     jog_state = state;
 }
 
@@ -325,48 +308,99 @@ void OLED::init() {
 
 Channel* OLED::pollLine(char* line) {
     autoReport();
-    encoder_update(config->_encoder->get_difference());    
+
+    int16_t enc_diff = config->_encoder->get_difference();
+    encoder_update(enc_diff);
+
+    // Jog command dispatch via channel pipeline
+    if (jog_state == JogState::Scrolling && jog_target_dirty) {
+        uint32_t now = millis();
+        bool user_quiet = (now - jog_last_tick_ms >= 100);
+        bool machine_just_idled = (jog_prev_sys_state == State::Jog
+                                   && sys.state == State::Idle);
+        bool machine_idle = (sys.state == State::Idle);
+
+        if ((user_quiet && machine_idle) || machine_just_idled) {
+            // Format jog command into _pending_jog_cmd
+            char axis_char = jog_active_axis;
+            int axis_index = -1;
+            switch (axis_char) {
+                case 'X': axis_index = X_AXIS; break;
+                case 'Y': axis_index = Y_AXIS; break;
+                case 'Z': axis_index = Z_AXIS; break;
+                case 'A': axis_index = A_AXIS; break;
+                case 'B': axis_index = B_AXIS; break;
+                case 'C': axis_index = C_AXIS; break;
+                default: break;
+            }
+
+            if (axis_index >= 0) {
+                snprintf(_pending_jog_cmd, sizeof(_pending_jog_cmd),
+                         "$J=G53 %c%.3f F%.0f",
+                         axis_char, jog_target[axis_index], JOG_FEEDRATE);
+                _jog_cmd_ready = true;
+                jog_target_dirty = false;
+            }
+        }
+    }
+
+    // Resync jog_target to current position when idle.
+    // Catches position changes from external jog sources (serial, web UI).
+    if (jog_state == JogState::Scrolling && !jog_target_dirty) {
+        uint32_t now = millis();
+        bool user_quiet = (now - jog_last_tick_ms >= 100);
+        bool machine_idle = (sys.state == State::Idle);
+
+        if (user_quiet && machine_idle) {
+            memcpy(jog_target, get_mpos(), sizeof(float) * MAX_N_AXIS);
+        }
+    }
+
+    // Track state transitions for idle detection
+    jog_prev_sys_state = sys.state;
+
+    // Return pending jog command through channel pipeline if ready
+    if (line != nullptr && _jog_cmd_ready) {
+        strncpy(line, _pending_jog_cmd, Channel::maxLine - 1);
+        line[Channel::maxLine - 1] = '\0';
+        _jog_cmd_ready = false;
+        return this;
+    }
+
     return nullptr;
 }
 
 // Updates the menu with encoder values
 void OLED::encoder_update(int16_t enc_diff) {
-    // Bail if 1) Not IDLE, 2) excessive scrolling, 3) locked out or 4) downloading a file or 5) popup displaying
-    if ((sys.state != State::Idle) || (abs(enc_diff) != 1) || _enc_scroll_lockout || _download_mode || _popup) return;
-   
-    // Save off the encoder difference to update the menu
-    _enc_diff = enc_diff;
-    //log_info("Saved encoder diff: " << enc_diff);
+    if (enc_diff == 0) return;
+    if ((abs(enc_diff) != 1) || _enc_scroll_lockout || _download_mode || _popup) return;
 
-    // System IDLE and scrolling to jog
-    if ((sys.state == State::Idle) && (jog_state == JogState::Scrolling)) {
+    // Save off the encoder difference for menu scrolling
+    _enc_diff = enc_diff;
+
+    // Jog target accumulation — works regardless of sys.state
+    if (jog_state == JogState::Scrolling) {
 
         // Extract axis from menu item
-        char *axis = (strrchr(_menu->get_selected()->display_name, ' ') + 1);
+        char *axis_str = (strrchr(_menu->get_selected()->display_name, ' ') + 1);
+        char axis_char = axis_str[0];
 
-        // Start timer if not active
-        if (!jog_timer_active) {
-
-            // Set flag
-            jog_timer_active = true;
-
-            // Set up and start timer
-            const esp_timer_create_args_t jog_timer_args = {
-                .callback = &jog_timer_cb,
-                .arg = (void*)axis,
-                .name = "jog_timer"
-            };
-            esp_timer_handle_t jog_timer;
-            ESP_ERROR_CHECK(esp_timer_create(&jog_timer_args, &jog_timer));
-            ESP_ERROR_CHECK(esp_timer_start_once(jog_timer, JOG_TIMER_MS * 1000));
+        // Detect axis change — re-seed target for the new axis
+        if (axis_char != jog_active_axis) {
+            jog_target_initialized = false;
+            jog_active_axis = axis_char;
         }
 
-        // Set the selected axis to the increment value and clamp to extents
+        // Initialize jog_target from current machine position on first tick
+        if (!jog_target_initialized) {
+            memcpy(jog_target, get_mpos(), sizeof(float) * MAX_N_AXIS);
+            jog_target_initialized = true;
+        }
+
+        // Determine axis index and step size
         int axis_index = -1;
         float jog_step = 1.0;
-
-        // Convert axis character to index and get jog step
-        switch (axis[0]) {
+        switch (axis_char) {
             case 'X': axis_index = X_AXIS; jog_step = JOG_X_STEP; break;
             case 'Y': axis_index = Y_AXIS; jog_step = JOG_Y_STEP; break;
             case 'Z': axis_index = Z_AXIS; jog_step = JOG_Z_STEP; break;
@@ -376,17 +410,29 @@ void OLED::encoder_update(int16_t enc_diff) {
             default: break;
         }
 
+        // Accumulate and clamp in MPos space
         if (axis_index >= 0 && axis_index < config->_axes->_numberAxis) {
-            saved_axes[axis_index] += (jog_step * (float)_enc_diff);
-            if (saved_axes[axis_index] < limitsMinPosition(axis_index)) 
-                saved_axes[axis_index] = limitsMinPosition(axis_index);
-            if (saved_axes[axis_index] > limitsMaxPosition(axis_index)) 
-                saved_axes[axis_index] = limitsMaxPosition(axis_index);
+            jog_target[axis_index] += (jog_step * (float)_enc_diff);
+            // Clamp to machine limits, snapping to step-aligned values.
+            // Without snap, clamping to e.g. -0.5 with a 1mm step breaks
+            // alignment — subsequent increments land on 0.5, 1.5, etc.
+            float min_pos = limitsMinPosition(axis_index);
+            float max_pos = limitsMaxPosition(axis_index);
+            if (jog_target[axis_index] < min_pos)
+                jog_target[axis_index] = ceilf(min_pos / jog_step) * jog_step;
+            if (jog_target[axis_index] > max_pos)
+                jog_target[axis_index] = floorf(max_pos / jog_step) * jog_step;
+
+            // Mark target as changed and record tick time
+            jog_target_dirty = true;
+            jog_last_tick_ms = millis();
         }
 
-        // Update the dro with the jog axis value
-        show_dro(saved_axes, saved_isMpos, saved_limits);
+        return;  // Don't fall through to menu scrolling
     }
+
+    // Non-jog menu scrolling (only when idle)
+    if (sys.state != State::Idle) return;
 
     // Refresh the menu
     show_menu();
@@ -601,29 +647,32 @@ void OLED::show_file() {
         }
         wrapped_draw_string(40, _saved_m0_comment, DejaVu_Sans_10);
     } else if (!_download_mode) {
-        // Default messages
+        // Default messages — centered
+        _oled->setTextAlignment(TEXT_ALIGN_CENTER);
+        int cx = _width / 2;
         if (_state == "Run") {
             if (_pause_requested) {
-                _oled->drawString(0, 46, "Pause requested...");
+                _oled->drawString(cx, 46, "Pause requested...");
             } else {
-                _oled->drawString(0, 46, "Click to PAUSE");
+                _oled->drawString(cx, 46, "Click to PAUSE");
             }
         } else if (_state == "Decel") {  // Hold:1 - decelerating
-            _oled->drawString(0, 46, "Pausing, please wait...");
+            _oled->drawString(cx, 46, "Pausing, please wait...");
         } else if (_state == "Hold") {    // Hold:0 - fully stopped
             // Check for unparking state - show "Resuming..." message
             if (sys.suspend.bit.initiateRestore) {
-                _oled->drawString(0, 46, "Resuming...");
+                _oled->drawString(cx, 46, "Resuming...");
             } else if (!config->_parking->park_on_feedhold() || sys.suspend.bit.retractComplete) {
                 // Only show resume message if parking is disabled OR parking is complete
                 clearLowerContentFast();  // Clear Y=40 to Y=63 efficiently
-                _oled->drawString(0, 40, "Click to RESUME");
-                _oled->drawString(0, 52, "HOLD to CANCEL");
+                _oled->drawString(cx, 40, "Click to RESUME");
+                _oled->drawString(cx, 52, "HOLD to CANCEL");
             } else if (sys.parkingInProgress) {
                 // Show "Pausing" only when actively parking (not after unpark completes)
-                _oled->drawString(0, 46, "Pausing, please wait...");
+                _oled->drawString(cx, 46, "Pausing, please wait...");
             }
         }
+        _oled->setTextAlignment(TEXT_ALIGN_LEFT);  // Restore default
     }
 
     // Add a method to cleanup all drawn stuff to clear corruption?
@@ -697,7 +746,7 @@ void OLED::show_dro(float* axes, bool isMpos, bool* limits) {
             config->_axes->_axis[axis]->_motors[0] && 
             config->_axes->_axis[axis]->_motors[0]->isReal()) {
             
-            oled_y_pos = ((_height == 64) ? 26 : 19) + (display_count * 10);
+            oled_y_pos = _header_height + 12 * (display_count + 1);
 
             std::string axis_msg(1, Machine::Axes::_names[axis]);
             if (_width == 128) {
@@ -719,6 +768,140 @@ void OLED::show_dro(float* axes, bool isMpos, bool* limits) {
         }
     }
     _oled->display();
+}
+
+// Clear a rectangle in the framebuffer using direct byte operations.
+// Operates on the in-memory buffer only (no I2C). Much faster than
+// fillRect() which calls drawVerticalLine() per column.
+// x0,y0 is top-left inclusive, x1,y1 is bottom-right inclusive.
+void OLED::clearBufferRect(int x0, int y0, int x1, int y1) {
+    int w = _oled->width();
+    uint8_t* buf = _oled->buffer;
+    int page_start = y0 / 8;
+    int page_end = y1 / 8;
+
+    for (int page = page_start; page <= page_end; page++) {
+        int top = page * 8;
+        int bot = top + 7;
+        int clear_top = (y0 > top) ? y0 : top;
+        int clear_bot = (y1 < bot) ? y1 : bot;
+        // Build mask of bits to clear: bit N corresponds to pixel y = page*8 + N
+        uint8_t mask = (0xFF << (clear_top - top)) & (0xFF >> (bot - clear_bot));
+        uint8_t inv_mask = ~mask;
+        uint8_t* row = buf + page * w + x0;
+        for (int x = x0; x <= x1; x++) {
+            *row++ &= inv_mask;
+        }
+    }
+}
+
+void OLED::show_jog_position_full() {
+    if (_popup || _file_job_running) return;
+
+    auto n_axis = config->_axes->_numberAxis;
+    char axisVal[20];
+
+    // Clear DRO area using fast byte operations
+    clearBufferRect(64, _header_height, _width - 1, _height - 1);
+
+    show(posLabelLayout, "Position G53");
+
+    int axis_order[3];
+    switch (config->getMachineType()) {
+        case Machine::MachineType::EggBot:
+            axis_order[0] = A_AXIS;
+            axis_order[1] = B_AXIS;
+            axis_order[2] = Z_AXIS;
+            break;
+        default:
+            axis_order[0] = X_AXIS;
+            axis_order[1] = Y_AXIS;
+            axis_order[2] = Z_AXIS;
+            break;
+    }
+
+    _oled->setFont(DejaVu_Sans_10);
+    int display_count = 0;
+
+    for (int i = 0; i < 3 && display_count < 3; i++) {
+        int axis = axis_order[i];
+        if (axis < n_axis && config->_axes->_axis[axis] &&
+            config->_axes->_axis[axis]->_motors[0] &&
+            config->_axes->_axis[axis]->_motors[0]->isReal()) {
+
+            // Align with menu entries: entry 0 is "< Back", entries 1-3 are Jog axes
+            // Menu uses _header_height + menu_height(12) * entry_index
+            uint8_t oled_y_pos = _header_height + 12 * (display_count + 1);
+
+            std::string axis_msg(1, Machine::Axes::_names[axis]);
+            axis_msg += ":";
+            _oled->setTextAlignment(TEXT_ALIGN_LEFT);
+            _oled->drawString(68, oled_y_pos, axis_msg.c_str());
+
+            _oled->setTextAlignment(TEXT_ALIGN_RIGHT);
+            float display_val = get_mpos()[axis];
+            snprintf(axisVal, sizeof(axisVal) - 1, "%.3f", display_val);
+            _oled->drawString((_width == 128) ? 128 : 131, oled_y_pos, axisVal);
+
+            // Cache the rendered string
+            strncpy(_jog_prev_val[display_count], axisVal, sizeof(_jog_prev_val[0]));
+
+            display_count++;
+        }
+    }
+
+    _jog_full_redraw_ms = millis();
+}
+
+void OLED::show_jog_position_update() {
+    if (_popup || _file_job_running) return;
+
+    auto n_axis = config->_axes->_numberAxis;
+    char axisVal[20];
+
+    int axis_order[3];
+    switch (config->getMachineType()) {
+        case Machine::MachineType::EggBot:
+            axis_order[0] = A_AXIS;
+            axis_order[1] = B_AXIS;
+            axis_order[2] = Z_AXIS;
+            break;
+        default:
+            axis_order[0] = X_AXIS;
+            axis_order[1] = Y_AXIS;
+            axis_order[2] = Z_AXIS;
+            break;
+    }
+
+    _oled->setFont(DejaVu_Sans_10);
+    int display_count = 0;
+
+    for (int i = 0; i < 3 && display_count < 3; i++) {
+        int axis = axis_order[i];
+        if (axis < n_axis && config->_axes->_axis[axis] &&
+            config->_axes->_axis[axis]->_motors[0] &&
+            config->_axes->_axis[axis]->_motors[0]->isReal()) {
+
+            float display_val = get_mpos()[axis];
+            snprintf(axisVal, sizeof(axisVal) - 1, "%.3f", display_val);
+
+            // Only redraw if the formatted string changed
+            if (strcmp(axisVal, _jog_prev_val[display_count]) != 0) {
+                // Align with menu entries (same formula as show_jog_position_full)
+                uint8_t oled_y_pos = _header_height + 12 * (display_count + 1);
+
+                // Clear just the number region (x=80 to end, 10px tall)
+                clearBufferRect(80, oled_y_pos, _width - 1, oled_y_pos + 9);
+
+                _oled->setTextAlignment(TEXT_ALIGN_RIGHT);
+                _oled->drawString((_width == 128) ? 128 : 131, oled_y_pos, axisVal);
+
+                strncpy(_jog_prev_val[display_count], axisVal, sizeof(_jog_prev_val[0]));
+            }
+
+            display_count++;
+        }
+    }
 }
 
 void OLED::show_radio_info() {
@@ -779,13 +962,22 @@ void OLED::show_all(float *axes, bool isMpos, bool *limits) {
         && !(_state == "Alarm" || _state == "Run" || _state == "Hold:0" || _state == "Hold:1" || _download_mode || _file_job_running || _popup) ) {
         // in an icon menu, and not in a state where we don't show a menu at all
         render_icon_menu();
+    } else if (jog_state != JogState::Idle) {
+        // Jog mode: minimal updates only
+        showJogHeaderFast(_state == "Jog");
+        uint32_t now = millis();
+        if (now - _jog_full_redraw_ms >= JOG_FULL_REDRAW_INTERVAL_MS) {
+            show_menu();
+            show_jog_position_full();
+        } else {
+            show_jog_position_update();
+        }
+        _oled->display();
     } else {
         show_state();
         show_file();
         show_menu();
-        if ((sys.state != State::Jog) || (jog_state == JogState::Idle)) {  // Don't update dro when jogging to position using the encoder
-            show_dro(axes, isMpos, limits);
-        }
+        show_dro(axes, isMpos, limits);
         show_radio_info();
         _oled->display();
     }
@@ -1048,6 +1240,10 @@ void OLED::refresh_display(bool menu_only) {
     
     if (menu_only) {
         show_menu();
+    } else if (jog_state != JogState::Idle) {
+        show_menu();
+        show_jog_position_full();
+        _oled->display();
     } else {
         show_all(saved_axes, saved_isMpos, saved_limits);
     }
@@ -1070,6 +1266,28 @@ void OLED::processDisplayRefresh() {
 }
 
 // Display a popup message temporarily
+void OLED::show_fw_update_popup() {
+    _popup = true;
+    clearScreenFast();
+
+    _oled->setFont(DejaVu_Sans_10);
+    _oled->setTextAlignment(TEXT_ALIGN_CENTER);
+    int cx = _width / 2;
+    int y = _header_height;
+    _oled->drawString(cx, y, "Firmware update");
+    _oled->drawString(cx, y + 13, "available now at:");
+    _oled->drawString(cx, y + 26, "bantam.tools/fw");
+    _oled->display();
+
+    delay_ms(1000);
+    clearScreenFast();  // Wipe buffer so no stale content lingers
+    // Leave _popup true briefly — it suppresses the transient
+    // "run" screen frame. The next show_state/show_file/M0 pause
+    // will clear it naturally via clear_popup() or process_clear_command().
+    // As a fallback, clear it after a short delay so it doesn't stick.
+    _popup = false;
+}
+
 void OLED::popup_msg(std::string msg, int dly) {
 
     // Show error message for 2s then restore display
@@ -1423,8 +1641,8 @@ void OLED::parse_error_report() {
 
 // [MSG:INFO: Connecting to STA:SSID foo]
 void OLED::parse_STA() {
-    // Don't overwrite active error popup
-    if (_popup && _error) {
+    // Don't overwrite active popup
+    if (_popup) {
         return;
     }
 
@@ -1438,8 +1656,8 @@ void OLED::parse_STA() {
 
 // [MSG:INFO: Connected - IP is 192.168.68.134]
 void OLED::parse_IP() {
-    // Don't overwrite active error popup
-    if (_popup && _error) {
+    // Don't overwrite active popup
+    if (_popup) {
         return;
     }
 
@@ -1457,8 +1675,8 @@ void OLED::parse_IP() {
 
 // [MSG:INFO: AP SSID foo IP 192.168.68.134 mask foo channel foo]
 void OLED::parse_AP() {
-    // Don't overwrite active error popup
-    if (_popup && _error) {
+    // Don't overwrite active popup
+    if (_popup) {
         return;
     }
 
@@ -1479,21 +1697,7 @@ void OLED::parse_AP() {
     delay_ms(_radio_delay);
 }
 
-void OLED::show_wifi_info() {
-    // similar to above using stored info
-    if( WebUI::wifi_config.isOn() ) {
-        _oled->clear();
-        wrapped_draw_string(0, "Wi-Fi Info", DejaVu_Sans_10);
-        _oled->fillRect(0, _header_height - 2, _width, 2);  // Thick line
-        wrapped_draw_string(_header_height, "Network ID: " + _radio_info, DejaVu_Sans_10); //DejaVu_Sans_Bold_10);
-        wrapped_draw_string(_header_height*2, "IP Addr: " + _radio_addr, DejaVu_Sans_10);
-        wrapped_draw_string(_header_height*3 + 4, "(Click to return)", DejaVu_Sans_10);
-        _oled->display();
-        _popup = true;
-    } else {
-        popup_msg("WiFi is off");
-    }
-}
+
 
 void OLED::parse_BT() {
     size_t      start  = strlen("[MSG:INFO: BT Started with ");

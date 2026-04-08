@@ -9,7 +9,7 @@ class Menu : public List {
 
 private:
 
-    ListType *_main_menu, *_files_menu, *_jogging_menu, *_rss_menu, *_settings_menu, *_version_menu, *_run_menu, *_postrun_menu, *_current_menu, *_firmware_menu, *_config_menu, *_confirm_menu, *_homing_choice_menu;
+    ListType *_main_menu, *_files_menu, *_jogging_menu, *_rss_menu, *_settings_menu, *_version_menu, *_run_menu, *_postrun_menu, *_current_menu, *_firmware_menu, *_config_menu, *_confirm_menu, *_homing_choice_menu, *_wifi_info_menu;
     ListType* _saved_directory_menu;  // Pointer to directory where file was selected
     std::string _recent_file_path;
     std::string _recent_file_name;
@@ -20,6 +20,7 @@ private:
 
     struct ListNodeType *get_active_tail(ListType *menu, int max_active_entries);
     void build();
+    void build_settings_menu();
 
 public:
 
@@ -38,6 +39,7 @@ public:
     bool is_config_menu();
     bool is_confirm_menu();
     bool is_homing_choice_menu();
+    bool is_wifi_info_menu();
     bool should_clear_on_entry(ListType* menu);
     void connect_rss_feed(ListType *feed);
     void print_current_menu();
@@ -70,6 +72,7 @@ public:
     void update_selection(int max_active_entries, int enc_diff);
     bool is_full_width();
     void rebuild();
+    void rebuild_settings_menu();
 
     ListType* firmware_menu() { return _firmware_menu; };
     ListType* config_menu() { return _config_menu; };
