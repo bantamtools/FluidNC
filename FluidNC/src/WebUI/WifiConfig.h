@@ -104,8 +104,9 @@ namespace WebUI {
 
     private:
         static bool ConnectSTA2AP();
-        static void WiFiEvent(WiFiEvent_t event);
+        static void WiFiEvent(arduino_event_id_t event, arduino_event_info_t info);
         static bool _events_registered;
+        static volatile bool _sta_got_ip;
 
         static std::string _hostname;
     };

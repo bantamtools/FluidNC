@@ -26,6 +26,18 @@ enum class JogState : uint8_t {
     Jogging,    // Performing the jog command
 };
 
+enum class BusyReason : uint8_t {
+    None = 0,
+    FileUpload,       // WiFi WebUI upload or USB xmodem
+    GcodeStreaming,   // Auto-detected external gcode commands
+};
+
+enum class BusyStage : uint8_t {
+    Off = 0,
+    Stage1,   // Initial detection — "External Control"
+    Stage2,   // Sustained activity confirmed
+};
+
 class OLED : public Channel, public Configuration::Configurable {
 public:
 
@@ -88,6 +100,16 @@ private: // AIDAN
 
     bool _popup = false;
 
+    // BusyScreen state machine
+    volatile BusyReason _busy_reason = BusyReason::None;  // volatile: written by WebServer task
+    volatile BusyStage  _busy_stage = BusyStage::Off;     // volatile: written by WebServer task
+    uint32_t   _busy_next_check_ms = 0;
+    uint32_t   _busy_idle_deadline_ms = 0;
+    uint32_t   _busy_stage_shown_ms = 0;
+    int        _busy_cmd_count = 0;
+    uint32_t   _busy_start_ms = 0;        // When first command in current busy cycle arrived
+    uint32_t   _busy_next_redraw_ms = 0;  // Throttle for periodic content refresh
+    volatile bool _busy_cleanup_pending = false;  // Set by clearBusy(), consumed by cleanupAfterBusy()
 
     bool _pause_requested = false;  // Tracks if pause has been requested
     
@@ -202,6 +224,14 @@ public:
     void clear_m0_comment();                         // Clear M0 comment on button press
     void process_clear_command();                    // Handle CLEAR based on current state
 
+    // BusyScreen API
+    void busyPing();                      // Called per external gcode command (fast path)
+    void setBusy(BusyReason reason);      // Explicit busy start (uploads)
+    void clearBusy(BusyReason reason);    // Explicit busy end (uploads)
+    bool isBusy() { return _busy_stage != BusyStage::Off; }
+    void updateBusyScreen();              // Periodic content refresh (called from protocol loop)
+    void cleanupAfterBusy();              // One-shot cleanup after busy ends
+
 	// add method to assert _oled->buffer[-1] == 0x40;
 	void printBufferControl(){
 		// uint32_t = (char*)_oled->&buffer[-1]
@@ -241,6 +271,13 @@ public:
 
     void makeImmutable() { _immutable = true; }
     void setStartupConfigWarning() { _startupConfigWarning = true; }
+
+private:
+    // BusyScreen private helpers
+    void showBusyDisplay();               // Render the busy screen content
+    void showBusyUpload();                // Render upload progress page
+    void evaluateBusyTransitions();       // Stage transition logic (called from display loop)
+    void exitBusyScreen();                // Full cleanup and recovery
 };
 
 // Created by http://oleddisplay.squix.ch/ Consider a donation

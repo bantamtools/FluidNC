@@ -529,15 +529,21 @@ namespace WebUI {
      * SYSTEM_EVENT_MAX
      */
 
-    void WiFiConfig::WiFiEvent(WiFiEvent_t event) {
+    volatile bool WiFiConfig::_sta_got_ip = false;
+
+    void WiFiConfig::WiFiEvent(arduino_event_id_t event, arduino_event_info_t info) {
         switch (event) {
-            case SYSTEM_EVENT_STA_GOT_IP:
+            case ARDUINO_EVENT_WIFI_STA_GOT_IP:
+                _sta_got_ip = true;
+                log_info("WiFi STA connected - IP is " << IP_string(WiFi.localIP()));
                 break;
-            case SYSTEM_EVENT_STA_DISCONNECTED:
-                log_info("WiFi Disconnected");
+            case ARDUINO_EVENT_WIFI_STA_DISCONNECTED: {
+                _sta_got_ip = false;
+                auto reason = (wifi_err_reason_t)info.wifi_sta_disconnected.reason;
+                log_info("WiFi STA disconnected (reason: " << WiFi.disconnectReasonName(reason) << ")");
                 break;
+            }
             default:
-                //log_info("WiFi event:" << event);
                 break;
         }
     }
@@ -927,7 +933,25 @@ namespace WebUI {
     /**
      * Handle not critical actions that must be done in sync environment
      */
-    void WiFiConfig::handle() { wifi_services.handle(); }
+    void WiFiConfig::handle() {
+        wifi_services.handle();
+
+        // Periodic WiFi reconnect .  The Arduino core's built-in
+        // auto-reconnect calls WiFi.begin() which fails silently during
+        // disconnect events.  We poll here instead and use WiFi.reconnect()
+        // which calls esp_wifi_connect() directly.
+        // Respects the autoReconnect flag (disabled during motion per ).
+        if (WiFi.getAutoReconnect() && !_sta_got_ip) {
+            static uint32_t nextReconnectAt = 0;
+            if (millis() >= nextReconnectAt) {
+                nextReconnectAt = millis() + 10000;
+                if (WiFi.getMode() & WIFI_MODE_STA) {
+                    log_info("WiFi: attempting reconnect");
+                    WiFi.reconnect();
+                }
+            }
+        }
+    }
 
     // Used by js/scanwifidlg.js
     Error WiFiConfig::listAPs(char* parameter, AuthenticationLevel auth_level, Channel& out) {  // ESP410

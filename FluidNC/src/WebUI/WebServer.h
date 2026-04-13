@@ -50,6 +50,8 @@ namespace WebUI {
 
         static long     get_client_ID();
         static uint16_t port() { return _port; }
+        static size_t   getUploadBytesReceived() { return _uploadBytesReceived; }
+        static void     uploadStop();  // Public: also called from OLED busy screen cancel
 
         ~Web_Server();
 
@@ -60,6 +62,7 @@ namespace WebUI {
         static uint16_t          _port;
         static UploadStatus      _upload_status;
         static FileStream*       _uploadFile;
+        static size_t            _uploadBytesReceived;
 
         static const char* getContentType(const char* filename);
 
@@ -100,7 +103,6 @@ namespace WebUI {
         static void uploadStart(const char* filename, size_t filesize, const char* fs);
         static void uploadWrite(uint8_t* buffer, size_t length);
         static void uploadEnd(size_t filesize);
-        static void uploadStop();
         static void uploadCheck();
 
         static void sendFSError(Error err);

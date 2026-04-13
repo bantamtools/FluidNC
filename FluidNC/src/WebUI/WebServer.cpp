@@ -34,6 +34,7 @@
 #    include "src/WebUI/JSONEncoder.h"
 
 #    include "src/HashFS.h"
+#    include "../OLED.h"
 #    include <list>
 
 namespace WebUI {
@@ -62,9 +63,10 @@ namespace WebUI {
     bool       Web_Server::_setupdone = false;
     uint16_t   Web_Server::_port      = 0;
 
-    UploadStatus      Web_Server::_upload_status = UploadStatus::NONE;
-    WebServer*        Web_Server::_webserver     = NULL;
-    WebSocketsServer* Web_Server::_socket_server = NULL;
+    UploadStatus      Web_Server::_upload_status        = UploadStatus::NONE;
+    size_t            Web_Server::_uploadBytesReceived  = 0;
+    WebServer*        Web_Server::_webserver            = NULL;
+    WebSocketsServer* Web_Server::_socket_server        = NULL;
 #    ifdef ENABLE_AUTHENTICATION
     AuthenticationIP* Web_Server::_head  = NULL;
     uint8_t           Web_Server::_nb_ip = 0;
@@ -1034,7 +1036,11 @@ namespace WebUI {
             //Create file for writing
             try {
                 _uploadFile    = new FileStream(fpath, "w");
-                _upload_status = UploadStatus::ONGOING;
+                _upload_status       = UploadStatus::ONGOING;
+                _uploadBytesReceived = 0;
+                if (config && config->_oled) {
+                    config->_oled->setBusy(BusyReason::FileUpload);
+                }
             } catch (const Error err) {
                 _uploadFile    = nullptr;
                 _upload_status = UploadStatus::FAILED;
@@ -1052,6 +1058,8 @@ namespace WebUI {
                 _upload_status = UploadStatus::FAILED;
                 log_info("Upload failed - file write failed");
                 pushError(ESP_ERROR_FILE_WRITE, "File write failed");
+            } else {
+                _uploadBytesReceived += length;
             }
         } else {  //if error set flag UploadStatus::FAILED
             _upload_status = UploadStatus::FAILED;
@@ -1107,9 +1115,15 @@ namespace WebUI {
             _upload_status = UploadStatus::FAILED;
             pushError(ESP_ERROR_UPLOAD, "Upload error 8");
         }
+        if (config && config->_oled) {
+            config->_oled->clearBusy(BusyReason::FileUpload);
+        }
     }
     void Web_Server::uploadStop() {
         _upload_status = UploadStatus::FAILED;
+        if (config && config->_oled) {
+            config->_oled->clearBusy(BusyReason::FileUpload);
+        }
         log_info("Upload cancelled");
         if (_uploadFile) {
             std::filesystem::path filepath = _uploadFile->fpath();
@@ -1128,6 +1142,11 @@ namespace WebUI {
                 _uploadFile = nullptr;
                 stdfs::remove(filepath, error_code);
                 HashFS::rehash_file(filepath);
+            }
+            // Clear busy screen on upload failure — without this,
+            // FileUpload busy state is stuck permanently (no idle timeout).
+            if (config && config->_oled) {
+                config->_oled->clearBusy(BusyReason::FileUpload);
             }
         }
     }

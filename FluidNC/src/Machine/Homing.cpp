@@ -10,6 +10,10 @@
 
 #include <cmath>
 
+#ifdef ENABLE_WIFI
+#    include <WiFi.h>
+#endif
+
 namespace Machine {
     // Calculate the motion for the next homing move.
     //  Input: motors - the motors that should participate in this homing cycle
@@ -322,6 +326,12 @@ namespace Machine {
 
         if (!sys.abort) {             // Execute startup scripts after successful homing.
             sys.state = State::Idle;  // Set to IDLE when complete.
+#ifdef ENABLE_WIFI
+            WiFi.setAutoReconnect(true);
+            if (WiFi.status() != WL_CONNECTED) {
+                WiFi.reconnect();
+            }
+#endif
             Stepper::go_idle();       // Set steppers to the settings idle state before returning.
         }
 
@@ -486,6 +496,9 @@ namespace Machine {
 
         config->_stepping->beginLowLatency();
 
+#ifdef ENABLE_WIFI
+        WiFi.setAutoReconnect(false);
+#endif
         sys.state = State::Homing;
         nextCycle();
     }

@@ -2,9 +2,10 @@
 #include "Logging.h"
 #include "Machine/MachineConfig.h"
 #include "WebUI/WifiConfig.h"  // wifi_config.Hostname()
-#include "Protocol.h"  // For rcServoZCal access
+#include "Protocol.h"          // protocol_send_event, feedHoldEvent, cycleStartEvent, pollingPaused
 #include "System.h"    // For sys.parkingInProgress access
 #include <cmath>       // ceilf, floorf
+#include <cstdio>      // snprintf
 #include <cstring>     // memcpy, memset
 
 // Static variables
@@ -375,6 +376,9 @@ void OLED::encoder_update(int16_t enc_diff) {
     if (enc_diff == 0) return;
     if ((abs(enc_diff) != 1) || _enc_scroll_lockout || _download_mode || _popup) return;
 
+    // During busy screen: ignore encoder input
+    if (_busy_stage != BusyStage::Off) return;
+
     // Save off the encoder difference for menu scrolling
     _enc_diff = enc_diff;
 
@@ -496,7 +500,7 @@ void OLED::show_menu() {
     int menu_max_active_entries;
 
     // Don't show menu during Alarm, Run or Hold states
-    if (_state == "Alarm" || _state == "Run" || _state == "Hold:0" || _state == "Hold:1" || _download_mode || _file_job_running || _popup) {
+    if (_busy_stage != BusyStage::Off || _state == "Alarm" || _state == "Run" || _state == "Hold:0" || _state == "Hold:1" || _download_mode || _file_job_running || _popup) {
         return;
     }
 
@@ -598,7 +602,9 @@ void OLED::show_file() {
         show(percentLayout128, std::to_string(pct) + '%');
 
         if (_download_mode) {
-            
+            // TODO(busy-screen): This display will be replaced by
+            // showBusyDisplay() when RSS downloads migrate to BusyScreen.
+
             truncated_draw_string(_header_height, "Downloading:", DejaVu_Sans_10);
             truncated_draw_string(_header_height + 12, _filename, DejaVu_Sans_10);
             _oled->drawProgressBar(0, _header_height + 12 + 16, 120, 10, pct);          
@@ -958,6 +964,12 @@ void OLED::show_all(float *axes, bool isMpos, bool *limits) {
     saved_isMpos = isMpos;
     saved_limits = limits;
 
+    // Busy screen active — don't draw normal UI.
+    // Rendering handled by updateBusyScreen() in the protocol loop.
+    if (_busy_stage != BusyStage::Off) {
+        return;
+    }
+
     if ( (_menu->is_home_menu() || _menu->is_run_menu() || _menu->is_postrun_menu())
         && !(_state == "Alarm" || _state == "Run" || _state == "Hold:0" || _state == "Hold:1" || _download_mode || _file_job_running || _popup) ) {
         // in an icon menu, and not in a state where we don't show a menu at all
@@ -1237,7 +1249,12 @@ void OLED::refresh_display(bool menu_only) {
         log_info("Locked in refresh_display()");
         return;
     }
-    
+
+    // Don't overwrite the busy screen
+    if (_busy_stage != BusyStage::Off) {
+        return;
+    }
+
     if (menu_only) {
         show_menu();
     } else if (jog_state != JogState::Idle) {
@@ -1322,6 +1339,189 @@ void OLED::clear_popup() {
     refresh_display();
 }
 
+// --- BusyScreen implementation ---
+
+void OLED::busyPing() {
+    // Hot path: Stage2 steady state
+    if (_busy_stage == BusyStage::Stage2) {
+        _busy_cmd_count++;
+        _busy_idle_deadline_ms = millis() + 3000;  // Keep alive
+        return;
+    }
+
+    uint32_t now = millis();
+
+    if (_busy_stage == BusyStage::Off) {
+        if (_busy_cmd_count == 0) {
+            _busy_next_check_ms = now + 1000;  // Check for Stage1 in 1s
+            _busy_start_ms = now;
+        }
+        _busy_cmd_count++;
+        _busy_idle_deadline_ms = now + 3000;
+        return;
+    }
+
+    // Stage1: record activity
+    _busy_cmd_count++;
+    _busy_idle_deadline_ms = now + 3000;
+}
+
+void OLED::setBusy(BusyReason reason) {
+    // Flag-only: do NOT draw here — may be called from WebServer task.
+    // The main loop's updateBusyScreen() will pick this up and draw.
+    _busy_reason = reason;
+    _busy_cmd_count = 1;
+    uint32_t now = millis();
+    _busy_stage_shown_ms = now;
+    _busy_start_ms = now;
+    _busy_idle_deadline_ms = now + 3000;
+    _busy_next_redraw_ms = 0;  // Force immediate redraw on next updateBusyScreen()
+    _busy_stage = BusyStage::Stage2;  // Set stage LAST (volatile, read by other task)
+}
+
+void OLED::clearBusy(BusyReason reason) {
+    if (_busy_stage == BusyStage::Off) return;
+    if (_busy_reason != reason) return;
+
+    if (reason == BusyReason::FileUpload) {
+        // Flag-only: use dedicated cleanup flag (not _busy_reason)
+        // to avoid race with setBusy() which also writes _busy_reason.
+        _busy_cleanup_pending = true;
+        _busy_stage = BusyStage::Off;
+    } else {
+        // Streaming: use idle timeout for graceful exit
+        uint32_t now = millis();
+        uint32_t min_end = _busy_stage_shown_ms + 2000;
+        _busy_idle_deadline_ms = (now >= min_end) ? now : min_end;
+        _busy_cmd_count = 0;
+    }
+}
+
+void OLED::evaluateBusyTransitions() {
+    uint32_t now = millis();
+
+    if (_busy_stage == BusyStage::Off) {
+        // Check if we should enter Stage1
+        if (_busy_cmd_count > 1 && now >= _busy_next_check_ms) {
+            _busy_stage = BusyStage::Stage1;
+            _busy_reason = BusyReason::GcodeStreaming;
+            _busy_stage_shown_ms = now;
+            _busy_next_redraw_ms = 0;  // Force immediate redraw
+        }
+        // Check if activity fizzled out before Stage1
+        if (_busy_cmd_count > 0 && now >= _busy_idle_deadline_ms) {
+            _busy_cmd_count = 0;  // Reset, never triggered
+        }
+        return;
+    }
+
+    // Check for Stage1 → Stage2 promotion
+    if (_busy_stage == BusyStage::Stage1) {
+        uint32_t elapsed = now - _busy_start_ms;
+        if (elapsed >= 5000 && _busy_cmd_count > 1) {
+            _busy_stage = BusyStage::Stage2;
+            _busy_stage_shown_ms = now;
+        }
+    }
+
+    // File uploads don't use idle timeout — only clearBusy() ends them.
+    if (_busy_reason != BusyReason::FileUpload &&
+        now >= _busy_idle_deadline_ms &&
+        now >= _busy_stage_shown_ms + 2000) {
+        exitBusyScreen();
+    }
+}
+
+void OLED::exitBusyScreen() {
+    _busy_stage = BusyStage::Off;
+    _busy_reason = BusyReason::None;
+    _busy_cmd_count = 0;
+
+    // Full display recovery
+    clearScreenFast();
+    _jog_full_redraw_ms = 0;
+    memset(_jog_prev_val, 0, sizeof(_jog_prev_val));
+    _last_state_width = 0;
+    refresh_display();
+}
+
+void OLED::cleanupAfterBusy() {
+    // One-shot: clearBusy() sets _busy_cleanup_pending as a signal.
+    // Using a dedicated flag avoids race with setBusy() writing _busy_reason.
+    if (!_busy_cleanup_pending) return;
+    _busy_cleanup_pending = false;
+
+    _busy_reason = BusyReason::None;
+
+    // Reset display caches so first normal frame redraws fully
+    clearScreenFast();
+    _jog_full_redraw_ms = 0;
+    memset(_jog_prev_val, 0, sizeof(_jog_prev_val));
+    _last_state_width = 0;
+
+    // Force immediate normal display refresh
+    refresh_display();
+}
+
+void OLED::updateBusyScreen() {
+    evaluateBusyTransitions();  // Always evaluate — handles Off→Stage1 transition
+    if (_busy_stage == BusyStage::Off) return;
+
+    // Throttle content redraw to ~1 Hz
+    uint32_t now = millis();
+    if (now < _busy_next_redraw_ms) return;
+    _busy_next_redraw_ms = now + 1000;
+
+    showBusyDisplay();
+    _oled->display();
+
+    // Push to I2C immediately — do not rely on polling loop
+    // timing, which is unreliable for cross-task buffer access.
+    processDisplayRefresh();
+}
+
+void OLED::showBusyDisplay() {
+    // Header: machine name for uploads, "External Control" for streaming
+    clearScreenFast();
+
+    _oled->setFont(DejaVu_Sans_10);
+    _oled->setTextAlignment(TEXT_ALIGN_CENTER);
+    int cx = _width / 2;
+
+    // Draw header — always machine name, left-aligned to match normal display
+    clearHeaderWithSeparator();
+    show(stateLayout, config->_name.c_str());
+
+    // Draw content — reset alignment after header drew left-aligned
+    _oled->setTextAlignment(TEXT_ALIGN_CENTER);
+
+    if (_busy_reason == BusyReason::FileUpload) {
+        showBusyUpload();
+    } else {
+        _oled->drawString(cx, _header_height + 6, "Under external");
+        _oled->drawString(cx, _header_height + 20, "control; streaming");
+        _oled->drawString(cx, _header_height + 34, "in progress");
+    }
+}
+
+void OLED::showBusyUpload() {
+    _oled->setFont(DejaVu_Sans_10);
+    _oled->setTextAlignment(TEXT_ALIGN_CENTER);
+    int cx = _width / 2;
+    int y = _header_height + 2;
+
+    // Source label — use pollingPaused to distinguish USB vs WiFi
+    // pollingPaused is true during xmodem transfers
+    const char* source;
+    if (pollingPaused) {
+        source = "USB file upload";
+    } else {
+        source = "WiFi file upload";
+    }
+
+    _oled->drawString(cx, y, source);
+    _oled->drawString(cx, y + 14, "in progress");
+}
 
 void OLED::parse_numbers(std::string s, float* nums, int maxnums) {
     size_t pos     = 0;
@@ -1755,6 +1955,10 @@ void OLED::parse_report() {
         return;
     }
     if (_report.rfind("[MSG:INFO: File download started]", 0) == 0) {
+        // TODO(busy-screen): Migrate RSS download to BusyScreen system.
+        // When the RSS feed is re-exposed, replace _download_mode with
+        // setBusy(BusyReason::FileUpload) and update RSSReader.cpp to
+        // call clearBusy() on completion. See 2026-04-10-busy-screen-design.md.
         _download_mode = true;
         return;
     }

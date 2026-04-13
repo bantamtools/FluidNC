@@ -25,8 +25,12 @@
 #include "System.h"
 #include "WebUI/RSSReader.h"
 #include "WebUI/WifiConfig.h"
+#ifdef ENABLE_WIFI
+#    include <WiFi.h>
+#endif
 
 #include <string>
+#include <cstring>  // strcmp
 
 // External function for config recovery
 extern void copyRecoveryConfigAndRestart();
@@ -217,6 +221,14 @@ void polling_loop(void* unused) {
 
         // Polling is paused when xmodem is using a channel for binary upload
         if (pollingPaused) {
+            // Keep display alive during xmodem transfers.
+            // INVARIANT: Safe to call updateBusyScreen() here only because
+            // pollingPaused is set exclusively when xmodemReceive() blocks
+            // the main loop — no concurrent buffer access.
+            if (config->_oled) {
+                config->_oled->updateBusyScreen();
+                config->_oled->processDisplayRefresh();
+            }
             vTaskDelay(100);
             continue;
         }
@@ -435,6 +447,15 @@ void protocol_main_loop() {
             report_echo_line_received(activeLine, allChannels);
 #endif
 
+            // Detect external gcode activity for busy screen
+            // Ping only for non-query gcode from external channels
+            if (config->_oled &&
+                activeLine[0] != '$' && activeLine[0] != '?' &&
+                activeLine[0] != '[' && activeLine[0] != '\0' &&
+                strcmp(activeChannel->name(), "file") != 0) {
+                config->_oled->busyPing();
+            }
+
             Error status_code = execute_line(activeLine, *activeChannel, WebUI::AuthenticationLevel::LEVEL_GUEST);
 
             // Tell the channel that the line has been processed.
@@ -448,6 +469,16 @@ void protocol_main_loop() {
         // Auto-cycle start any queued moves.
         protocol_auto_cycle_start();
         protocol_execute_realtime();  // Runtime command check point.
+
+        // BusyScreen: always call updateBusyScreen (handles Off→Stage1
+        // transition), then cleanup when not busy.
+        if (config->_oled) {
+            config->_oled->updateBusyScreen();
+            if (!config->_oled->isBusy()) {
+                config->_oled->cleanupAfterBusy();
+            }
+        }
+
         if (sys.abort) {
             stop_polling();
             return;  // Bail to main() program loop to reset system.
@@ -552,6 +583,12 @@ static void protocol_do_alarm() {
         spindle->stop();
     }
     sys.state = State::Alarm;  // Set system alarm state
+#ifdef ENABLE_WIFI
+    WiFi.setAutoReconnect(true);
+    if (WiFi.status() != WL_CONNECTED) {
+        WiFi.reconnect();
+    }
+#endif
     alarm_msg(rtAlarm);
     if (rtAlarm == ExecAlarm::HardLimit || rtAlarm == ExecAlarm::SoftLimit) {
         if(rtAlarm == ExecAlarm::SoftLimit){
@@ -801,6 +838,9 @@ static void protocol_do_initiate_cycle() {
     plan_block_t* pb;
     if ((pb = plan_get_current_block()) && !sys.suspend.bit.motionCancel) {
         sys.suspend.value = 0;  // Break suspend state.
+#ifdef ENABLE_WIFI
+        WiFi.setAutoReconnect(false);
+#endif
         sys.state         = pb->is_jog ? State::Jog : State::Cycle;
         
         // Clear any deferred pause when resuming motion
@@ -815,6 +855,12 @@ static void protocol_do_initiate_cycle() {
 
         sys.suspend.value = 0;  // Break suspend state.
         sys.state         = State::Idle;
+#ifdef ENABLE_WIFI
+        WiFi.setAutoReconnect(true);
+        if (WiFi.status() != WL_CONNECTED) {
+            WiFi.reconnect();
+        }
+#endif
     }
 }
 static void protocol_initiate_homing_cycle() {
@@ -969,6 +1015,12 @@ if (sys.step_control.executeHold) {
             } else {
                 sys.suspend.value = 0;
                 sys.state         = State::Idle;
+#ifdef ENABLE_WIFI
+                WiFi.setAutoReconnect(true);
+                if (WiFi.status() != WL_CONNECTED) {
+                    WiFi.reconnect();
+                }
+#endif
             }
             break;
         case State::Homing:
@@ -1309,6 +1361,11 @@ static void protocol_do_enter() {
             log_info("Pause request deferred until after parking completes");
         }
         return;  // Dismiss button press
+    }
+
+    // BusyScreen: ignore button presses while busy
+    if (config->_oled && config->_oled->isBusy()) {
+        return;
     }
 
     // Bail if enter button locked out (prevents duplicates)

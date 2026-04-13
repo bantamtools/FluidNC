@@ -42,6 +42,7 @@
 #include "Machine/MachineConfig.h"
 #include "WebUI/InputBuffer.h"
 #include "WebUI/Commands.h"
+#include "WebUI/WifiConfig.h"
 #include "WebUI/WifiServices.h"
 #include "MotionControl.h"
 #include "Report.h"
@@ -343,7 +344,7 @@ Channel* pollChannels(char* line) {
     Channel* retval = allChannels.pollLine(line);
 
     WebUI::COMMANDS::handle();      // Handles ESP restart
-    WebUI::wifi_services.handle();  // OTA, webServer, telnetServer, RSS reader polling
+    WebUI::wifi_config.handle();    // wifi_services + periodic WiFi reconnect 
 
     return retval;
 }

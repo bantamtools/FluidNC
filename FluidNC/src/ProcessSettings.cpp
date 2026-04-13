@@ -21,6 +21,7 @@
 #include "UartChannel.h"          // Uart0.write()
 #include "FileStream.h"           // FileStream()
 #include "xmodem.h"               // xmodemReceive(), xmodemTransmit()
+#include "OLED.h"
 #include "StartupLog.h"           // startupLog
 #include "Driver/fluidnc_gpio.h"  // gpio_dump()
 #ifdef USE_SDMMC
@@ -635,8 +636,20 @@ static Error xmodem_receive(const char* value, WebUI::AuthenticationLevel auth_l
     }
     pollingPaused = true;
     bool oldCr    = out.setCr(false);
+
+    // Activate busy screen for xmodem transfer
+    if (config && config->_oled) {
+        config->_oled->setBusy(BusyReason::FileUpload);
+    }
+
     delay_ms(1000);
     int size = xmodemReceive(&out, outfile);
+
+    // Clear busy screen
+    if (config && config->_oled) {
+        config->_oled->clearBusy(BusyReason::FileUpload);
+    }
+
     out.setCr(oldCr);
     pollingPaused = false;
     if (size >= 0) {
