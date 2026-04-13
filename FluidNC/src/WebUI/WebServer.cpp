@@ -65,6 +65,7 @@ namespace WebUI {
 
     UploadStatus      Web_Server::_upload_status        = UploadStatus::NONE;
     size_t            Web_Server::_uploadBytesReceived  = 0;
+    size_t            Web_Server::_uploadTotalSize      = 0;
     WebServer*        Web_Server::_webserver            = NULL;
     WebSocketsServer* Web_Server::_socket_server        = NULL;
 #    ifdef ENABLE_AUTHENTICATION
@@ -1038,6 +1039,7 @@ namespace WebUI {
                 _uploadFile    = new FileStream(fpath, "w");
                 _upload_status       = UploadStatus::ONGOING;
                 _uploadBytesReceived = 0;
+                _uploadTotalSize     = filesize;
                 if (config && config->_oled) {
                     config->_oled->setBusy(BusyReason::FileUpload);
                 }

@@ -125,6 +125,8 @@ static void flushinput(void) {
 // control-Z's.  Doing the control-Z removal only on the final
 // packet avoids removing interior control-Z's that happen to
 // land at the end of a packet.
+volatile size_t xmodem_bytes_received = 0;
+
 static uint8_t held_packet[1024];
 static size_t  held_packet_len;
 static void    flush_packet(size_t packet_len, size_t& total_len) {
@@ -138,6 +140,7 @@ static void    flush_packet(size_t packet_len, size_t& total_len) {
         }
         file->write(held_packet, count);
         total_len += count;
+        xmodem_bytes_received += count;
         held_packet_len = 0;
     }
 }
@@ -145,6 +148,7 @@ static void write_packet(uint8_t* buf, size_t packet_len, size_t& total_len) {
     if (held_packet_len > 0) {
         file->write(held_packet, held_packet_len);
         total_len += held_packet_len;
+        xmodem_bytes_received += held_packet_len;
         held_packet_len = 0;
     }
     memcpy(held_packet, buf, packet_len);

@@ -5,3 +5,5 @@
 
 int xmodemReceive(Channel* serial, FileStream* outfile);
 int xmodemTransmit(Channel* serial, FileStream* infile);
+
+extern volatile size_t xmodem_bytes_received;

@@ -7,6 +7,8 @@
 #include <cmath>       // ceilf, floorf
 #include <cstdio>      // snprintf
 #include <cstring>     // memcpy, memset
+#include "WebUI/WebServer.h"   // WebUI::Web_Server::getUploadBytesReceived(), getUploadTotalSize()
+#include "xmodem.h"            // xmodem_bytes_received
 
 // Static variables
 static float* saved_axes = NULL;   // Saved dro values for refreshing display
@@ -1481,23 +1483,22 @@ void OLED::updateBusyScreen() {
 }
 
 void OLED::showBusyDisplay() {
-    // Header: machine name for uploads, "External Control" for streaming
-    clearScreenFast();
-
     _oled->setFont(DejaVu_Sans_10);
     _oled->setTextAlignment(TEXT_ALIGN_CENTER);
     int cx = _width / 2;
 
-    // Draw header — always machine name, left-aligned to match normal display
-    clearHeaderWithSeparator();
-    show(stateLayout, config->_name.c_str());
-
-    // Draw content — reset alignment after header drew left-aligned
-    _oled->setTextAlignment(TEXT_ALIGN_CENTER);
-
     if (_busy_reason == BusyReason::FileUpload) {
+        // Content area only — header pixels preserved in buffer
+        clearContentAreaFast();
+        clearHeaderWithSeparator();
+        show(stateLayout, config->_name.c_str());
+        _oled->setTextAlignment(TEXT_ALIGN_CENTER);
         showBusyUpload();
     } else {
+        clearScreenFast();
+        clearHeaderWithSeparator();
+        show(stateLayout, config->_name.c_str());
+        _oled->setTextAlignment(TEXT_ALIGN_CENTER);
         _oled->drawString(cx, _header_height + 6, "Under external");
         _oled->drawString(cx, _header_height + 20, "control; streaming");
         _oled->drawString(cx, _header_height + 34, "in progress");
@@ -1511,16 +1512,63 @@ void OLED::showBusyUpload() {
     int y = _header_height + 2;
 
     // Source label — use pollingPaused to distinguish USB vs WiFi
-    // pollingPaused is true during xmodem transfers
     const char* source;
+    size_t bytes;
+    size_t total;
     if (pollingPaused) {
         source = "USB file upload";
+        bytes = xmodem_bytes_received;
+        total = 0;  // Unknown until ; File size: sentinel is implemented
     } else {
         source = "WiFi file upload";
+        bytes = WebUI::Web_Server::getUploadBytesReceived();
+        total = WebUI::Web_Server::getUploadTotalSize();
     }
 
     _oled->drawString(cx, y, source);
-    _oled->drawString(cx, y + 14, "in progress");
+
+    // Format progress text
+    char progress[24];
+    size_t bytes_kb = bytes / 1024;
+    if (bytes_kb == 0 && bytes > 0) bytes_kb = 1;  // Minimum display: 1 kB
+    size_t total_kb = total / 1024;
+
+    // Determine unit from the larger value
+    size_t larger_kb = (total_kb > 0) ? total_kb : bytes_kb;
+
+    if (larger_kb <= 9999) {
+        // Integer kB — cast to unsigned long for portable snprintf on ESP32
+        if (total_kb > 0) {
+            snprintf(progress, sizeof(progress), "%lu / %lu kB",
+                     (unsigned long)bytes_kb, (unsigned long)total_kb);
+        } else {
+            snprintf(progress, sizeof(progress), "%lu kB received",
+                     (unsigned long)bytes_kb);
+        }
+    } else {
+        // MB with variable precision based on magnitude
+        float bytes_mb = bytes_kb / 1024.0f;
+        float larger_mb = larger_kb / 1024.0f;
+
+        // Pick decimal places from the magnitude of the larger value
+        const char* fmt;
+        if (larger_mb < 10.0f) {
+            fmt = (total_kb > 0) ? "%.3f / %.3f MB" : "%.3f MB received";
+        } else if (larger_mb < 100.0f) {
+            fmt = (total_kb > 0) ? "%.2f / %.2f MB" : "%.2f MB received";
+        } else {
+            fmt = (total_kb > 0) ? "%.1f / %.1f MB" : "%.1f MB received";
+        }
+
+        if (total_kb > 0) {
+            float total_mb = total_kb / 1024.0f;
+            snprintf(progress, sizeof(progress), fmt, bytes_mb, total_mb);
+        } else {
+            snprintf(progress, sizeof(progress), fmt, bytes_mb);
+        }
+    }
+
+    _oled->drawString(cx, y + 14, progress);
 }
 
 void OLED::parse_numbers(std::string s, float* nums, int maxnums) {

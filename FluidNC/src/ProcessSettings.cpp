@@ -635,6 +635,7 @@ static Error xmodem_receive(const char* value, WebUI::AuthenticationLevel auth_l
         return Error::UploadFailed;
     }
     pollingPaused = true;
+    xmodem_bytes_received = 0;
     bool oldCr    = out.setCr(false);
 
     // Activate busy screen for xmodem transfer
