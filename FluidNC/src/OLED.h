@@ -132,6 +132,10 @@ private: // AIDAN
 
     void encoder_update(int16_t enc_diff);
     void clearBufferRect(int x0, int y0, int x1, int y1);
+
+    void drawX3(int16_t x, int16_t y);   // Draw a 3x3 X at (x,y)
+    bool wifiDisconnected();              // True when STA configured but not connected
+    void drawWifiDisconnectX();           // Draw X at default upper-right if disconnected
     
     void parse_report();
     void parse_status_report();

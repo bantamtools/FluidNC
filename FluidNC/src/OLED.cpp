@@ -601,7 +601,13 @@ void OLED::show_file() {
     clearContentAreaFast();
 
     if (_width == 128) {
-        show(percentLayout128, std::to_string(pct) + '%');
+        if (wifiDisconnected()) {
+            _oled->setTextAlignment(TEXT_ALIGN_RIGHT);
+            _oled->setFont(DejaVu_Sans_10);
+            _oled->drawString(124, 0, (std::to_string(pct) + '%').c_str());
+        } else {
+            show(percentLayout128, std::to_string(pct) + '%');
+        }
 
         if (_download_mode) {
             // TODO(busy-screen): This display will be replaced by
@@ -803,6 +809,33 @@ void OLED::clearBufferRect(int x0, int y0, int x1, int y1) {
     }
 }
 
+void OLED::drawX3(int16_t x, int16_t y) {
+    // 3x3 X pattern:  X.X
+    //                  .X.
+    //                  X.X
+    _oled->setPixel(x,     y);
+    _oled->setPixel(x + 2, y);
+    _oled->setPixel(x + 1, y + 1);
+    _oled->setPixel(x,     y + 2);
+    _oled->setPixel(x + 2, y + 2);
+}
+
+bool OLED::wifiDisconnected() {
+#ifdef ENABLE_WIFI
+    int mode = WebUI::wifi_mode->get();
+    return (mode == WebUI::WiFiSTA || mode == WebUI::WiFiFallback)
+        && !WebUI::WiFiConfig::sta_got_ip();
+#else
+    return false;
+#endif
+}
+
+void OLED::drawWifiDisconnectX() {
+    if (wifiDisconnected()) {
+        drawX3(125, 0);
+    }
+}
+
 void OLED::show_jog_position_full() {
     if (_popup || _file_job_running) return;
 
@@ -978,7 +1011,11 @@ void OLED::show_all(float *axes, bool isMpos, bool *limits) {
         render_icon_menu();
     } else if (jog_state != JogState::Idle) {
         // Jog mode: minimal updates only
-        showJogHeaderFast(_state == "Jog");
+        bool moving = (_state == "Jog");
+        showJogHeaderFast(moving);
+        if (!moving) {
+            drawWifiDisconnectX();
+        }
         uint32_t now = millis();
         if (now - _jog_full_redraw_ms >= JOG_FULL_REDRAW_INTERVAL_MS) {
             show_menu();
@@ -993,6 +1030,7 @@ void OLED::show_all(float *axes, bool isMpos, bool *limits) {
         show_menu();
         show_dro(axes, isMpos, limits);
         show_radio_info();
+        drawWifiDisconnectX();
         _oled->display();
     }
 }
@@ -1124,6 +1162,7 @@ void OLED::show_home_layout(int hightlight) {
         }
     }
 
+    drawWifiDisconnectX();
     _oled->display();
 }
 
@@ -1173,6 +1212,7 @@ void OLED::show_run_layout(int hightlight) {  // run menu
     // bottom text : most recent file name
     show(bottomTextLayout, _menu->get_recent_file_name());
 
+    drawWifiDisconnectX();
     _oled->display();
 }
 
@@ -1239,6 +1279,7 @@ void OLED::show_postrun_layout(int hightlight) {  // run menu
     // bottom text : most recent file name
     show(bottomTextLayout, _menu->get_completed_file_name());
 
+    drawWifiDisconnectX();
     _oled->display();
 }
 
@@ -1272,10 +1313,18 @@ void OLED::processDisplayRefresh() {
     if (!_oled || !_active) {
         return;
     }
-    
+
+    // Redraw content when WiFi connection state changes
+    static bool prev_wifi_disconnected = false;
+    bool curr = wifiDisconnected();
+    if (curr != prev_wifi_disconnected) {
+        prev_wifi_disconnected = curr;
+        refresh_display();
+    }
+
     // Cast to SSD1306_I2C to access the refresh flag and method
     SSD1306_I2C* ssd1306 = static_cast<SSD1306_I2C*>(_oled);
-    
+
     // Check timing and perform refresh if needed
     uint32_t now = millis();
     if (ssd1306->_refresh_needed && now >= _next_refresh_ms) {

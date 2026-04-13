@@ -25,6 +25,7 @@ namespace WebUI {
         static void reset_settings() {}
         static void handle() {}
         static bool isOn() { return false; }
+        static bool sta_got_ip() { return false; }
         static void showWifiStats(Channel& out) {}
     };
     extern WiFiConfig wifi_config;
@@ -34,6 +35,13 @@ namespace WebUI {
 #    include "../Settings.h"
 
 namespace WebUI {
+    enum WiFiStartupMode {
+        WiFiOff = 0,
+        WiFiSTA,
+        WiFiAP,
+        WiFiFallback,  // Try STA, fall back to AP if STA fails
+    };
+
     extern StringSetting* wifi_hostname;
 
     static const int DHCP_MODE   = 0;
@@ -96,6 +104,7 @@ namespace WebUI {
         static void    handle();
         static void    reset_settings();
         static bool    isOn();
+        static bool    sta_got_ip() { return _sta_got_ip; }
 
         static Error listAPs(char* parameter, AuthenticationLevel auth_level, Channel& out);
         static void  showWifiStats(Channel& out);

@@ -33,13 +33,6 @@ WebUI::WiFiConfig wifi_config  __attribute__((init_priority(109))) ;
 #    include "../SSD1306_I2C.h"
 
 namespace WebUI {
-    enum WiFiStartupMode {
-        WiFiOff = 0,
-        WiFiSTA,
-        WiFiAP,
-        WiFiFallback,  // Try STA and fall back to AP if STA fails
-    };
-
     enum_opt_t wifiModeOptions = {
         { "Off", WiFiOff },
         { "STA", WiFiSTA },
