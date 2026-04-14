@@ -100,8 +100,11 @@ namespace WebUI {
         notificationsService.begin();
         rssReader.begin();
 
-        //be sure we are not is mixed mode in setup
-        WiFi.scanNetworks(true);
+        // Network scanning is deferred to listAPs() (ESP410) so it only
+        // runs when the WebUI actually requests a network list.  The old
+        // boot-time WiFi.scanNetworks(true) call caused two problems:
+        //   - In AP mode it transiently set WIFI_MODE_APSTA 
+        //   - In STA mode it triggered an ASSOC_LEAVE disconnect/reconnect
         return no_error;
     }
     void WiFiServices::end() {

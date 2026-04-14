@@ -884,6 +884,13 @@ namespace WebUI {
             WiFi.onEvent(WiFiConfig::WiFiEvent);
             _events_registered = true;
         }
+
+        // The GOT_IP event fires during ConnectSTA2AP() before the event
+        // handler is registered above, so _sta_got_ip never gets set.
+        // Sync it now to prevent handle() from triggering a spurious reconnect.
+        if (WiFi.status() == WL_CONNECTED) {
+            _sta_got_ip = true;
+        }
         esp_wifi_set_ps(WIFI_PS_NONE);
 
         // WiFi is up — enable auto-reconnect for idle-state recovery.
@@ -951,8 +958,8 @@ namespace WebUI {
         JSONencoder j(true, &out);
         j.begin();
         j.begin_array("AP_LIST");
-        // An initial async scanNetworks was issued at startup, so there
-        // is a good chance that scan information is already available.
+        // Scan is triggered on demand — the first call returns an empty
+        // list and kicks off an async scan; subsequent calls return results.
         int n = WiFi.scanComplete();
         switch (n) {
             case -2:                      // Scan not triggered
