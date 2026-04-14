@@ -159,7 +159,7 @@ void Menu::connect_rss_feed(ListType *feed) {
     // Initialize and connect into menu system
     init(_rss_menu, _settings_menu);
     add_entry(_settings_menu, _rss_menu, NULL, "RSS Feed");
-    add_entry(_rss_menu, NULL, NULL, "< Back");
+    add_entry(_rss_menu, NULL, NULL, BACK_LABEL);
 }
 
 void Menu::print_current_menu() {
@@ -350,7 +350,7 @@ void Menu::go_to_saved_directory() {
                 entry->selected = false;
                 entry = entry->next;
             }
-            // Select first entry (usually "< Back")
+            // Select first entry (usually BACK_LABEL)
             _current_menu->head->selected = true;
             _current_menu->active_head = _current_menu->head;
         }
@@ -453,7 +453,7 @@ ListType* Menu::add_directory(char *path, bool isBin, bool isCfg) {
 //            log_info("Adding menu entry for folder: " << token_copy);
             if (!add_entry(current_menu, new_menu, NULL, token_copy)) {
                 // Failed to add entry, clean up and return
-                remove_entries(new_menu);  // Free the "< Back" entry first
+                remove_entries(new_menu);  // Free the BACK_LABEL entry first
                 delete new_menu;
                 return current_menu;
             }
@@ -545,17 +545,17 @@ void Menu::prep_for_sd_update(void) {
     if (_files_menu->head) {
         remove_entries_recursive(_files_menu);
     }
-    add_entry(_files_menu, NULL, NULL, "< Back");
+    add_entry(_files_menu, NULL, NULL, BACK_LABEL);
 
     if (_firmware_menu->head) {
         remove_entries_recursive(_firmware_menu);
     }
-    add_entry(_firmware_menu, NULL, NULL, "< Back");
+    add_entry(_firmware_menu, NULL, NULL, BACK_LABEL);
 
     if (_config_menu->head) {
         remove_entries_recursive(_config_menu);
     }
-    add_entry(_config_menu, NULL, NULL, "< Back");
+    add_entry(_config_menu, NULL, NULL, BACK_LABEL);
 
     uint32_t heap_cleared = ESP.getFreeHeap();
     float heap_kb_cleared = heap_cleared / 1024.0;
@@ -623,12 +623,12 @@ void Menu::build(void) {
     // add_entry(_main_menu, _run_menu, NULL, "Run Files");
 
     // // Run Menu // not currently used
-    // add_entry(_run_menu, NULL, NULL, "< Back");
+    // add_entry(_run_menu, NULL, NULL, BACK_LABEL);
     // add_entry(_run_menu, NULL, NULL, "Run Latest");
     // add_entry(_run_menu, _files_menu, NULL, "Browse SD");
 
     // Jogging Menu
-    add_entry(_jogging_menu, NULL, NULL, "< Back");
+    add_entry(_jogging_menu, NULL, NULL, BACK_LABEL);
     
     // Add jog entries for configured axes (limit to 3 for display)
     if (config && config->_axes && config->_axes->_numberAxis > 0) {
@@ -688,21 +688,21 @@ void Menu::build(void) {
     }
 
     // Files Menu
-    add_entry(_files_menu, NULL, NULL, "< Back");
+    add_entry(_files_menu, NULL, NULL, BACK_LABEL);
 
     // Settings Menu
     build_settings_menu();
 
     // Back buttons for settings submenus (only added once during build)
-    add_entry(_config_menu, NULL, NULL, "< Back");
-    add_entry(_firmware_menu, NULL, NULL, "< Back");
+    add_entry(_config_menu, NULL, NULL, BACK_LABEL);
+    add_entry(_firmware_menu, NULL, NULL, BACK_LABEL);
 
     // confirmation for factory reset
     add_entry(_confirm_menu, NULL, NULL, "Cancel Factory Reset");
     add_entry(_confirm_menu, NULL, NULL, "Confirm Factory Reset");
     
     // homing choice menu entries
-    add_entry(_homing_choice_menu, NULL, NULL, "< Back");
+    add_entry(_homing_choice_menu, NULL, NULL, BACK_LABEL);
     add_entry(_homing_choice_menu, NULL, NULL, "Run Homing");
     
     // Version Menu
@@ -726,7 +726,7 @@ void Menu::build(void) {
         default: snprintf(wifi_mode_str, sizeof(wifi_mode_str), "WiFi: %d", config->_wifiMode); break;
     }
 
-    add_entry(_version_menu, NULL, NULL, "< Back");
+    add_entry(_version_menu, NULL, NULL, BACK_LABEL);
     add_entry(_version_menu, NULL, NULL, bantam_ver_str);
     add_entry(_version_menu, NULL, NULL, machine_name_str);
     add_entry(_version_menu, NULL, NULL, config_ver_str);
@@ -734,7 +734,7 @@ void Menu::build(void) {
     add_entry(_version_menu, NULL, NULL, wifi_mode_str);
 
     // Post-run menu
-    add_entry(_postrun_menu, NULL, NULL, "< Back");
+    add_entry(_postrun_menu, NULL, NULL, BACK_LABEL);
     add_entry(_postrun_menu, NULL, NULL, "Run Again"); // special handling to run just-finished file
 }
 
@@ -742,7 +742,7 @@ void Menu::build(void) {
 // contents (file lists, confirm entries, etc). Safe to call after
 // remove_entries(_settings_menu) for a targeted refresh.
 void Menu::build_settings_menu() {
-    add_entry(_settings_menu, NULL, NULL, "< Back");
+    add_entry(_settings_menu, NULL, NULL, BACK_LABEL);
     add_entry(_settings_menu, _version_menu, NULL, "Version");
     add_entry(_settings_menu, _jogging_menu, NULL, "Jog mode");
     // WiFi toggle menu item
@@ -766,7 +766,7 @@ void Menu::build_settings_menu() {
     if (WebUI::wifi_config.isOn()) {
         add_entry(_settings_menu, _wifi_info_menu, NULL, "WiFi Info");
         remove_entries(_wifi_info_menu);
-        add_entry(_wifi_info_menu, NULL, NULL, "< Back");
+        add_entry(_wifi_info_menu, NULL, NULL, BACK_LABEL);
         wifi_mode_t wm = WiFi.getMode();
         char buf[LIST_NAME_MAX_STR];
         if (wm == WIFI_MODE_AP || wm == WIFI_MODE_APSTA) {

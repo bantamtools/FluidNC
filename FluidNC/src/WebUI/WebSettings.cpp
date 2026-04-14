@@ -125,7 +125,7 @@ namespace WebUI {
 
         while(entry) {
         
-            if (strcmp(entry->display_name, "< Back") != 0) {  // Skip back button
+            if (strcmp(entry->display_name, BACK_LABEL) != 0) {  // Skip back button
                 j.begin_object();
                 j.member("title", entry->display_name);
                 j.member("link", entry->path);

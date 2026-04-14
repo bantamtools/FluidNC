@@ -54,7 +54,7 @@ bool List::add_entry(ListType *list, ListType *sublist, const char *path, const 
             new_entry->display_name = NULL;
         }
     } else {
-        // Case 2: Static menu entry (e.g., "< Back") - no path, allocate display_name separately
+        // Case 2: Static menu entry (e.g., BACK_LABEL) - no path, allocate display_name separately
         new_entry->path = NULL;
         if (display_name) {
             new_entry->display_name = strdup(display_name);
@@ -198,6 +198,6 @@ void List::prep(ListType *list, bool add_back_btn) {
 
     // Add the back button to top of list if requested
     if (add_back_btn) {
-        add_entry(list, NULL, NULL, "< Back");
+        add_entry(list, NULL, NULL, BACK_LABEL);
     }
 }

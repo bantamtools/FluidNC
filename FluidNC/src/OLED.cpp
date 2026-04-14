@@ -870,7 +870,7 @@ void OLED::show_jog_position_full() {
             config->_axes->_axis[axis]->_motors[0] &&
             config->_axes->_axis[axis]->_motors[0]->isReal()) {
 
-            // Align with menu entries: entry 0 is "< Back", entries 1-3 are Jog axes
+            // Align with menu entries: entry 0 is BACK_LABEL, entries 1-3 are Jog axes
             // Menu uses _header_height + menu_height(12) * entry_index
             uint8_t oled_y_pos = _header_height + 12 * (display_count + 1);
 
@@ -1239,7 +1239,7 @@ void OLED::show_postrun_layout(int hightlight) {  // run menu
     int i = 0;
     while (entry && entry->display_name && i < 4) {
         if (entry->selected) {
-            if (strncmp(entry->display_name, "< Back", 40) == 0) { // special case, override
+            if (strcmp(entry->display_name, BACK_LABEL) == 0) { // special case, override
                 if (_menu->get_last_file_succeeded() ) {
                     // calc previous run time
                     char completed_msg[24];

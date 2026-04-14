@@ -1545,7 +1545,7 @@ static void protocol_do_enter() {
                 // Handle homing choice menu
                 } else if (config->_oled->_menu->is_homing_choice_menu()) {
                     
-                    if (strcmp(config->_oled->_menu->get_selected()->display_name, "< Back") == 0) {
+                    if (strcmp(config->_oled->_menu->get_selected()->display_name, BACK_LABEL) == 0) {
                         // Return to jogging menu (parent set during menu initialization)
                         config->_oled->_menu->exit_submenu();
                         // Force clean redraw of jogging menu
@@ -1727,7 +1727,7 @@ static void protocol_do_enter() {
                     // back button specifically from post-run menu, go back to run menu
                     config->_oled->_menu->return_to_run_menu();
                 // Back button
-                } else if (strcmp(config->_oled->_menu->get_selected()->display_name, "< Back") == 0) {
+                } else if (strcmp(config->_oled->_menu->get_selected()->display_name, BACK_LABEL) == 0) {
                     // Special handling for postrun menu - go directly to saved directory
                     if (config->_oled->_menu->is_postrun_menu()) {
                         log_info("Postrun Back button - going to saved directory");
