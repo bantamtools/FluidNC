@@ -56,7 +56,7 @@ Menu::Menu() {
     strcpy(_confirm_menu->title, "Confirm");
     strcpy(_homing_choice_menu->title, "Machine Not Homed");
     strcpy(_run_menu->title, "Run Menu");
-    strcpy(_wifi_info_menu->title, "WiFi Info");
+    strcpy(_wifi_info_menu->title, "WiFi Status");
 
     _recent_file_is_new_upload = false;
 
@@ -745,6 +745,11 @@ void Menu::build_settings_menu() {
     add_entry(_settings_menu, NULL, NULL, BACK_LABEL);
     add_entry(_settings_menu, _version_menu, NULL, "Version");
     add_entry(_settings_menu, _jogging_menu, NULL, "Jog mode");
+    // WiFi Status submenu — before toggle so user sees status first
+    if (WebUI::wifi_config.isOn()) {
+        add_entry(_settings_menu, _wifi_info_menu, NULL, "WiFi Status");
+        rebuild_wifi_status();
+    }
     // WiFi toggle menu item
     // - Hidden when config enforces WiFi off (wifi_mode: 0)
     // - When config defers (wifi_mode: -1): user has full on/off control
@@ -761,29 +766,6 @@ void Menu::build_settings_menu() {
         } else {
             add_entry(_settings_menu, NULL, NULL, "WiFi: Reboot to enable");
         }
-    }
-    // WiFi Info submenu — populated with current connection data
-    if (WebUI::wifi_config.isOn()) {
-        add_entry(_settings_menu, _wifi_info_menu, NULL, "WiFi Info");
-        remove_entries(_wifi_info_menu);
-        add_entry(_wifi_info_menu, NULL, NULL, BACK_LABEL);
-        wifi_mode_t wm = WiFi.getMode();
-        char buf[LIST_NAME_MAX_STR];
-        if (wm == WIFI_MODE_AP || wm == WIFI_MODE_APSTA) {
-            add_entry(_wifi_info_menu, NULL, NULL, "WiFi Hotspot:");
-            add_entry(_wifi_info_menu, NULL, NULL, WebUI::wifi_ap_ssid->get());
-            snprintf(buf, sizeof(buf), "Pass: %s", WebUI::wifi_ap_password->get());
-            add_entry(_wifi_info_menu, NULL, NULL, buf);
-            snprintf(buf, sizeof(buf), "IP: %s", IP_string(WiFi.softAPIP()).c_str());
-            add_entry(_wifi_info_menu, NULL, NULL, buf);
-        } else {
-            add_entry(_wifi_info_menu, NULL, NULL, "Joined Network:");
-            add_entry(_wifi_info_menu, NULL, NULL, WiFi.SSID().c_str());
-            snprintf(buf, sizeof(buf), "IP: %s", IP_string(WiFi.localIP()).c_str());
-            add_entry(_wifi_info_menu, NULL, NULL, buf);
-        }
-        snprintf(buf, sizeof(buf), "Host: %s", WebUI::wifi_hostname->get());
-        add_entry(_wifi_info_menu, NULL, NULL, buf);
     }
     if (config->getMachineType() == Machine::MachineType::EggBot ||
         config->getMachineType() == Machine::MachineType::WaterColorBot) {
@@ -804,6 +786,50 @@ void Menu::build_settings_menu() {
 void Menu::rebuild_settings_menu() {
     remove_entries(_settings_menu);
     build_settings_menu();
+}
+
+void Menu::rebuild_wifi_status() {
+    if (!WebUI::wifi_config.isOn()) {
+        return;
+    }
+    remove_entries(_wifi_info_menu);
+    add_entry(_wifi_info_menu, NULL, NULL, BACK_LABEL);
+
+    char buf[LIST_NAME_MAX_STR];
+    bool sta_connected = WebUI::WiFiConfig::sta_got_ip();
+    wifi_mode_t wm = WiFi.getMode();
+    int configured_mode = WebUI::wifi_mode->get();
+
+    if (sta_connected) {
+        // STA connected (either pure STA or STA>AP that succeeded)
+        strcpy(_wifi_info_menu->title, "WiFi Status: Connected");
+        add_entry(_wifi_info_menu, NULL, NULL, "Connected to network:");
+        add_entry(_wifi_info_menu, NULL, NULL, WiFi.SSID().c_str());
+        snprintf(buf, sizeof(buf), "IP: %s", IP_string(WiFi.localIP()).c_str());
+        add_entry(_wifi_info_menu, NULL, NULL, buf);
+    } else if (wm == WIFI_MODE_AP || wm == WIFI_MODE_APSTA) {
+        // Running as AP — intentional or fallback?
+        strcpy(_wifi_info_menu->title, "WiFi Status: Hotspot");
+        if (configured_mode == WebUI::WiFiFallback) {
+            add_entry(_wifi_info_menu, NULL, NULL, "Hotspot (fallback mode):");
+        } else {
+            add_entry(_wifi_info_menu, NULL, NULL, "WiFi Hotspot:");
+        }
+        add_entry(_wifi_info_menu, NULL, NULL, WebUI::wifi_ap_ssid->get());
+        snprintf(buf, sizeof(buf), "Pass: %s", WebUI::wifi_ap_password->get());
+        add_entry(_wifi_info_menu, NULL, NULL, buf);
+        snprintf(buf, sizeof(buf), "IP: %s", IP_string(WiFi.softAPIP()).c_str());
+        add_entry(_wifi_info_menu, NULL, NULL, buf);
+    } else {
+        // STA mode, not connected
+        strcpy(_wifi_info_menu->title, "WiFi: Not connected");
+        add_entry(_wifi_info_menu, NULL, NULL, "Not connected");
+        add_entry(_wifi_info_menu, NULL, NULL, WebUI::wifi_sta_ssid->get());
+        add_entry(_wifi_info_menu, NULL, NULL, "IP: <not connected>");
+    }
+
+    snprintf(buf, sizeof(buf), "Host: %s", WebUI::wifi_hostname->get());
+    add_entry(_wifi_info_menu, NULL, NULL, buf);
 }
 
 // Rebuilds the menu system (e.g., after machine type is determined)

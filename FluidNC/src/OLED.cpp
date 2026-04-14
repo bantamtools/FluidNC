@@ -1025,6 +1025,18 @@ void OLED::show_all(float *axes, bool isMpos, bool *limits) {
         }
         _oled->display();
     } else {
+        // Live-update WiFi Status menu before rendering header+entries
+#ifdef ENABLE_WIFI
+        if (_menu->is_wifi_info_menu()) {
+            bool connected = WebUI::WiFiConfig::sta_got_ip();
+            int mode = (int)WiFi.getMode();
+            if (connected != _wifi_status_last_connected || mode != _wifi_status_last_mode) {
+                _wifi_status_last_connected = connected;
+                _wifi_status_last_mode = mode;
+                _menu->rebuild_wifi_status();
+            }
+        }
+#endif
         show_state();
         show_file();
         show_menu();

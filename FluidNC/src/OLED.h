@@ -136,6 +136,9 @@ private: // AIDAN
     void drawX3(int16_t x, int16_t y);   // Draw a 3x3 X at (x,y)
     bool wifiDisconnected();              // True when STA configured but not connected
     void drawWifiDisconnectX();           // Draw X at default upper-right if disconnected
+
+    bool _wifi_status_last_connected = false;
+    int  _wifi_status_last_mode = 0;  // cached WiFi.getMode()
     
     void parse_report();
     void parse_status_report();

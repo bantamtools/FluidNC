@@ -40,6 +40,7 @@ public:
     bool is_confirm_menu();
     bool is_homing_choice_menu();
     bool is_wifi_info_menu();
+    void rebuild_wifi_status();
     bool should_clear_on_entry(ListType* menu);
     void connect_rss_feed(ListType *feed);
     void print_current_menu();
