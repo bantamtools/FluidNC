@@ -20,12 +20,10 @@ Some features should not be changed. See notes below.
 
 // DEBUG: Enable memory printouts
 // #define DEBUG_MEMORY
-#ifdef DEBUG_MEMORY
-#define DEBUG_MEMORY_WATERMARKS
-#ifdef DEBUG_MEMORY_WATERMARKS
-#define DEBUG_MEMORY_WM_TIME_MS 10000
-#endif
-#endif
+
+// Task stack high-water-mark logging (every N ms)
+// #define DEBUG_MEMORY_WATERMARKS
+// #define DEBUG_MEMORY_WM_TIME_MS 10000
 
 // It is no longer necessary to edit this file to choose
 // a machine configuration; edit machine.h instead

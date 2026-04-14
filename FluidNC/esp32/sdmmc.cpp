@@ -263,8 +263,12 @@ void sd_populate_files_menu() {
                                 config->_oled->processDisplayRefresh(); // Force display update
                             }
 
-                            // Stop if heap drops below safe threshold (65 kB)
-                            if (current_heap < 65000) {
+                            // Stop if heap drops below safe threshold (50 kB)
+                            // WiFi stack is already allocated by scan time;
+                            // 50 kB reserves room for HTTP/telnet transients,
+                            // RSS fetches, filesystem iterators, FreeRTOS overhead,
+                            // and heap fragmentation from many small file entries.
+                            if (current_heap < 50000) {
                                 log_warn("Memory limit reached: " << file_count << " files read; stopping scan (heap: " << current_heap << " bytes)");
                                 config->_oled->clear_popup();  // Clear loading message first
                                 char msg[55];

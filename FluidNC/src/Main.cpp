@@ -33,8 +33,23 @@
 #    include "WifiSetupFile.h"
 #    include <cstring>   // strcmp, strlen
 #    include <cctype>    // isalpha, isdigit, tolower
+#    include <freertos/task.h>  // uxTaskGetStackHighWaterMark
 
 extern void make_user_commands();
+
+static const uint32_t LOOP_STACK_WORDS = 6144;  // ARDUINO_LOOP_STACK_SIZE
+
+static void log_startup_resources(const char* label) {
+    uint32_t heap_free   = xPortGetFreeHeapSize();
+    uint32_t stack_words = uxTaskGetStackHighWaterMark(NULL);
+    float heap_kb        = heap_free / 1024.0f;
+    float stack_kb       = (stack_words * 4) / 1024.0f;
+    float stack_total_kb = (LOOP_STACK_WORDS * 4) / 1024.0f;
+    uint32_t stack_pct   = ((LOOP_STACK_WORDS - stack_words) * 100) / LOOP_STACK_WORDS;
+    log_info(label << " - Stack: " << stack_kb << " kB free / "
+             << stack_total_kb << " kB total (" << stack_pct
+             << "% used) | Heap: " << heap_kb << " kB free");
+}
 
 // Derive a valid hostname from the config machine name.
 // Lowercase, replace spaces with hyphens, drop invalid chars.
@@ -270,10 +285,14 @@ void setup() {
     // Derive hostname from config name if config changed
     derive_hostname_from_config();
 
+    log_startup_resources("Pre-radio");
+
     // Try Bluetooth first so its memory can be released if it is disabled
     if (!WebUI::bt_config.begin()) {
         WebUI::wifi_config.begin();
     }
+
+    log_startup_resources("Post-radio");
 
     // Rebuild settings menu now that WiFi state is known
     if (config->_oled && config->_oled->_menu) {
@@ -319,6 +338,7 @@ static void reset_variables() {
 void loop() {
     static int tries = 0;
     try {
+        log_startup_resources("Pre-main-loop");
         reset_variables();
 
 #ifdef DEBUG_MEMORY
