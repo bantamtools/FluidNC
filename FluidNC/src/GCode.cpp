@@ -1531,7 +1531,8 @@ Error gc_execute_line(char* line) {
                     if (value_words & bitnum_to_mask(GCodeWord::R)) {             // Arc Radius Mode
                         clear_bits(value_words, bitnum_to_mask(GCodeWord::R));
                         if (isequal_position_vector(gc_state.position, gc_block.values.xyz)) {
-                            FAIL(Error::GcodeInvalidTarget);  // [Invalid target]
+                            axis_command = AxisCommand::None;  // Skip zero-length R-form arc
+                            break;
                         }
                         // Convert radius value to proper units.
                         if (gc_block.modal.units == Units::Inches) {

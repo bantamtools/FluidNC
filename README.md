@@ -1,6 +1,6 @@
-# Bantam Tools FluidNC v2.6.7 - source release
+# Bantam Tools FluidNC v2.6.8 - source release
 
-Corresponding source for Bantam Tools FluidNC firmware v2.6.7, a modified version of
+Corresponding source for Bantam Tools FluidNC firmware v2.6.8, a modified version of
 [FluidNC](https://github.com/bdring/FluidNC), distributed under the GNU General Public
 License v3 (see `LICENSE` and `NOTICE`).
 
@@ -10,7 +10,7 @@ Requires [PlatformIO](https://platformio.org/). Clone with submodules:
 
     git clone --recurse-submodules https://github.com/bantamtools/FluidNC
     cd FluidNC
-    git checkout v2.6.7
+    git checkout v2.6.8
     git submodule update --init --recursive
     pio run -e wifi_s3            # firmware.bin
     pio run -e wifi_s3_usb-otg    # USB-OTG variant (where present in platformio.ini)
