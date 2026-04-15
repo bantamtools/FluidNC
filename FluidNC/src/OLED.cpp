@@ -1943,6 +1943,21 @@ void OLED::parse_error_report() {
     if (_report.substr(0, 5) == "ERR: ") {
         _report = _report.substr(5); // trim "ERR: " prefix
     }
+    // Strip directory path from filename to save display space.
+    // " in /sd/path/file.gcode at line" -> " in file.gcode at line"
+    // If filename > 18 chars, drop it: -> " in G-code file at line"
+    size_t in_pos = _report.find(" in ");
+    size_t at_pos = _report.find(" at line");
+    if (in_pos != std::string::npos && at_pos != std::string::npos && at_pos > in_pos) {
+        std::string filepath = _report.substr(in_pos + 4, at_pos - in_pos - 4);
+        auto slash = filepath.rfind('/');
+        std::string fname = (slash != std::string::npos) ? filepath.substr(slash + 1) : filepath;
+        if (fname.length() <= 18) {
+            _report = _report.substr(0, in_pos) + " in " + fname + _report.substr(at_pos);
+        } else {
+            _report = _report.substr(0, in_pos) + " in G-code file" + _report.substr(at_pos);
+        }
+    }
     _popup = true;
     _error = true; // Mark as error popup to prevent WiFi overwrite
     show_error(_report); // popup error report until next button click
