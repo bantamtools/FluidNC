@@ -1707,11 +1707,9 @@ Error gc_execute_line(char* line) {
                    (bitnum_to_mask(GCodeWord::N) | bitnum_to_mask(GCodeWord::F) | bitnum_to_mask(GCodeWord::S) |
                     bitnum_to_mask(GCodeWord::T)));  // Remove single-meaning value words.
     }
-    if (axis_command != AxisCommand::None) {
-        clear_bits(value_words,
-                   (bitnum_to_mask(GCodeWord::X) | bitnum_to_mask(GCodeWord::Y) | bitnum_to_mask(GCodeWord::Z) |
-                    bitnum_to_mask(GCodeWord::A) | bitnum_to_mask(GCodeWord::B) | bitnum_to_mask(GCodeWord::C)));  // Remove axis words.
-    }
+    clear_bits(value_words,
+               (bitnum_to_mask(GCodeWord::X) | bitnum_to_mask(GCodeWord::Y) | bitnum_to_mask(GCodeWord::Z) |
+                bitnum_to_mask(GCodeWord::A) | bitnum_to_mask(GCodeWord::B) | bitnum_to_mask(GCodeWord::C)));  // Remove axis words.
     if (value_words) {
         FAIL(Error::GcodeUnusedWords);  // [Unused words]
     }
