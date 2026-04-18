@@ -56,6 +56,7 @@ tag = (
     .strip()
     .decode("utf-8")
 )
+version = tag.lstrip('v')
 
 sharedPath = 'install_scripts'
 
@@ -85,7 +86,7 @@ os.makedirs(manifestRelPath)
 
 manifest = {
         "name": "FluidNC",
-        "version": tag,
+        "version": version,
         "source_url": "https://github.com/bdring/FluidNC/tree/" + tag,
         "release_url": "https://github.com/bdring/FluidNC/releases/tag/" + tag,
         "funding_url": "https://www.paypal.com/donate/?hosted_button_id=8DYLB6ZYYDG7Y",
@@ -227,7 +228,7 @@ with open(os.path.join(manifestRelPath, "manifest.json"), "w") as manifest_file:
                  
 
     # Create "update only" zip
-    updateZipName = os.path.join(relPath, f'fluidnc-bantam-update-only-{tag}.zip')
+    updateZipName = os.path.join(relPath, f'fluidnc-bantam-update-only-{version}.zip')
     with ZipFile(updateZipName, 'w') as updateZip:
         # Add index.html.gz
         addToUpdateZip(updateZip, os.path.join('FluidNC', 'data', 'index.html.gz'), os.path.join('update', 'index.html.gz'))
@@ -265,7 +266,7 @@ for platform in ['win64', 'posix']:
         'posix': False,
     }
 
-    zipDirName = os.path.join('fluidnc-bantam-new-install-' + tag + '-' + platform)
+    zipDirName = os.path.join('fluidnc-bantam-new-install-' + version + '-' + platform)
     zipFileName = os.path.join(relPath, zipDirName + '.zip')
 
     print("zipDirName=", zipDirName)
