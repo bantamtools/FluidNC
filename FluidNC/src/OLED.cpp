@@ -1006,7 +1006,7 @@ void OLED::show_all(float *axes, bool isMpos, bool *limits) {
     }
 
     if ( (_menu->is_home_menu() || _menu->is_run_menu() || _menu->is_postrun_menu())
-        && !(_state == "Alarm" || _state == "Run" || _state == "Hold:0" || _state == "Hold:1" || _download_mode || _file_job_running || _popup) ) {
+        && !(_state == "Alarm" || _state == "Hold" || _state == "Decel" || _download_mode || _file_job_running || _popup) ) {
         // in an icon menu, and not in a state where we don't show a menu at all
         render_icon_menu();
     } else if (jog_state != JogState::Idle) {
@@ -1416,17 +1416,16 @@ void OLED::busyPing() {
 
     if (_busy_stage == BusyStage::Off) {
         if (_busy_cmd_count == 0) {
-            _busy_next_check_ms = now + 1000;  // Check for Stage1 in 1s
             _busy_start_ms = now;
         }
         _busy_cmd_count++;
-        _busy_idle_deadline_ms = now + 3000;
+        _busy_idle_deadline_ms = now + 1500;
         return;
     }
 
     // Stage1: record activity
     _busy_cmd_count++;
-    _busy_idle_deadline_ms = now + 3000;
+    _busy_idle_deadline_ms = now + 1500;
 }
 
 void OLED::setBusy(BusyReason reason) {
@@ -1464,16 +1463,12 @@ void OLED::evaluateBusyTransitions() {
     uint32_t now = millis();
 
     if (_busy_stage == BusyStage::Off) {
-        // Check if we should enter Stage1
-        if (_busy_cmd_count > 1 && now >= _busy_next_check_ms) {
+        // Enter Stage1 immediately on any external command
+        if (_busy_cmd_count > 0) {
             _busy_stage = BusyStage::Stage1;
             _busy_reason = BusyReason::GcodeStreaming;
             _busy_stage_shown_ms = now;
             _busy_next_redraw_ms = 0;  // Force immediate redraw
-        }
-        // Check if activity fizzled out before Stage1
-        if (_busy_cmd_count > 0 && now >= _busy_idle_deadline_ms) {
-            _busy_cmd_count = 0;  // Reset, never triggered
         }
         return;
     }
@@ -1488,9 +1483,12 @@ void OLED::evaluateBusyTransitions() {
     }
 
     // File uploads don't use idle timeout — only clearBusy() ends them.
+    // Don't exit while machine is still in Run — avoids garbled display
+    // when show_all() renders with Run state before Idle report arrives.
     if (_busy_reason != BusyReason::FileUpload &&
+        _state != "Run" &&
         now >= _busy_idle_deadline_ms &&
-        now >= _busy_stage_shown_ms + 2000) {
+        now >= _busy_stage_shown_ms + 1000) {
         exitBusyScreen();
     }
 }
@@ -1556,13 +1554,27 @@ void OLED::showBusyDisplay() {
         _oled->setTextAlignment(TEXT_ALIGN_CENTER);
         showBusyUpload();
     } else {
-        clearScreenFast();
-        clearHeaderWithSeparator();
-        show(stateLayout, config->_name.c_str());
+        // Overlay box drawn on top of existing screen content
+        int ox = 10;   // overlay x
+        int oy = 14;   // overlay y
+        int ow = 108;  // overlay width
+        int oh = 42;   // overlay height
+
+        _oled->setColor(BLACK);
+        _oled->fillRect(ox - 1, oy - 1, ow + 2, oh + 2);   // Same outer black size
+        _oled->setColor(WHITE);
+        _oled->drawRect(ox + 1, oy + 1, ow - 2, oh - 2);   // Outer white, 2px black padding
+        _oled->drawRect(ox + 2, oy + 2, ow - 4, oh - 4);   // Inner white, 2px thick total
+
+        _oled->setFont(DejaVu_Sans_10);
         _oled->setTextAlignment(TEXT_ALIGN_CENTER);
-        _oled->drawString(cx, _header_height + 6, "Under external");
-        _oled->drawString(cx, _header_height + 20, "control; streaming");
-        _oled->drawString(cx, _header_height + 34, "in progress");
+        if (_busy_stage == BusyStage::Stage2) {
+            _oled->drawString(cx, oy + 8, "Under external");
+            _oled->drawString(cx, oy + 21, "streaming control");
+        } else {
+            _oled->drawString(cx, oy + 8, "External command");
+            _oled->drawString(cx, oy + 21, "in progress");
+        }
     }
 }
 
