@@ -736,6 +736,22 @@ namespace WebUI {
         _webserver->send(200, "application/json", s);
     }
 
+    // Flush the accumulated JSON fragment to the chunked HTTP response when
+    // it crosses the threshold. Intended for use during streaming JSON
+    // responses where the caller has already opened a chunked response via
+    // setContentLength(CONTENT_LENGTH_UNKNOWN) + send(200, ..., "").
+    //
+    // Threshold is a soft target; callers flush at logical JSON boundaries
+    // (e.g. after each array element) rather than mid-token, so the buffer
+    // may exceed the threshold by one entry's worth. That is intentional —
+    // flushing mid-token would corrupt the JSON stream.
+    void Web_Server::flushJsonChunk(std::string& buf, size_t threshold) {
+        if (buf.size() >= threshold) {
+            _webserver->sendContent(buf.c_str(), buf.size());
+            buf.clear();  // retains capacity; no reallocation on next fill
+        }
+    }
+
     void Web_Server::sendAuth(const char* status, const char* level, const char* user) {
         std::string s;
         JSONencoder j(false, &s);
@@ -974,7 +990,24 @@ namespace WebUI {
             list_files = false;
         }
 
+        // Stream the JSON response via chunked transfer encoding instead of
+        // building the full body in one std::string. Peak heap for this
+        // response is bounded by the flush threshold (~512 bytes) plus one
+        // directory entry's worth of JSON, which makes the handler robust
+        // to heap fragmentation. See issue.
+        //
+        // CONTENT_LENGTH_UNKNOWN causes the pinned arduino-esp32 fork to
+        // emit Transfer-Encoding: chunked and switch sendContent() into
+        // chunk-framing mode. The terminating sendContent("") below closes
+        // the chunked response.
+        static constexpr size_t JSON_FLUSH_THRESHOLD = 512;
+
+        _webserver->sendHeader("Cache-Control", "no-cache");
+        _webserver->setContentLength(CONTENT_LENGTH_UNKNOWN);
+        _webserver->send(200, "application/json", "");
+
         std::string        s;
+        s.reserve(JSON_FLUSH_THRESHOLD + 128);  // one-shot allocation; no growth
         WebUI::JSONencoder j(false, &s);
         j.begin();
 
@@ -986,9 +1019,13 @@ namespace WebUI {
                     j.begin_object();
                     j.member("name", dir_entry.path().filename());
                     j.member("shortname", dir_entry.path().filename());
-                    j.member("size", dir_entry.is_directory() ? -1 : dir_entry.file_size());
+                    j.member("size",
+                             dir_entry.is_directory() ? -1 : dir_entry.file_size());
                     j.member("datetime", "");
                     j.end_object();
+                    // Flush at a JSON-valid boundary (after end_object inside
+                    // the array). Never flush mid-token.
+                    flushJsonChunk(s, JSON_FLUSH_THRESHOLD);
                 }
                 j.end_array();
             }
@@ -1007,7 +1044,13 @@ namespace WebUI {
         j.member("occupation", percent);
         j.member("status", sstatus);
         j.end();
-        sendJSON(200, s);
+
+        // Final flush — any remaining JSON including the closing brace.
+        if (!s.empty()) {
+            _webserver->sendContent(s.c_str(), s.size());
+        }
+        // Terminate the chunked response with a zero-length chunk.
+        _webserver->sendContent("");
     }
 
     void Web_Server::handle_direct_SDFileList() { handleFileOps(sdName); }

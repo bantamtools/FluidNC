@@ -110,6 +110,7 @@ namespace WebUI {
         static void sendFSError(Error err);
         static void sendJSON(int code, const char* s);
         static void sendJSON(int code, const std::string& s) { sendJSON(code, s.c_str()); }
+        static void flushJsonChunk(std::string& buf, size_t threshold);
         static void sendAuth(const char* status, const char* level, const char* user);
         static void sendAuthFailed();
         static void sendStatus(int code, const char* str);
