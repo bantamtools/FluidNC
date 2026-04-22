@@ -348,14 +348,13 @@ static void gcode_comment_msg(char* comment) {
         case 'M':
             // Check for "MSG"
             if (text[1] == 'S' && text[2] == 'G' && (text[3] == ' ' || text[3] == ':')) {
-                char msg[80];
-                const size_t offset = 4;  // skip "MSG " part
-                size_t index = offset;
-                while (index < strlen(comment)) {
-                    msg[index - offset] = comment[index];
-                    index++;
+                char        msg[65];  // 64 chars + null, matching pending_m0_comment
+                const char* body = text + 4;  // skip "MSG<delim>"
+                strncpy(msg, body, 64);
+                msg[64] = '\0';
+                if (strlen(body) > 64) {
+                    strcpy(msg + 61, "...");
                 }
-                msg[index - offset] = 0;
                 log_info("GCode Comment..." << msg);
                 return;
             }
