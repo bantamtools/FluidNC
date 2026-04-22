@@ -6,14 +6,13 @@
 #define LIST_NAME_MAX_STR   40
 #define LIST_NAME_MAX_PATH  255
 
-// Custom glyph character constants for DejaVu_Sans_10 font on SSD1306 OLED.
-// The \xC2 prefix is required: the SSD1306 library's drawString() uses a UTF-8
-// decoder that drops raw 0x80-0x9F bytes. \xC2\xNN is valid UTF-8 for U+00NN,
-// and the decoder's 0xC2 case passes the second byte through as the font index.
-#define GLYPH_BACK_ARROW "\xC2\x81"
-#define GLYPH_WIFI       "\xC2\x84"
-
-#define BACK_LABEL GLYPH_BACK_ARROW " Back"
+// BACK_LABEL is used both as a menu display string and as a strcmp
+// key (see Menu.cpp, Protocol.cpp). Centralizing the definition
+// ensures all call sites compare identical bytes.
+// The ◀ character is U+25C0 BLACK LEFT-POINTING TRIANGLE; rendering
+// on the OLED is handled by customFontTableLookup in OLED.cpp, which
+// maps it to font slot 0x81.
+#define BACK_LABEL "◀ Back"
 
 typedef struct ListNodeType
 {

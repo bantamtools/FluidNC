@@ -142,8 +142,90 @@ static uint8_t unlock_icon_bits[] PROGMEM = {
   0xC0, 0x01, 0x00, 0xF8, 0xFF, 0x1F, 0xFC, 0xFF, 0x3F, 0xFC, 0xFF, 0x3F, 
   0x1C, 0x00, 0x38, 0x1C, 0x00, 0x38, 0x1C, 0x00, 0x38, 0x1C, 0xFF, 0x38, 
   0x1C, 0xFF, 0x38, 0x1C, 0x00, 0x38, 0x1C, 0x00, 0x38, 0x1C, 0x00, 0x38, 
-  0xFC, 0xFF, 0x3F, 0xFC, 0xFF, 0x3F, 0xFC, 0xFF, 0x3F, 0x00, 0x00, 0x00, 
+  0xFC, 0xFF, 0x3F, 0xFC, 0xFF, 0x3F, 0xFC, 0xFF, 0x3F, 0x00, 0x00, 0x00,
   };
+
+// 24x24, 72 bytes, generated from draw_again_icon.png
+static uint8_t draw_again_icon_bits[] PROGMEM = {
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x7E, 0x00, 0x80, 0xC3, 0x01,
+    0xE0, 0x00, 0x07, 0x30, 0x40, 0x0C, 0x10, 0xE0, 0x08, 0x18, 0xB0, 0x19,
+    0x08, 0x18, 0x13, 0x0C, 0x8C, 0x36, 0x04, 0x46, 0x23, 0x04, 0xA3, 0x21,
+    0x84, 0xD1, 0x20, 0xC4, 0x68, 0x20, 0x4C, 0x35, 0x30, 0x48, 0x1A, 0x10,
+    0x58, 0x0C, 0x18, 0xD0, 0x07, 0x08, 0x30, 0x00, 0x0C, 0x00, 0x08, 0x07,
+    0x00, 0xC4, 0x01, 0x00, 0x7E, 0x00, 0x00, 0x04, 0x00, 0x00, 0x08, 0x00
+};
+
+
+// Custom UTF-8 → font-index lookup for the SSD1306 OLED font.
+//
+// Replaces DefaultFontTableLookup. Recognizes specific Unicode
+// codepoints as multi-byte UTF-8 sequences and maps them to font
+// slots 0x80–0x84 (→, ◀, ˣ, ✓, 🛜). Unrecognized bytes either push
+// onto state (potential mid-sequence) or drop (return 0).
+//
+// Reference implementation + unit tests:
+//   misc-oskay/fluidnc-font/font_table_lookup.py
+//   misc-oskay/fluidnc-font/test_font_table_lookup.py
+//
+// Called byte-by-byte during drawStringInternal. State persists
+// across the bytes of one string; it is effectively reset at the
+// start of each string because incomplete sequences at the end of
+// the previous string either completed or drifted out of the
+// 3-byte state window.
+static char customFontTableLookup(const uint8_t ch) {
+    static uint8_t prev3 = 0;
+    static uint8_t prev2 = 0;
+    static uint8_t prev1 = 0;
+
+    // ASCII: passthrough, clear state.
+    if (ch < 0x80) {
+        prev3 = prev2 = prev1 = 0;
+        return (char)ch;
+    }
+
+    // Latin-1 passthrough ranges (matches DefaultFontTableLookup).
+    if (prev1 == 0xC2) {
+        prev3 = prev2 = prev1 = 0;
+        return (char)ch;
+    }
+    if (prev1 == 0xC3) {
+        prev3 = prev2 = prev1 = 0;
+        return (char)(ch | 0xC0);
+    }
+
+    // Mapped 2-byte: ˣ U+02E3 (CB A3) -> 0x82
+    if (prev1 == 0xCB && ch == 0xA3) {
+        prev3 = prev2 = prev1 = 0;
+        return (char)0x82;
+    }
+
+    // Mapped 3-byte sequences, lead byte 0xE2.
+    if (prev2 == 0xE2 && prev1 == 0x86 && ch == 0x92) {
+        prev3 = prev2 = prev1 = 0;
+        return (char)0x80;  // → U+2192
+    }
+    if (prev2 == 0xE2 && prev1 == 0x97 && ch == 0x80) {
+        prev3 = prev2 = prev1 = 0;
+        return (char)0x81;  // ◀ U+25C0
+    }
+    if (prev2 == 0xE2 && prev1 == 0x9C && ch == 0x93) {
+        prev3 = prev2 = prev1 = 0;
+        return (char)0x83;  // ✓ U+2713
+    }
+
+    // Mapped 4-byte: 🛜 U+1F6DC (F0 9F 9B 9C) -> 0x84
+    if (prev3 == 0xF0 && prev2 == 0x9F && prev1 == 0x9B
+        && ch == 0x9C) {
+        prev3 = prev2 = prev1 = 0;
+        return (char)0x84;
+    }
+
+    // Otherwise: push onto state, return 0 (no glyph yet / drop).
+    prev3 = prev2;
+    prev2 = prev1;
+    prev1 = ch;
+    return (char)0;
+}
 
 
 // Get the jogging state
@@ -273,6 +355,12 @@ void OLED::init() {
     }
 
     _oled->flipScreenVertically();
+
+    // Install custom UTF-8 lookup so source strings can use real
+    // Unicode codepoints (◀, →, ✓, ˣ, 🛜) directly instead of the
+    // old "\xC2\xNN" prefix trick. See customFontTableLookup above.
+    _oled->setFontTableLookupFunction(customFontTableLookup);
+
     _oled->setTextAlignment(TEXT_ALIGN_LEFT);
 
     _oled->clear();
