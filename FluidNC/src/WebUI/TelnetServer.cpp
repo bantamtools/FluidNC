@@ -58,7 +58,7 @@ namespace WebUI {
     void TelnetServer::end() {
         _setupdone = false;
         if (_wifiServer) {
-            // delete _wifiServer;
+            delete _wifiServer;
             _wifiServer = NULL;
         }
 
