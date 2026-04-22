@@ -1390,8 +1390,21 @@ Error gc_execute_line(char* line) {
                     FAIL(Error::GcodeUnsupportedCommand);  // [Unsupported L]
                 }
             }
-            // Select the coordinate system based on the P word
-            pValue = int8_t(truncf(gc_block.values.p));  // Convert p value to integer
+            // Select the coordinate system based on the P word.
+            // Validate the float value against the documented range [0, NWCSystems]
+            // before narrowing. This avoids the implementation-defined behavior of
+            // casting an out-of-range float to int8_t (where P values above 127
+            // could wrap and silently alias onto a valid coord_select).
+            if (!isfinite(gc_block.values.p) || gc_block.values.p < 0.0f) {
+                FAIL(Error::GcodeUnsupportedCoordSys);
+            }
+            {
+                float p_int = truncf(gc_block.values.p);
+                if (p_int > static_cast<float>(CoordIndex::NWCSystems)) {
+                    FAIL(Error::GcodeUnsupportedCoordSys);
+                }
+                pValue = static_cast<uint8_t>(p_int);
+            }
             if (pValue > 0) {
                 // P1 means G54, P2 means G55, etc.
                 coord_select = static_cast<CoordIndex>(pValue - 1 + int(CoordIndex::G54));
