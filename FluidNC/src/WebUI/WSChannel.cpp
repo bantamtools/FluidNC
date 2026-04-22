@@ -164,6 +164,20 @@ namespace WebUI {
         }
     }
 
+    // Tears down every tracked WSChannel by routing it through the normal
+    // removeChannel path.  Called from Web_Server::end() before the backing
+    // WebSocketsServer is deleted, so no WSChannel is left registered with
+    // allChannels holding a dangling _server pointer.
+    void WSChannels::removeAllChannels() {
+        std::list<WSChannel*> toRemove;
+        for (auto& pair : _wsChannels) {
+            toRemove.push_back(pair.second);
+        }
+        for (WSChannel* channel : toRemove) {
+            removeChannel(channel);
+        }
+    }
+
     bool WSChannels::runGCode(int pageid, std::string cmd) {
         bool has_error = false;
 
@@ -202,7 +216,12 @@ namespace WebUI {
         return true;
     }
     void WSChannels::sendPing() {
-        for (WSChannel* wsChannel : _webWsChannels) {
+        // Snapshot the list before iterating.  sendTXT() calls removeChannel()
+        // on send failure, which in turn calls _webWsChannels.remove() -- if
+        // that ran on the list we were iterating, it would invalidate the
+        // current iterator and the next loop step would be undefined.
+        std::list<WSChannel*> snapshot = _webWsChannels;
+        for (WSChannel* wsChannel : snapshot) {
             std::string s("PING:");
             s += std::to_string(wsChannel->id());
             // sendBIN would be okay too because the string contains only

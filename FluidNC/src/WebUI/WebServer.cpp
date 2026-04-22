@@ -207,6 +207,11 @@ namespace WebUI {
         mdns_service_remove("_http", "_tcp");
 
         if (_socket_server) {
+            // Drain every tracked WSChannel before freeing the backing
+            // WebSocketsServer.  Each WSChannel holds a raw pointer to
+            // _socket_server; leaving them registered with allChannels
+            // would leave pollChannels() with dangling pointers to use.
+            WSChannels::removeAllChannels();
             delete _socket_server;
             _socket_server = NULL;
         }

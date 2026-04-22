@@ -51,7 +51,21 @@ protected:
     bool       _reportWco = true;
     CoordIndex _reportNgc = CoordIndex::End;
 
+    // Set by AllChannels::kill() when the channel is first queued for
+    // deletion.  Guards against enqueueing the same pointer twice, which
+    // would cause a double-free when the kill queue is drained.
+    bool _killed = false;
+
 public:
+    // Accessor used by AllChannels::kill() to make enqueue idempotent.
+    bool setKilled() {
+        if (_killed) {
+            return false;
+        }
+        _killed = true;
+        return true;
+    }
+
     Channel(const char* name, bool addCR = false) : _name(name), _linelen(0), _addCR(addCR) {}
     virtual ~Channel() = default;
 

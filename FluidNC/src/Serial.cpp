@@ -202,6 +202,13 @@ void AllChannels::init() {
 }
 
 void AllChannels::kill(Channel* channel) {
+    // Idempotent: if the channel has already been queued once, do not
+    // queue it again.  Preventing duplicate entries is what keeps the
+    // drain at the top of pollLine() from running `delete` twice on the
+    // same pointer, which would corrupt the heap on the second pass.
+    if (!channel || !channel->setKilled()) {
+        return;
+    }
     xQueueSend(_killQueue, &channel, 0);
 }
 

@@ -85,7 +85,13 @@ class AllChannels : public Channel {
     static std::mutex _mutex;
 
 public:
-    AllChannels() : Channel("all") { _killQueue = xQueueCreate(3, sizeof(Channel*)); }
+    // Kill-queue depth must cover the worst-case number of channels that can
+    // be queued for deletion between two poll cycles -- multiple WebSocket
+    // clients, a telnet client, an InputFile, and others can all call kill()
+    // in rapid succession.  xQueueSend() uses a zero timeout and its return
+    // value is ignored, so an overflow silently drops the kill and leaves the
+    // channel registered with a potentially dangling underlying transport.
+    AllChannels() : Channel("all") { _killQueue = xQueueCreate(16, sizeof(Channel*)); }
 
     void kill(Channel* channel);
 

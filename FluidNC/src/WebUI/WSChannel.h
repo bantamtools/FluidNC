@@ -87,6 +87,7 @@ namespace WebUI {
     public:
         static void removeChannel(WSChannel* channel);
         static void removeChannel(uint8_t num);
+        static void removeAllChannels();
 
         static bool runGCode(int pageid, std::string cmd);
         static bool sendError(int pageid, std::string error);
