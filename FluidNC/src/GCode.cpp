@@ -133,6 +133,55 @@ void gc_reset_winding_offsets() {
     }
 }
 
+// Parses a Park Height value using the house read_float() parser and
+// requires the entire remaining text to be consumed (apart from trailing
+// whitespace). Returns true on success. Rejects empty input, non-numeric
+// input, and trailing junk such as scientific-notation suffixes that
+// read_float() does not recognize.
+static bool parse_park_value(const char* text, float* out) {
+    while (*text == ' ' || *text == '\t') text++;
+    if (*text == '\0') return false;
+
+    size_t pos = 0;
+    float  value;
+    if (!read_float(text, &pos, &value)) return false;
+
+    const char* tail = text + pos;
+    while (*tail == ' ' || *tail == '\t') tail++;
+    if (*tail != '\0') return false;
+
+    *out = value;
+    return true;
+}
+
+// Validates and applies a Park Height / Install Height value. Never throws.
+// Rejects unparseable input, negative values, and values beyond the Z axis
+// travel limit (with a 1 mm tolerance). The deprecated flag logs the
+// Install Height deprecation notice before validation.
+static void apply_park_height(const char* value_str, bool deprecated) {
+    if (deprecated) {
+        log_warn("Install Height is deprecated; use Park Height instead");
+    }
+    if (!config || !config->_parking || !config->_axes) return;
+
+    float value;
+    if (!parse_park_value(value_str, &value)) {
+        log_warn("Park Height: unparseable value: " << value_str);
+        return;
+    }
+    if (value < 0.0f) {
+        log_warn("Park Height: negative value rejected: " << value);
+        return;
+    }
+    float max_bound = config->_axes->_axis[Z_AXIS]->_maxTravel + 1.0f;
+    if (value > max_bound) {
+        log_warn("Park Height: " << value << " exceeds Z max travel (" << max_bound << ")");
+        return;
+    }
+    config->_parking->_target_mpos = value;
+    log_info("Park Height: " << value);
+}
+
 static void gcode_comment_msg(char* comment) {
     // Skip leading whitespace
     char* text = comment;
@@ -183,13 +232,15 @@ static void gcode_comment_msg(char* comment) {
                 }
                 return;
             }
-            // Check for "Install Height" (deprecated, use Park Height)
+            // Check for "Install Height:" (deprecated alias for Park Height)
+            if (strncmp(text + 1, "nstall Height:", 14) == 0) {
+                apply_park_height(text + 15, /*deprecated=*/true);
+                return;
+            }
+            // Typo path: "Install Height" with no colon
             if (strncmp(text + 1, "nstall Height", 13) == 0) {
-                const char* colon = strchr(text, ':');
-                if (colon) {
-                    log_warn("Install Height is deprecated; use Park Height instead");
-                    config->_parking->_target_mpos = std::stof(colon + 1);
-                }
+                log_warn("Install Height: missing ':' separator "
+                         "(also: Install Height is deprecated; use Park Height)");
                 return;
             }
             break;
@@ -220,14 +271,14 @@ static void gcode_comment_msg(char* comment) {
             break;
 
         case 'P':
-            // Check for "Park Height"
+            // Check for "Park Height:"
+            if (strncmp(text + 1, "ark Height:", 11) == 0) {
+                apply_park_height(text + 12, /*deprecated=*/false);
+                return;
+            }
+            // Typo path: "Park Height" with no colon
             if (strncmp(text + 1, "ark Height", 10) == 0) {
-                const char* colon = strchr(text, ':');
-                if (colon) {
-                    float height = std::stof(colon + 1);
-                    log_info("Park Height: " << height);
-                    config->_parking->_target_mpos = height;
-                }
+                log_warn("Park Height: missing ':' separator");
                 return;
             }
             break;
@@ -236,8 +287,10 @@ static void gcode_comment_msg(char* comment) {
             // Check for "Accel" (Accel:, AccelX:, AccelY:, etc.)
             if (text[1] == 'c' && text[2] == 'c' && text[3] == 'e' && text[4] == 'l') {
                 char axis_char = text[5];
-                if (axis_char == ':' || axis_char == 'X' || axis_char == 'Y' ||
-                    axis_char == 'Z' || axis_char == 'A' || axis_char == 'B' || axis_char == 'C') {
+                bool is_bare  = (axis_char == ':');
+                bool is_axis  = (axis_char == 'X' || axis_char == 'Y' || axis_char == 'Z' ||
+                                 axis_char == 'A' || axis_char == 'B' || axis_char == 'C');
+                if (is_bare || (is_axis && text[6] == ':')) {
 
                     const char* colon = strchr(text, ':');
                     if (colon) {
@@ -294,7 +347,7 @@ static void gcode_comment_msg(char* comment) {
 
         case 'M':
             // Check for "MSG"
-            if (text[1] == 'S' && text[2] == 'G') {
+            if (text[1] == 'S' && text[2] == 'G' && (text[3] == ' ' || text[3] == ':')) {
                 char msg[80];
                 const size_t offset = 4;  // skip "MSG " part
                 size_t index = offset;
