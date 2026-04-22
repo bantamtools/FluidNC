@@ -200,6 +200,10 @@ static char customFontTableLookup(const uint8_t ch) {
     }
 
     // Mapped 3-byte sequences, lead byte 0xE2.
+    if (prev2 == 0xE2 && prev1 == 0x86 && ch == 0x90) {
+        prev3 = prev2 = prev1 = 0;
+        return (char)0x7F;  // ← U+2190
+    }
     if (prev2 == 0xE2 && prev1 == 0x86 && ch == 0x92) {
         prev3 = prev2 = prev1 = 0;
         return (char)0x80;  // → U+2192
