@@ -661,6 +661,29 @@ void OLED::show_menu() {
     _enc_scroll_lockout = false;  // Unlock scrolling to use menu (if needed)
 }
 
+// Authoritative transition handler for the file-job flag. On the true->false
+// edge (issued from InputFile::~InputFile after motion drains), latch the
+// final elapsed time into _saved_run_time so the postrun screen can display
+// it. Other transitions are no-ops beyond updating the flag itself.
+void OLED::set_file_job_running(bool running) {
+    if (_file_job_running && !running) {
+        commit_elapsed_time();
+    }
+    _file_job_running = running;
+}
+
+// Fold any live running segment into _prev_run_time, then snapshot the total
+// into _saved_run_time (seconds). If the job ends during a Hold, the Hold
+// handler has already zeroed _run_start_time and folded its segment, so the
+// fold here is skipped and the snapshot reflects pre-hold elapsed time only.
+void OLED::commit_elapsed_time() {
+    if (_run_start_time != 0) {
+        _prev_run_time += (millis() - _run_start_time);
+        _run_start_time = 0;
+    }
+    _saved_run_time = _prev_run_time / 1000;
+}
+
 // This is where file running menu stuff is drawn from?
 void OLED::show_file() {
     // log_info("OLED show_file() called, _state=" << _state << ", _file_job_running=" << _file_job_running << ", _download_mode=" << _download_mode);
@@ -668,21 +691,10 @@ void OLED::show_file() {
     char time_str[10];
     int pct = int(_percent);
 
-    // Record the start time if at beginning and clear at end of run
-    if (_state == "Run" && _run_start_time == 0) {
-        _run_start_time = millis();
-        _saved_run_time = 0;
-
-} else if ((_state == "Idle" && !_file_job_running && !_download_mode) || pct == 100) {
-//        _prev_run_time += (millis() - _run_start_time);
-//        _saved_run_time = _prev_run_time / 1000;
-        _run_start_time = 0;
-        _prev_run_time = 0;
-        return;
-    }
-
-// Exit if file/download not running, no filename or have one last SD report
-    if ((!_file_job_running && !_download_mode) || /*(!_download_mode && _run_start_time == 0) ||*/ (_filename.length() == 0) || (_state != "Run" && pct == 100)) {
+    // Exit if file/download not running or no filename. Elapsed-time state is
+    // managed by the raw-state edge handlers and set_file_job_running(); this
+    // function is a pure reader of _run_start_time / _prev_run_time.
+    if ((!_file_job_running && !_download_mode) || (_filename.length() == 0)) {
         return;
     }
 
@@ -1322,17 +1334,9 @@ void OLED::show_run_layout(int hightlight) {  // run menu
 
 void OLED::show_postrun_layout(int hightlight) {  // run menu
     log_info("Show postrun layout");
-    // clear run timer here to make sure it gets reset between repeated runs
-    if (_saved_run_time == 0) {
-        // Only accumulate if timer was actually running (not stopped in Hold/Alarm)
-        if (_run_start_time != 0) {
-            _prev_run_time += (millis() - _run_start_time);
-        }
-        _saved_run_time = _prev_run_time / 1000;
-        //log_info("Calc'd run time in postrun: " << _saved_run_time);
-    }
-    _run_start_time = 0;
-    _prev_run_time = 0;
+    // _saved_run_time is latched by commit_elapsed_time(), invoked from the
+    // set_file_job_running(true->false) transition before this menu becomes
+    // routable. This function is a pure reader.
     // clear entire screen and set text state
     clearScreenFast();
     _oled->setTextAlignment(TEXT_ALIGN_LEFT);
@@ -1773,15 +1777,6 @@ void OLED::parse_status_report() {
     // Now the string is a sequence of field|field|field
     size_t pos     = 0;
     auto   nextpos = _report.find_first_of("|", pos);
-
-    // Track file job transitions to detect when new job starts
-    static bool prev_file_job_running = false;
-
-    // Detect new file job starting - reset accumulated time
-    if (_file_job_running && !prev_file_job_running) {
-        _prev_run_time = 0;
-    }
-    prev_file_job_running = _file_job_running;
 
     // Save previous MAPPED state from last call
     // NOTE: old_state contains the mapped display name (e.g., "Decel" not "Hold:1")

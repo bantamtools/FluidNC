@@ -219,7 +219,7 @@ public:
 	bool showing_popup() { return _popup; }
 
 	bool is_file_job_running() { return _file_job_running; };
-	void set_file_job_running(bool running) { _file_job_running = running; };
+	void set_file_job_running(bool running);
 
 	void set_file_awaiting_homing(const char *path) { _file_awaiting_homing = path; }
 
@@ -285,6 +285,9 @@ private:
     void showBusyUpload();                // Render upload progress page
     void evaluateBusyTransitions();       // Stage transition logic (called from display loop)
     void exitBusyScreen();                // Full cleanup and recovery
+
+    // Elapsed-time commit, invoked from set_file_job_running() on true->false transition.
+    void commit_elapsed_time();
 };
 
 // Created by http://oleddisplay.squix.ch/ Consider a donation
