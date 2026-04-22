@@ -660,13 +660,17 @@ namespace WebUI {
         // WiFi stack can use.  Making these numbers too large
         // can eat up a lot of memory at 1.6K per buffer.  It
         // can be especially bad when there are many dynamic buffers,
-        // If there are too few Rx buffers, file upload can fail,
-        // possibly due to IP packet fragments getting lost.  The limit
-        // for what works seems to be 4 static, 4 dynamic.
         // allowing external network traffic to use a lot of the heap.
-        // The bawin parameters are for AMPDU aggregation.
+        // The bawin parameters are for AMPDU aggregation; ba_win_rx=0
+        // disables AMPDU RX entirely, which limits 802.11 throughput
+        // roughly 10x (one MPDU per 802.11 frame).
+        //
+        // Scaled up to match sdkconfig recipe for TCP_WND=11520:
+        //   static_rx=16, dynamic_rx=64, ba_win_rx=16 — AMPDU enabled,
+        //   matched to STATIC_RX_BUFFER_NUM per Kconfig guidance.
+        //   static_tx=4 (stock); ba_win_tx=6 (IDF default for TX AMPDU).
         // rx: static dynamic bawin  tx: static dynamic bawin cache
-        WiFi.setBuffers(4, 5, 0, 4, 0, 0, 4);
+        WiFi.setBuffers(16, 64, 16, 4, 0, 6, 4);
 
         //SSID
         const char* SSID = wifi_sta_ssid->get();

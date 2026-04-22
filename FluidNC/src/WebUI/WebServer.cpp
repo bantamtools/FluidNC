@@ -854,7 +854,9 @@ namespace WebUI {
                     //Upload write
                     //**************
                 } else if (upload.status == UPLOAD_FILE_WRITE) {
-                    vTaskDelay(1 / portTICK_RATE_MS);
+                    // [fix/upload-backpressure] Removed vTaskDelay same as
+                    // uploadWrite(). Same rationale applies to the /updatefw
+                    // (OTA) path. See uploadWrite() comment below.
                     //check if no error
                     if (_upload_status == UploadStatus::ONGOING) {
                         if (((100 * upload.totalSize) / maxSketchSpace) != last_upload_update) {
@@ -1101,7 +1103,15 @@ namespace WebUI {
     }
 
     void Web_Server::uploadWrite(uint8_t* buffer, size_t length) {
-        vTaskDelay(1 / portTICK_RATE_MS);
+        // [fix/upload-backpressure] Removed vTaskDelay(1 / portTICK_RATE_MS).
+        // At the ESP32's default 100 Hz FreeRTOS tick that yields ~10 ms per
+        // 1436-byte chunk — roughly 34 seconds of pure scheduler yield on a
+        // 5 MB upload, with no drain benefit. fwrite()/SD_MMC already yield
+        // during their own blocking waits. Removing this lets _parseForm
+        // drain the WiFi recv buffer at a rate closer to actual SD write
+        // bandwidth instead of being gated by the scheduler tick, reducing
+        // TCP backpressure that was causing mid-body UPLOAD_FILE_ABORTED.
+        // See internal tracker.
         if (_uploadFile && _upload_status == UploadStatus::ONGOING) {
             //no error write post data
             if (length != _uploadFile->write(buffer, length)) {
