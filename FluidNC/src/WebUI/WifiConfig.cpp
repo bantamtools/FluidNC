@@ -24,6 +24,7 @@ WebUI::WiFiConfig wifi_config  __attribute__((init_priority(109))) ;
 
 #    include <WiFi.h>
 #    include <esp_wifi.h>
+#    include <ESPmDNS.h>
 #    include "Driver/localfs.h"
 #    include <cstring>
 
@@ -784,6 +785,14 @@ namespace WebUI {
 
     void WiFiConfig::StopWiFi() {
         if (WiFi.getMode() != WIFI_MODE_NULL) {
+            // Tear down mDNS before dropping the WiFi interface.
+            // mdns_free() unregisters its WIFI_EVENT / IP_EVENT handlers
+            // and joins the mdns task synchronously, so the subsequent
+            // WiFi.disconnect(true) can no longer dispatch an
+            // interface-state event to a live mdns task whose netif
+            // handle is being invalidated under it.
+            MDNS.end();
+
             if ((WiFi.getMode() == WIFI_STA) || (WiFi.getMode() == WIFI_AP_STA)) {
                 WiFi.disconnect(true);
             }

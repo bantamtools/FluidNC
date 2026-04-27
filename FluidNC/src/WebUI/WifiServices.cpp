@@ -108,6 +108,7 @@ namespace WebUI {
         return no_error;
     }
     void WiFiServices::end() {
+        // mdns teardown is intentionally elsewhere — see WiFiConfig::StopWiFi().
         rssReader.end();
         notificationsService.end();
         telnetServer.end();
@@ -115,9 +116,6 @@ namespace WebUI {
 
         //stop OTA
         ArduinoOTA.end();
-
-        //Stop mDNS
-        MDNS.end();
     }
 
     void WiFiServices::handle() {
