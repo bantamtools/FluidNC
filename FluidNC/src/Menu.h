@@ -3,7 +3,6 @@
 #include "List.h"
 
 extern const char* git_info_short;
-extern const char* fluidnc_version;
 
 class Menu : public List {
 

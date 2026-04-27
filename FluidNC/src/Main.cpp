@@ -135,7 +135,7 @@ void setup() {
         // Load settings from non-volatile storage
         settings_init();  // requires config
 
-        log_info("FluidNC " << git_info);
+        log_info("Bantam Tools Serama Firmware v" << git_info);
         log_info("Compiled with ESP32 SDK:" << esp_get_idf_version());
 
         bool configOkay = config->loadLayered();

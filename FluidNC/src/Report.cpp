@@ -394,7 +394,7 @@ void report_gcode_comment(Channel& channel) {
 
 // Prints build info line
 void report_build_info(const char* line, Channel& channel) {
-    log_to(channel, "[VER:", grbl_version << " FluidNC " << git_info << ":" << line);
+    log_to(channel, "[VER:", grbl_version << " Bantam Tools Serama Firmware v" << git_info << ":" << line);
 
     // The option message is included for backwards compatibility but
     // is not particularly useful for FluidNC, which has runtime

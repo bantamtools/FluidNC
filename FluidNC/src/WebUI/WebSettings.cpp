@@ -259,7 +259,7 @@ namespace WebUI {
         if (info.length()) {
             log_to(out, info);
         }
-        log_to(out, "FW version: FluidNC ", git_info);
+        log_to(out, "FW version: Bantam Tools Serama Firmware v", git_info);
         return Error::Ok;
     }
 

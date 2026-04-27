@@ -50,10 +50,13 @@ else:
 
         rev = " (%s-%s%s)" % (branchname, revision, dirty)
 
-grbl_version = tag.lstrip('v').rpartition('.')[0]
+# grbl_version is the Grbl protocol version this firmware implements —
+# NOT the firmware's own version tag. Senders feature-gate on this field.
+# Grbl-classic reports "1.1h"; grblHAL reports "1.1f"; FluidNC reports "1.1".
+# We speak Grbl 1.1 protocol semantics, so this is hardcoded to "1.1".
+grbl_version = "1.1"
 git_info = '%s%s' % (tag.lstrip('v'), rev)
 git_info_short = '%s' % (tag.replace('bantam_', '').lstrip('v'))
-fluidnc_version = "v3.7.4"
 
 provisional = "FluidNC/src/version.cxx"
 final = "FluidNC/src/version.cpp"
@@ -61,7 +64,6 @@ with open(provisional, "w") as fp:
     fp.write('const char* grbl_version = \"' + grbl_version + '\";\n')
     fp.write('const char* git_info     = \"' + git_info + '\";\n')
     fp.write('const char* git_info_short = \"' + git_info_short + '\";\n')
-    fp.write('const char* fluidnc_version = \"' + fluidnc_version + '\";\n')
 
 if not os.path.exists(final):
     # No version.cpp so rename version.cxx to version.cpp
