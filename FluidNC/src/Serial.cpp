@@ -28,13 +28,21 @@
   This is because only a certain number of commands can be buffered at a time.
   The system will tell you when it is ready for another one with the OK.
 
-  Realtime commands can be sent at any time and will acted upon very quickly.
-  Realtime commands can be anywhere in the stream.
+  Realtime commands are recognized at command boundaries -- that is, when the
+  channel is not currently accumulating a line.  At a boundary, an incoming
+  byte matching is_realtime_command() is dispatched immediately; otherwise it
+  becomes line content and is delivered to the parser along with the rest of
+  the line.  Ctrl-X (Reset / E-stop) is the single exception: it dispatches
+  regardless of line state so emergency stop remains instant.
 
-  To allow the realtime commands to be randomly mixed in the stream of data, we
-  read all channels as fast as possible. The realtime commands are acted upon and
-  the other characters are placed into a per-channel buffer.  When a complete line
-  is received, pollChannel returns the associated channel spec.
+  This rule lets line-based commands carry bytes in the realtime range as
+  content (for example UTF-8 sequences in filenames, or ? / ! / ~ inside a
+  gcode comment) without those bytes being stolen by the realtime gate.
+
+  To keep realtime commands responsive, we read all channels as fast as
+  possible.  When a byte is claimed as realtime it is acted upon; otherwise
+  it is placed into a per-channel line buffer.  When a complete line is
+  received, pollChannel returns the associated channel spec.
 */
 
 #include "Serial.h"
@@ -179,6 +187,14 @@ void execute_realtime_command(Cmd command, Channel& channel) {
             break;
         case Cmd::Macro3:
             protocol_send_event(&macro3Event);
+            break;
+        default:
+            // Diagnostic hook: any byte that passed is_realtime_command() but
+            // has no Cmd enum handler used to vanish silently here.  Log it
+            // via log_debug_to (per-channel, bypasses AllChannels::_mutex
+            // which pollLine holds -- broadcast log_debug would deadlock).
+            // Gated by $Message/Level=Debug; off by default.
+            log_debug_to(channel, "unhandled realtime Cmd " << to_hex(uint8_t(command)));
             break;
     }
 }

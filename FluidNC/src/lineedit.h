@@ -36,8 +36,8 @@ private:
     char* endaddr;
     char* maxaddr;
 
-    int  saved_length;
-    char lastline[MAXHISTORY];
+    int  saved_length        = 0;
+    char lastline[MAXHISTORY] = {};
 
     char killbuf[100] = { 0 };
 
@@ -56,7 +56,6 @@ private:
     void addchar(char c, bool echo = true);
     void erase_char();
     void erase_line();
-    void validate_history();
     bool already_in_history(char* adr, int len);
     void add_to_history(char* adr, int len);
     bool get_history(int history_num);
@@ -87,4 +86,9 @@ public:
     int  finish();
     bool step(int c);
     bool realtime(int c);
+
+    // empty() returns true when no characters have been accumulated into
+    // the current line buffer.  Used by Channel subclasses that delegate
+    // line accumulation to Lineedit to answer Channel::lineEmpty().
+    bool empty() const { return endaddr == startaddr; }
 };

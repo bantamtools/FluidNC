@@ -97,6 +97,13 @@ public:
     // end is seen.
     virtual bool lineComplete(char* line, char c);
 
+    // lineEmpty() returns true when no line is currently being accumulated on this
+    // channel -- i.e., we are at a command boundary.  Used by pollLine() to decide
+    // whether an incoming realtime byte should be dispatched or buffered into the
+    // line in progress.  Subclasses that accumulate lines somewhere other than
+    // _line (e.g. in a Lineedit buffer) should override.
+    virtual bool lineEmpty() const { return _linelen == 0; }
+
     virtual size_t timedReadBytes(char* buffer, size_t length, TickType_t timeout) {
         setTimeout(timeout);
         return readBytes(buffer, length);

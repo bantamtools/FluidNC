@@ -68,26 +68,6 @@ void Lineedit::erase_line() {
     endaddr = startaddr;
 }
 
-void Lineedit::validate_history() {
-    int i;
-
-    // Clear history if it is invalid
-    if (saved_length == 0 || saved_length > MAXHISTORY)
-        goto clear_history;
-
-    for (i = 0; i < MAXHISTORY; i++) {
-        if (lastline[i] & 0x80)
-            goto clear_history;
-    }
-    return;
-
-clear_history:
-    for (i = 0; i < MAXHISTORY; i++) {
-        lastline[i] = '\0';
-    }
-    saved_length = 0;
-}
-
 bool Lineedit::already_in_history(char* adr, int len) {
     char* p;
     char* first;
@@ -137,7 +117,6 @@ void Lineedit::add_to_history(char* adr, int len) {
     int i;
     int new_length;
 
-    validate_history();
     if (len && !already_in_history(adr, len)) {
         len += 1;  // Room for null
         new_length = (len > MAXHISTORY) ? MAXHISTORY : len;
@@ -164,8 +143,6 @@ bool Lineedit::get_history(int history_num) {
     int   i;
     int   hn;
     char* p;
-
-    validate_history();
 
     if (saved_length == 0)
         return false;

@@ -145,7 +145,13 @@ Channel* Channel::pollLine(char* line) {
         if (ch < 0) {
             break;
         }
-        if (realtimeOkay(ch) && is_realtime_command(ch)) {
+        // Dispatch realtime commands only at command boundaries (lineEmpty())
+        // so that bytes in the realtime range that appear inside a line-based
+        // command (for example UTF-8 sequences in a filename, or ? / ! / ~ in
+        // a gcode comment) become line content instead of firing unintended
+        // handlers.  Ctrl-X (Reset / E-stop) is carved out and dispatched
+        // regardless of line state so emergency stop remains instant.
+        if ((lineEmpty() || ch == 0x18) && realtimeOkay(ch) && is_realtime_command(ch)) {
             execute_realtime_command(static_cast<Cmd>(ch), *this);
             continue;
         }

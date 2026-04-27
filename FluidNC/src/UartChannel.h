@@ -36,6 +36,7 @@ public:
     size_t   timedReadBytes(uint8_t* buffer, size_t length, TickType_t timeout) { return timedReadBytes((char*)buffer, length, timeout); };
     bool     realtimeOkay(char c) override;
     bool     lineComplete(char* line, char c) override;
+    bool     lineEmpty() const override { return _lineedit == nullptr || _lineedit->empty(); }
     Channel* pollLine(char* line) override;
 
     // Configuration methods

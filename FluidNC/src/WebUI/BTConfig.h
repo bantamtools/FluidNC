@@ -53,6 +53,7 @@ namespace WebUI {
 
         bool realtimeOkay(char c) override;
         bool lineComplete(char* line, char c) override;
+        bool lineEmpty() const override { return _lineedit == nullptr || _lineedit->empty(); }
 
         Channel* pollLine(char* line) override;
     };
