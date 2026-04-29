@@ -793,13 +793,25 @@ namespace WebUI {
             // handle is being invalidated under it.
             MDNS.end();
 
+            // Stop user-facing WiFi services before disconnecting the
+            // radio.  Services that own LwIP sockets (SSDP, HTTP and
+            // WebSocket, telnet, OTA) close them in their end() methods.
+            // lwip_close drains any RX packets still queued on the socket
+            // via pbuf_free, which on ESP-IDF calls back into the WiFi
+            // driver to release the underlying RX buffer (zero-copy
+            // pbufs reference WiFi-managed memory).  If WiFi.disconnect()
+            // has already torn down the per-netif RX-buffer state, that
+            // callback dereferences a freed struct and the ROM helper
+            // panics with LoadProhibited at offset 0x130 .
+            // StartSTA() and begin() use this same ordering.
+            wifi_services.end();
+
             if ((WiFi.getMode() == WIFI_STA) || (WiFi.getMode() == WIFI_AP_STA)) {
                 WiFi.disconnect(true);
             }
             if ((WiFi.getMode() == WIFI_AP) || (WiFi.getMode() == WIFI_AP_STA)) {
                 WiFi.softAPdisconnect(true);
             }
-            wifi_services.end();
             WiFi.enableSTA(false);
             WiFi.enableAP(false);
             WiFi.mode(WIFI_OFF);
