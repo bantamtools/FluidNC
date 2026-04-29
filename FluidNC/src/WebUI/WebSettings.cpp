@@ -647,7 +647,17 @@ namespace WebUI {
         bt_config.end();
 
         //if On start proper service
-        if (on && (wifi_config.begin() || bt_config.begin())) {
+        bool radio_up = on && (wifi_config.begin() || bt_config.begin());
+
+        // Refresh the OLED settings menu so the WiFi toggle label and the
+        // WiFi-status submenu reflect the new radio state. The menu-driven
+        // toggle handlers in Protocol.cpp already do this; mirror it here
+        // so $Radio/State=ON|OFF (serial / Web UI ESP115) stays in sync.
+        if (config && config->_oled && config->_oled->_menu) {
+            config->_oled->_menu->rebuild_settings_menu();
+        }
+
+        if (radio_up) {
             return Error::Ok;
         }
         log_msg_to(out, "Radio is Off");

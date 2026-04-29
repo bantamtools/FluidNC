@@ -755,7 +755,12 @@ void Menu::build_settings_menu() {
     // - When config defers (wifi_mode: -1): user has full on/off control
     // - When config enforces a mode (1/2/3): user can turn off temporarily
     if (config->_wifiMode == -1) {
-        if (WebUI::wifi_mode->get() != 0) {
+        // Read live radio state, not the persisted wifi_mode setting:
+        // $Radio/State=OFF turns the radio off without touching the
+        // setting, so wifi_mode->get() stays non-zero and the label
+        // would lie. wifi_config.isOn() matches the source of truth
+        // used everywhere else (and by the _wifiMode>0 branch below).
+        if (WebUI::wifi_config.isOn()) {
             add_entry(_settings_menu, NULL, NULL, "Turn WiFi OFF");
         } else {
             add_entry(_settings_menu, NULL, NULL, "Turn WiFi ON");
@@ -789,11 +794,18 @@ void Menu::rebuild_settings_menu() {
 }
 
 void Menu::rebuild_wifi_status() {
-    if (!WebUI::wifi_config.isOn()) {
-        return;
-    }
     remove_entries(_wifi_info_menu);
     add_entry(_wifi_info_menu, NULL, NULL, BACK_LABEL);
+
+    // Radio off (explicit $Radio/State=OFF, or a failed bring-up that fell
+    // through to the wifi_off path). Render the off state explicitly rather
+    // than early-returning, which would leave whatever the menu rendered
+    // last (often a stale "Connected" body) on screen. See issue.
+    if (!WebUI::wifi_config.isOn()) {
+        strcpy(_wifi_info_menu->title, "WiFi: Disabled");
+        add_entry(_wifi_info_menu, NULL, NULL, "Radio is off");
+        return;
+    }
 
     char buf[LIST_NAME_MAX_STR];
     bool sta_connected = WebUI::WiFiConfig::sta_got_ip();
