@@ -8,6 +8,7 @@
 */
 
 #include "Protocol.h"
+#include "CompletionMark.h"  // : strip-on-start helper
 #include "Config.h"
 #include "Event.h"
 #include "Menu.h"
@@ -21,6 +22,7 @@
 #include "Planner.h"        // plan_get_current_block
 #include "MotionControl.h"  // PARKING_MOTION_LINE_NUMBER
 #include "Settings.h"       // settings_execute_startup
+#include "SettingsDefinitions.h"  // : completion_marking
 #include "Machine/LimitPin.h"
 #include "System.h"
 #include "WebUI/RSSReader.h"
@@ -1622,6 +1624,26 @@ static void protocol_do_enter() {
                     config->_oled->show_persistent_msg("Now Rebooting...");
                     ESP.restart();
                     while (1) {}
+                // : completed-file marking toggle. Two labels, one per state.
+                // Update the just-clicked entry's display_name in place rather than
+                // calling rebuild_settings_menu() — the rebuild path resets selection
+                // to position 0 and doesn't trigger an OLED redraw, so the displayed
+                // menu stays stale until the encoder turn forces a refresh, at which
+                // point it visibly jumps to the top of the list.
+                } else if (strcmp(config->_oled->_menu->get_selected()->display_name,
+                                  "\xE2\x9C\x93" " Completed files: ON") == 0) {
+                    completion_marking->setStringValue((char*)"OFF");
+                    ListNodeType* sel = config->_oled->_menu->get_selected();
+                    free(sel->display_name);
+                    sel->display_name = strdup("\xE2\x9C\x93" " Completed files: OFF");
+                    config->_oled->refresh_display(true);  // menu-only redraw
+                } else if (strcmp(config->_oled->_menu->get_selected()->display_name,
+                                  "\xE2\x9C\x93" " Completed files: OFF") == 0) {
+                    completion_marking->setStringValue((char*)"ON");
+                    ListNodeType* sel = config->_oled->_menu->get_selected();
+                    free(sel->display_name);
+                    sel->display_name = strdup("\xE2\x9C\x93" " Completed files: ON");
+                    config->_oled->refresh_display(true);  // menu-only redraw
                 // temp testing
                 } else if (strcmp(config->_oled->_menu->get_selected()->display_name, "TEST") == 0) {
 
@@ -1655,9 +1677,15 @@ static void protocol_do_enter() {
                         config->_oled->popup_msg("Machine not homed");
                         log_info("Debug path during unhomed: " << config->_oled->_menu->get_recent_file_path().c_str());
                     } else {
-                        log_info("Passing path to InputFile from Run Latest: " << config->_oled->_menu->get_recent_file_path().c_str());
+                        // : strip the completion prefix on re-run if present.
+                        // Copy the std::string locally — get_recent_file_path() returns by value.
+                        std::string source_path = config->_oled->_menu->get_recent_file_path();
+                        log_info("Passing path to InputFile from Run Latest: " << source_path);
+                        std::string stripped_storage;
+                        const char* path_to_open = CompletionMark::resolve_with_strip(
+                            source_path.c_str(), stripped_storage);
                         config->_oled->_menu->set_completed_file_from_recent(); // store run file path
-                        InputFile *infile = new InputFile("sd", config->_oled->_menu->get_recent_file_path().c_str(), WebUI::AuthenticationLevel::LEVEL_ADMIN, allChannels);
+                        InputFile *infile = new InputFile("sd", path_to_open, WebUI::AuthenticationLevel::LEVEL_ADMIN, allChannels);
                         allChannels.registration(infile);
                     }
 
@@ -1671,8 +1699,14 @@ static void protocol_do_enter() {
                         config->_oled->popup_msg("Machine not homed");
                         log_info("Debug path during unhomed: " << config->_oled->_menu->get_completed_file_path().c_str());
                     } else {
-                        log_info("Passing path to InputFile from Run Again: " << config->_oled->_menu->get_completed_file_path().c_str());
-                        InputFile *infile = new InputFile("sd", config->_oled->_menu->get_completed_file_path().c_str(), WebUI::AuthenticationLevel::LEVEL_ADMIN, allChannels);
+                        // : strip the completion prefix on re-run if present.
+                        // Copy locally — get_completed_file_path() returns by value.
+                        std::string source_path = config->_oled->_menu->get_completed_file_path();
+                        log_info("Passing path to InputFile from Run Again: " << source_path);
+                        std::string stripped_storage;
+                        const char* path_to_open = CompletionMark::resolve_with_strip(
+                            source_path.c_str(), stripped_storage);
+                        InputFile *infile = new InputFile("sd", path_to_open, WebUI::AuthenticationLevel::LEVEL_ADMIN, allChannels);
                         allChannels.registration(infile);
                     }
 
@@ -1761,23 +1795,31 @@ static void protocol_do_enter() {
                     } else {
                         // It's a file, execute the file
 
+                        // : strip at the action layer, before the homing branch.
+                        // The auto-home path stashes the path via set_file_awaiting_homing
+                        // and opens the file later in OLED.cpp; the immediate path opens
+                        // it now. Both branches must see the already-stripped name.
+                        std::string stripped_storage;
+                        const char* path_to_open = CompletionMark::resolve_with_strip(
+                            selected_entry->path, stripped_storage);
+
                         // Auto-home if trying to run unhomed (unless no motors home)
                         //  Unfortunately latest EggBot config doesn't return false from canHome() even though
                         //  it seems like it should, so also exclude it explicitly.
                         if (!config->_axes->_homed && config->_kinematics->canHome(0) &&
                                 !(config->getMachineType() == Machine::MachineType::EggBot)) {
-                            log_info("Unhomed. About to home before running file: " << selected_entry->path);
+                            log_info("Unhomed. About to home before running file: " << path_to_open);
                             // Display error
                             //config->_oled->popup_msg("Machine not homed");
                             // New behavior: auto-home before file run if not homed
-                            config->_oled->set_file_awaiting_homing(selected_entry->path);
+                            config->_oled->set_file_awaiting_homing(path_to_open);
                             config->_oled->show_persistent_msg("Homing before file run...");
                             Machine::Homing::run_cycles(Machine::Homing::AllCycles);
                         } else {
-                            log_info("Passing path to InputFile: " << selected_entry->path);
+                            log_info("Passing path to InputFile: " << path_to_open);
                             config->_oled->_menu->save_current_directory(); // save directory before running file
-                            config->_oled->_menu->set_completed_file(selected_entry->path); // store run file path
-                            InputFile *infile = new InputFile("sd", selected_entry->path, WebUI::AuthenticationLevel::LEVEL_ADMIN, allChannels);
+                            config->_oled->_menu->set_completed_file(path_to_open); // store run file path
+                            InputFile *infile = new InputFile("sd", path_to_open, WebUI::AuthenticationLevel::LEVEL_ADMIN, allChannels);
                             allChannels.registration(infile);
                         }
                     }
@@ -1807,21 +1849,27 @@ static void protocol_do_enter() {
                     } else if (selected_entry->path != NULL) {
                         // It's a file, execute the file
 
+                        // : strip at the action layer, before the homing branch.
+                        // Same pattern as file-browser action #1 above.
+                        std::string stripped_storage;
+                        const char* path_to_open = CompletionMark::resolve_with_strip(
+                            selected_entry->path, stripped_storage);
+
                         // Auto-home if trying to run unhomed (unless no motors home)
                         if (!config->_axes->_homed && config->_kinematics->canHome(0) &&
                                 !(config->getMachineType() == Machine::MachineType::EggBot)) {
-                            log_info("Unhomed. About to home before running file: " << selected_entry->path);
+                            log_info("Unhomed. About to home before running file: " << path_to_open);
                             // Display error
                             //config->_oled->popup_msg("Machine not homed");
                             // New behavior: auto-home before file run if not homed
-                            config->_oled->set_file_awaiting_homing(selected_entry->path);
+                            config->_oled->set_file_awaiting_homing(path_to_open);
                             config->_oled->show_persistent_msg("Homing before file run...");
                             Machine::Homing::run_cycles(Machine::Homing::AllCycles);
                         } else {
-                            log_info("Passing path to InputFile: " << selected_entry->path);
+                            log_info("Passing path to InputFile: " << path_to_open);
                             config->_oled->_menu->save_current_directory(); // save directory before running file
-                            config->_oled->_menu->set_completed_file(selected_entry->path); // store run file path
-                            InputFile *infile = new InputFile("sd", selected_entry->path, WebUI::AuthenticationLevel::LEVEL_ADMIN, allChannels);
+                            config->_oled->_menu->set_completed_file(path_to_open); // store run file path
+                            InputFile *infile = new InputFile("sd", path_to_open, WebUI::AuthenticationLevel::LEVEL_ADMIN, allChannels);
                             allChannels.registration(infile);
                         }
                     }

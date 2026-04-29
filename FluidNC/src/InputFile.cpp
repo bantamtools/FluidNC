@@ -3,10 +3,13 @@
 
 #include "InputFile.h"
 
+#include "CompletionMark.h"  // : mark-on-success
 #include "Report.h"
 #include "Protocol.h"
 #include "Machine/MachineConfig.h"  // config
 #include "GCode.h"  // For gc_clear_m0_comment()
+
+#include <string>  // for std::string final_path
 
 InputFile::InputFile(const char* defaultFs, const char* path, WebUI::AuthenticationLevel auth_level, Channel& out) :
     FileStream(path, "r", defaultFs), _auth_level(auth_level), _out(out), _line_num(0)  {
@@ -106,7 +109,42 @@ Channel* InputFile::pollLine(char* line) {
 #else
             log_info("File completed - Heap: " << heap_kb << " kB free");
 #endif
-            config->_oled->_menu->set_completed_file(path().c_str());
+            // : mark on success, then update _completed_file_path so
+            // it reflects the post-rename on-disk name. Both "Run Again"
+            // and the end-of-plot display (OLED.cpp get_completed_file_name)
+            // read this stored path; if we stored the unmarked name first
+            // and renamed after, those consumers would later try to open
+            // a file that no longer exists.
+            //
+            // Reaching Error::Eof implies strict success: no alarm (would
+            // have exited via default case below, setting _hadError),
+            // no abort/cancel (stopJob() sets _hadError before re-entry).
+            //
+            // Lifetime note: FileStream::path() returns std::string by
+            // value. We keep one std::string (final_path) alive across
+            // the whole block and only take c_str() at the
+            // set_completed_file API boundary.
+            //
+            // Invariant established by this block: after it runs,
+            // _completed_file_path matches the on-disk reality —
+            // regardless of toggle state, regardless of rename success.
+            std::string final_path = path();  // copy by value, lives through block
+            if (CompletionMark::completion_marking_enabled()) {
+                Error me = CompletionMark::mark_completed(final_path.c_str());
+                if (me == Error::Ok) {
+                    std::string marked = CompletionMark::compute_marked_path(final_path.c_str());
+                    if (!marked.empty()) {
+                        final_path = std::move(marked);
+                    }
+                } else {
+                    // Rename failed; disk still unmarked; final_path
+                    // remains the unmarked name. Stored matches disk.
+                    log_warn("CompletionMark: failed to mark " << final_path
+                             << " (Error " << static_cast<int>(me) << ")");
+                }
+            }
+
+            config->_oled->_menu->set_completed_file(final_path.c_str());
             config->_oled->_menu->set_last_file_succeeded(true);
             if (gc_saw_program_end == false) { config->_oled->show_persistent_msg("Warning: Program ended unexpectedly"); }
             allChannels.kill(this);

@@ -1,6 +1,7 @@
 #include "List.h"
 #include "Machine/MachineConfig.h"
 #include <Esp.h>
+#include <cstring>  // memcpy, strlen, strdup, strrchr
 
 // Constructor
 List::List() {}
@@ -19,7 +20,7 @@ void List::init(ListType *list, ListType *parent) {
 }
 
 // Adds a node entry to the given list
-bool List::add_entry(ListType *list, ListType *sublist, const char *path, const char *display_name, bool updated) {
+bool List::add_entry(ListType *list, ListType *sublist, const char *path, const char *display_name, bool updated, size_t extra_path_capacity) {
 
     // Allocate memory for the new entry
     struct ListNodeType* new_entry = (ListNodeType*)malloc(sizeof(struct ListNodeType));
@@ -38,13 +39,20 @@ bool List::add_entry(ListType *list, ListType *sublist, const char *path, const 
 
     // Memory optimization: display_name points into path string to save allocation overhead
     if (path) {
-        // Case 1: File entry with path - allocate path, point display_name into it
-        new_entry->path = strdup(path);
+        // Case 1: File entry with path - allocate path, point display_name into it.
+        //
+        // extra_path_capacity reserves slack at the end of the buffer so the
+        // caller can shift the basename in place later without reallocating.
+        // Used by the SD scan path to reserve room for the  completion
+        // prefix (3 bytes for U+2713) so mark/unmark is in-place.
+        size_t path_len = strlen(path);
+        new_entry->path = (char*)malloc(path_len + 1 + extra_path_capacity);
         if (new_entry->path == NULL) {
             log_error("Failed to allocate path (heap: " << ESP.getFreeHeap() << " bytes)");
             free(new_entry);
             return false;
         }
+        memcpy(new_entry->path, path, path_len + 1);  // includes the '\0'
 
         // Point display_name to filename portion within path (no separate allocation)
         if (display_name) {

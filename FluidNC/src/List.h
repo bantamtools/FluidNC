@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstddef>  // size_t
+
 #include "Config.h"
 
 // Legacy defines kept for compatibility with stack-allocated buffers
@@ -46,7 +48,11 @@ class List {
 protected:
 
     void init(ListType *list, ListType *parent);
-    bool add_entry(ListType *list, ListType *sublist, const char *path, const char *display_name, bool updated = false);
+    // extra_path_capacity: extra bytes reserved at the end of the path
+    // allocation, only used when path != NULL. Lets the caller pre-reserve
+    // slack so that an in-place rename (e.g., adding a 3-byte completion
+    // prefix in ) can shift the basename without reallocating.
+    bool add_entry(ListType *list, ListType *sublist, const char *path, const char *display_name, bool updated = false, size_t extra_path_capacity = 0);
     void remove_entries(ListType *list);
     void remove_entries_recursive(ListType *list);
     void prep(ListType *list, bool add_back_btn = true);

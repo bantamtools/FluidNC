@@ -13,6 +13,8 @@ IntSetting* sd_fallback_cs;
 
 EnumSetting* message_level;
 
+EnumSetting* completion_marking;
+
 enum_opt_t messageLevels = {
     // clang-format off
     { "None", MsgLevelNone },
@@ -52,6 +54,13 @@ void make_settings() {
     make_coordinate(CoordIndex::TLO, "TLO");
 
     message_level = new EnumSetting("Which Messages", EXTENDED, WG, NULL, "Message/Level", MsgLevelInfo, &messageLevels, NULL);
+
+    // Bantam plotter: prefix completed files on the SD card with U+2713.
+    // Default ON. See internal tracker.
+    completion_marking = new EnumSetting(
+        "Mark completed files on SD with checkmark prefix",
+        EXTENDED, WG, NULL, "Bantam/CompletionMarking",
+        1 /* default ON */, &onoffOptions, NULL);
 
     config_filename = new StringSetting("Name of Configuration File", EXTENDED, WG, NULL, "Config/Filename", "config.yaml", 1, 50, NULL);
 

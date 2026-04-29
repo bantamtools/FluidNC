@@ -16,6 +16,7 @@
 #include "../Uart.h"       // Uart0.baud
 #include "../Report.h"     // git_info
 #include "../InputFile.h"  // InputFile
+#include "../CompletionMark.h"  // : strip-on-start helper
 
 #include "Commands.h"  // COMMANDS::restart_MCU();
 #include "WifiConfig.h"
@@ -377,8 +378,19 @@ namespace WebUI {
             log_to(out, "Busy");
             return Error::IdleError;
         }
+        // : strip the completion prefix on $SD/Run — same action-layer
+        // semantic as OLED-initiated runs. WebUI does not auto-home, so
+        // there is no homing branch here; strip immediately before openFile.
+        // Only applies to the SD filesystem; localfs ($LocalFS/Run) is
+        // separate and does not use the completion-marking convention.
+        std::string stripped_storage;
+        const char* path_to_open = parameter;
+        if (strcmp(fs, "sd") == 0) {
+            path_to_open = CompletionMark::resolve_with_strip(parameter, stripped_storage);
+        }
+
         InputFile* theFile;
-        if ((err = openFile(fs, parameter, auth_level, out, theFile)) != Error::Ok) {
+        if ((err = openFile(fs, const_cast<char*>(path_to_open), auth_level, out, theFile)) != Error::Ok) {
             return err;
         }
         // for unclear reasons, setting menu var here crashes. Setting from InputFile object instead.

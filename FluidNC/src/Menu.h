@@ -52,6 +52,14 @@ public:
     bool add_sd_file(char *path, bool isBin = false, bool isCfg = false); // return whether we actually added it (hidden/trash files discarded)
     void prep_for_sd_update();
     void finish_sd_update();
+
+    // : rename a single file menu entry in place after an on-disk
+    // rename. Walks the file tree to find the entry whose path matches
+    // old_path, then shifts the basename within the existing buffer
+    // (the buffer was sized at scan time with extra slack for the
+    // completion prefix). Returns true if found and updated.
+    // Best-effort — if the entry isn't found, caller logs and proceeds.
+    bool rename_sd_file_entry(const char *old_path, const char *new_path);
     void set_recent_file(char *path, bool from_upload = false);
     std::string get_recent_file_path() { return _recent_file_path; }
     std::string get_recent_file_name() { return _recent_file_name; }

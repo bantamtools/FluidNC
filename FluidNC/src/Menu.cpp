@@ -1,5 +1,7 @@
 #include "Menu.h"
+#include "CompletionMark.h"        // : kPrefixLen, has_completion_prefix
 #include "Machine/MachineConfig.h"
+#include "SettingsDefinitions.h"   // : completion_marking
 #include "WebUI/WifiConfig.h"
 #include <Esp.h>
 #include <WiFi.h>
@@ -505,8 +507,13 @@ bool Menu::add_sd_file(char *path, bool isBin, bool isCfg) {
     }
 
 //    log_info("Adding menu entry for filepath: " << path);
-    // Add the file to the correct submenu
-    if (!add_entry(file_menu, NULL, path, filename)) {
+    // Add the file to the correct submenu.
+    //
+    // : reserve CompletionMark::kPrefixLen bytes of slack at the end of
+    // the path allocation so a later mark/unmark can shift the basename in
+    // place without reallocating. See Menu::rename_sd_file_entry.
+    if (!add_entry(file_menu, NULL, path, filename, /*updated=*/false,
+                   /*extra_path_capacity=*/CompletionMark::kPrefixLen)) {
         log_warn("Failed to add file to menu: " << path);
         return false;
     }
@@ -584,6 +591,58 @@ void Menu::finish_sd_update(void) {
 #else
     log_info("SD file list load END - Heap: " << heap_kb_end << " kB free");
 #endif
+}
+
+// : walk a list (recursively into submenus) looking for an entry
+// whose path matches old_path. Returns the matching node or nullptr.
+static ListNodeType* find_file_entry_recursive(ListType* list, const char* old_path) {
+    if (list == nullptr) return nullptr;
+    for (ListNodeType* node = list->head; node != nullptr; node = node->next) {
+        if (node->path != nullptr && strcmp(node->path, old_path) == 0) {
+            return node;
+        }
+        if (node->child != nullptr) {
+            ListNodeType* hit = find_file_entry_recursive(node->child, old_path);
+            if (hit != nullptr) return hit;
+        }
+    }
+    return nullptr;
+}
+
+bool Menu::rename_sd_file_entry(const char *old_path, const char *new_path) {
+    if (old_path == nullptr || new_path == nullptr) return false;
+    if (_files_menu == nullptr) return false;
+
+    ListNodeType* node = find_file_entry_recursive(_files_menu, old_path);
+    if (node == nullptr) {
+        // Entry not in the cached menu — could happen if the file was
+        // added via a path that bypassed the SD scan, or if the menu
+        // was rebuilt between the rename and this call. Caller logs.
+        return false;
+    }
+
+    // Buffer-size invariant: each scanned file entry was allocated with
+    // kPrefixLen extra bytes of slack (see add_sd_file). That guarantees
+    // the buffer can hold either direction of a single mark/unmark
+    // operation — mark grows by kPrefixLen, strip shrinks. For any other
+    // rename shape (e.g., a future caller passing a much longer name),
+    // refuse rather than overflow.
+    size_t new_len = strlen(new_path);
+    size_t old_len = strlen(node->path);
+    if (new_len > old_len + CompletionMark::kPrefixLen) {
+        log_warn("rename_sd_file_entry: new path too long for reserved buffer "
+                 "(new=" << new_len << ", old=" << old_len << ", slack="
+                 << CompletionMark::kPrefixLen << "), refusing in-place update for " << old_path);
+        return false;
+    }
+
+    // Copy new_path into the existing buffer; recompute display_name to
+    // point past the last '/' in the new content.
+    memcpy(node->path, new_path, new_len + 1);
+    char* slash = strrchr(node->path, '/');
+    node->display_name = slash ? (slash + 1) : node->path;
+
+    return true;
 }
 
 // Store path and filename of most recent file on SD card
@@ -771,6 +830,12 @@ void Menu::build_settings_menu() {
         } else {
             add_entry(_settings_menu, NULL, NULL, "WiFi: Reboot to enable");
         }
+    }
+    // : completed-file marking toggle. Label reflects current state.
+    if (completion_marking != nullptr && completion_marking->get() != 0) {
+        add_entry(_settings_menu, NULL, NULL, "\xE2\x9C\x93" " Completed files: ON");
+    } else {
+        add_entry(_settings_menu, NULL, NULL, "\xE2\x9C\x93" " Completed files: OFF");
     }
     if (config->getMachineType() == Machine::MachineType::EggBot ||
         config->getMachineType() == Machine::MachineType::WaterColorBot) {
