@@ -1407,6 +1407,18 @@ void OLED::refresh_display(bool menu_only) {
     }
 
     if (menu_only) {
+        // : menu_only is "render only, don't consume input." Drop
+        // any pending encoder rotation before show_menu() can apply it
+        // as cursor motion. Action handlers that force a redraw via
+        // refresh_display(true) — the in-place toggle / submenu-flip
+        // primitives in Menu and Protocol — don't intend to consume
+        // encoder events, but rotary buttons can emit spurious
+        // rotation pulses when pressed (mechanical wobble). Without
+        // this clear, a forced refresh inside an action handler
+        // sometimes shifts the cursor one row, even though the user
+        // only clicked. The regular periodic show_menu() tick remains
+        // the canonical encoder-consumer.
+        _enc_diff = 0;
         show_menu();
     } else if (jog_state != JogState::Idle) {
         show_menu();

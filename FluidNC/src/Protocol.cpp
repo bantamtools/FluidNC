@@ -1644,6 +1644,26 @@ static void protocol_do_enter() {
                     free(sel->display_name);
                     sel->display_name = strdup("\xE2\x9C\x93" " Completed files: ON");
                     config->_oled->refresh_display(true);  // menu-only redraw
+                // : Next File Ordering submenu taps. Each option
+                // appears under one of two display_name labels (chosen
+                // "✓ Foo" vs. unchosen "   Foo" with 3-space pad);
+                // the dispatch matches both forms. 3-space pad chosen
+                // to x-align with the chosen form's left edge on the
+                // OLED's proportional font. Strcmp targets must match
+                // the labels in Menu.cpp exactly or the dispatch
+                // fails to fire.
+                } else if (strcmp(config->_oled->_menu->get_selected()->display_name, "   Oldest") == 0
+                        || strcmp(config->_oled->_menu->get_selected()->display_name, "\xE2\x9C\x93 Oldest") == 0) {
+                    config->_oled->_menu->set_next_file_ordering_index(0);
+                } else if (strcmp(config->_oled->_menu->get_selected()->display_name, "   Newest") == 0
+                        || strcmp(config->_oled->_menu->get_selected()->display_name, "\xE2\x9C\x93 Newest") == 0) {
+                    config->_oled->_menu->set_next_file_ordering_index(1);
+                } else if (strcmp(config->_oled->_menu->get_selected()->display_name, "   A \xE2\x86\x92 Z") == 0
+                        || strcmp(config->_oled->_menu->get_selected()->display_name, "\xE2\x9C\x93 A \xE2\x86\x92 Z") == 0) {
+                    config->_oled->_menu->set_next_file_ordering_index(2);
+                } else if (strcmp(config->_oled->_menu->get_selected()->display_name, "   Z \xE2\x86\x92 A") == 0
+                        || strcmp(config->_oled->_menu->get_selected()->display_name, "\xE2\x9C\x93 Z \xE2\x86\x92 A") == 0) {
+                    config->_oled->_menu->set_next_file_ordering_index(3);
                 // temp testing
                 } else if (strcmp(config->_oled->_menu->get_selected()->display_name, "TEST") == 0) {
 

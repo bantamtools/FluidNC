@@ -15,6 +15,8 @@ EnumSetting* message_level;
 
 EnumSetting* completion_marking;
 
+EnumSetting* next_file_ordering;
+
 enum_opt_t messageLevels = {
     // clang-format off
     { "None", MsgLevelNone },
@@ -27,6 +29,13 @@ enum_opt_t messageLevels = {
 };
 
 enum_opt_t onoffOptions = { { "OFF", 0 }, { "ON", 1 } };
+
+enum_opt_t nextFileOrderingOptions = {
+    { "Oldest", 0 },
+    { "Newest", 1 },
+    { "A_to_Z", 2 },
+    { "Z_to_A", 3 },
+};
 
 void make_coordinate(CoordIndex index, const char* name) {
     float coord_data[MAX_N_AXIS] = { 0.0 };
@@ -61,6 +70,14 @@ void make_settings() {
         "Mark completed files on SD with checkmark prefix",
         EXTENDED, WG, NULL, "Bantam/CompletionMarking",
         1 /* default ON */, &onoffOptions, NULL);
+
+    // : persist the user's preferred ordering for Plot Next.
+    // Default Oldest (0). The actual sort logic is the future Plot
+    // Next consumer's responsibility — this stores the preference.
+    next_file_ordering = new EnumSetting(
+        "Next File Ordering for Plot Next",
+        EXTENDED, WG, NULL, "Bantam/NextFileOrdering",
+        0 /* default Oldest */, &nextFileOrderingOptions, NULL);
 
     config_filename = new StringSetting("Name of Configuration File", EXTENDED, WG, NULL, "Config/Filename", "config.yaml", 1, 50, NULL);
 

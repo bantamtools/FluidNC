@@ -15,3 +15,4 @@ extern IntSetting* sd_fallback_cs;
 extern EnumSetting* message_level;
 
 extern EnumSetting* completion_marking;  // : prefix completed files with U+2713 on SD
+extern EnumSetting* next_file_ordering;  // : ordering for Plot Next

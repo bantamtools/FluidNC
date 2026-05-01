@@ -8,7 +8,7 @@ class Menu : public List {
 
 private:
 
-    ListType *_main_menu, *_files_menu, *_jogging_menu, *_rss_menu, *_settings_menu, *_version_menu, *_run_menu, *_postrun_menu, *_current_menu, *_firmware_menu, *_config_menu, *_confirm_menu, *_homing_choice_menu, *_wifi_info_menu;
+    ListType *_main_menu, *_files_menu, *_jogging_menu, *_rss_menu, *_settings_menu, *_version_menu, *_run_menu, *_postrun_menu, *_current_menu, *_firmware_menu, *_config_menu, *_confirm_menu, *_homing_choice_menu, *_wifi_info_menu, *_next_file_ordering_menu;
     ListType* _saved_directory_menu;  // Pointer to directory where file was selected
     std::string _recent_file_path;
     std::string _recent_file_name;
@@ -20,6 +20,7 @@ private:
     struct ListNodeType *get_active_tail(ListType *menu, int max_active_entries);
     void build();
     void build_settings_menu();
+    void build_next_file_ordering_menu();
 
 public:
 
@@ -81,6 +82,13 @@ public:
     bool is_full_width();
     void rebuild();
     void rebuild_settings_menu();
+
+    // : persist the new ordering and update the indicator
+    // (leading "✓ " vs "  ") on each entry of _next_file_ordering_menu
+    // in place. Triggers a menu-only refresh_display so the user sees
+    // the ✓ jump to the just-tapped entry without a full menu rebuild.
+    // Index 0..3 maps to Oldest / Newest / A_to_Z / Z_to_A.
+    void set_next_file_ordering_index(int index);
 
     ListType* firmware_menu() { return _firmware_menu; };
     ListType* config_menu() { return _config_menu; };

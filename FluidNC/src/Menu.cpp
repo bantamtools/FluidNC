@@ -24,6 +24,7 @@ Menu::Menu() {
     _confirm_menu = new struct ListType;
     _homing_choice_menu = new struct ListType;
     _wifi_info_menu = new struct ListType;
+    _next_file_ordering_menu = new struct ListType;
     // _fw_update_menu = new struct ListType;
 
     // Initialize the menus
@@ -39,6 +40,7 @@ Menu::Menu() {
     init(_confirm_menu, _settings_menu);
     init(_homing_choice_menu, _jogging_menu);
     init(_wifi_info_menu, _settings_menu);
+    init(_next_file_ordering_menu, _settings_menu);
 
     // Set main menu as current
     _current_menu = _main_menu;
@@ -59,6 +61,7 @@ Menu::Menu() {
     strcpy(_homing_choice_menu->title, "Machine Not Homed");
     strcpy(_run_menu->title, "Run Menu");
     strcpy(_wifi_info_menu->title, "WiFi Status");
+    strcpy(_next_file_ordering_menu->title, "Next File Ordering");
 
     _recent_file_is_new_upload = false;
 
@@ -85,6 +88,7 @@ Menu::~Menu() {
     remove_entries(_confirm_menu);
     remove_entries(_homing_choice_menu);
     remove_entries(_wifi_info_menu);
+    remove_entries(_next_file_ordering_menu);
 
     // Deallocate memory for the menus
     delete(_version_menu);
@@ -99,6 +103,7 @@ Menu::~Menu() {
     delete(_confirm_menu);
     delete(_homing_choice_menu);
     delete(_wifi_info_menu);
+    delete(_next_file_ordering_menu);
 }
 
 // Returns true if the current menu is the files menu
@@ -752,6 +757,10 @@ void Menu::build(void) {
     // Settings Menu
     build_settings_menu();
 
+    // : pre-populate the Next File Ordering submenu so it's
+    // ready when the user enters it.
+    build_next_file_ordering_menu();
+
     // Back buttons for settings submenus (only added once during build)
     add_entry(_config_menu, NULL, NULL, BACK_LABEL);
     add_entry(_firmware_menu, NULL, NULL, BACK_LABEL);
@@ -837,6 +846,12 @@ void Menu::build_settings_menu() {
     } else {
         add_entry(_settings_menu, NULL, NULL, "\xE2\x9C\x93" " Completed files: OFF");
     }
+    // : navigate into the Next File Ordering submenu. The double-
+    // quotes around "Next File" signal that "Next File" is a feature
+    // name (the upcoming Plot Next feature), making the entry less
+    // ambiguous than plain "Next File Ordering".
+    add_entry(_settings_menu, _next_file_ordering_menu, NULL,
+              "\"Next File\" Ordering");
     if (config->getMachineType() == Machine::MachineType::EggBot ||
         config->getMachineType() == Machine::MachineType::WaterColorBot) {
         add_entry(_settings_menu, NULL, NULL, "Z Calibration Position");
@@ -847,6 +862,94 @@ void Menu::build_settings_menu() {
     // Re-link RSS feed if it was previously connected
     if (_rss_menu) {
         add_entry(_settings_menu, _rss_menu, NULL, "RSS Feed");
+    }
+}
+
+// : populate the Next File Ordering submenu. The leading "✓ "
+// (U+2713) on the chosen entry is the indicator; non-chosen entries
+// get a 3-space pad to keep labels x-aligned with the chosen form.
+//
+// 3 spaces (not 2) because the OLED font is not fixed-width: the
+// ✓ glyph at font slot 0x83 renders visibly wider than a single
+// space, so two-space padding leaves a small but noticeable gap
+// at the start of unchosen entries. Three spaces matches the
+// chosen form's left edge on the actual hardware.
+//
+// Built at boot and from the public set_next_file_ordering_index()
+// helper so a fresh rebuild reflects the current setting value.
+void Menu::build_next_file_ordering_menu() {
+    add_entry(_next_file_ordering_menu, NULL, NULL, BACK_LABEL);
+    int8_t cur = (next_file_ordering != nullptr) ? next_file_ordering->get() : 0;
+
+    add_entry(_next_file_ordering_menu, NULL, NULL,
+              cur == 0 ? "\xE2\x9C\x93 Oldest" : "   Oldest");
+    add_entry(_next_file_ordering_menu, NULL, NULL,
+              cur == 1 ? "\xE2\x9C\x93 Newest" : "   Newest");
+    add_entry(_next_file_ordering_menu, NULL, NULL,
+              cur == 2 ? "\xE2\x9C\x93 A \xE2\x86\x92 Z"
+                       : "   A \xE2\x86\x92 Z");
+    add_entry(_next_file_ordering_menu, NULL, NULL,
+              cur == 3 ? "\xE2\x9C\x93 Z \xE2\x86\x92 A"
+                       : "   Z \xE2\x86\x92 A");
+}
+
+// : update the chosen-entry indicator in place after a tap. The
+// in-place rewrite avoids the full rebuild_*-then-redraw flicker that
+// would otherwise reset the user's selection cursor (see 's PR
+//  for the same primitive applied to the toggle entry).
+void Menu::set_next_file_ordering_index(int index) {
+    if (index < 0 || index > 3) {
+        // Defensive: callers should pass 0..3 only. Out-of-range is
+        // a programming error; log and ignore.
+        log_warn("set_next_file_ordering_index: out-of-range " << index);
+        return;
+    }
+    if (next_file_ordering == nullptr) {
+        log_warn("set_next_file_ordering_index: setting not initialized");
+        return;
+    }
+
+    // 1. Persist the new value via EnumSetting using the WebUI string.
+    static const char* const kWireStrings[4] = {
+        "Oldest", "Newest", "A_to_Z", "Z_to_A",
+    };
+    next_file_ordering->setStringValue(const_cast<char*>(kWireStrings[index]));
+
+    // 2. Walk the submenu's entries and rewrite each entry's
+    //    display_name in place. Skip the BACK_LABEL entry (head).
+    static const char* const kChosenLabels[4] = {
+        "\xE2\x9C\x93 Oldest",
+        "\xE2\x9C\x93 Newest",
+        "\xE2\x9C\x93 A \xE2\x86\x92 Z",
+        "\xE2\x9C\x93 Z \xE2\x86\x92 A",
+    };
+    // 3-space pad matches the chosen form's left edge on hardware;
+    // see comment on build_next_file_ordering_menu() for why three
+    // (and not two) spaces. Must stay in sync with the build helper
+    // and with the strcmp targets in Protocol.cpp's settings-menu
+    // dispatch.
+    static const char* const kPadLabels[4] = {
+        "   Oldest",
+        "   Newest",
+        "   A \xE2\x86\x92 Z",
+        "   Z \xE2\x86\x92 A",
+    };
+
+    ListNodeType* node = _next_file_ordering_menu->head;
+    if (node == nullptr) return;
+    node = node->next;  // skip BACK
+    for (int i = 0; i < 4 && node != nullptr; i++, node = node->next) {
+        const char* new_label = (i == index) ? kChosenLabels[i] : kPadLabels[i];
+        free(node->display_name);
+        node->display_name = strdup(new_label);
+    }
+
+    // 3. Repaint the menu only. Selection stays where the user
+    //    tapped; no encoder-jump-to-top. refresh_display(true) drops
+    //    any pending encoder rotation at entry (see ), so press-
+    //    induced wobble pulses don't get applied as cursor motion.
+    if (config && config->_oled) {
+        config->_oled->refresh_display(true);
     }
 }
 
@@ -933,6 +1036,7 @@ void Menu::rebuild(void) {
     remove_entries(_confirm_menu);
     remove_entries(_homing_choice_menu);
     remove_entries(_wifi_info_menu);
+    remove_entries(_next_file_ordering_menu);  // 
 
     // Rebuild the menu structure with current config
     build();
