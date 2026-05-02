@@ -118,6 +118,23 @@ Error rename_with_clobber(const char* src, const char* dest) {
 
 }  // namespace
 
+// Strip the leading "/sd" mount prefix from a fully-qualified SD
+// path so the result matches the form the menu cache stores. The
+// populate function in esp32/sdmmc.cpp / sdspi.cpp builds cache
+// keys via `full_path.substr(strlen(base_path))` where `base_path`
+// is "/sd" (no trailing slash), so the stored form is e.g.
+// "/foo.gcode" -- with the leading slash preserved. Match "/sd"
+// only when followed by '/' or end-of-string so paths like
+// "/sdcard/..." don't get mis-stripped. Returns the input
+// unchanged when the prefix isn't present.
+static const char* strip_sd_prefix(const char* p) {
+    if (p == nullptr) return p;
+    if (strncmp(p, "/sd", 3) != 0) return p;
+    char tail = p[3];
+    if (tail != '/' && tail != '\0') return p;
+    return p + 3;
+}
+
 // After a successful on-disk rename, propagate the change into the
 // in-memory file menu so the file browser shows the new name without a
 // re-scan. Best-effort — if the entry isn't in the menu (file added
@@ -127,7 +144,16 @@ static void sync_menu_after_rename(const char* old_path, const char* new_path) {
     if (config == nullptr || config->_oled == nullptr || config->_oled->_menu == nullptr) {
         return;
     }
-    if (!config->_oled->_menu->rename_sd_file_entry(old_path, new_path)) {
+    // FileStream::path() returns the fully-qualified canonical form
+    // (e.g. "/sd/foo.gcode") via FluidPath, but the menu cache keys
+    // entries by base_path-relative form ("/foo.gcode"). Strip the
+    // mount prefix before the lookup so the strcmp in
+    // Menu::rename_sd_file_entry actually matches. Without this
+    // strip the lookup silently fails and the menu never reflects
+    // the rename until the next full populate. (Issue.)
+    const char* old_rel = strip_sd_prefix(old_path);
+    const char* new_rel = strip_sd_prefix(new_path);
+    if (!config->_oled->_menu->rename_sd_file_entry(old_rel, new_rel)) {
         log_info("CompletionMark: menu entry not found for " << old_path
                  << " (renamed on disk to " << new_path
                  << "); browser will reflect the change on next scan");

@@ -650,6 +650,160 @@ bool Menu::rename_sd_file_entry(const char *old_path, const char *new_path) {
     return true;
 }
 
+// Like find_file_entry_recursive but also returns the parent list
+// pointer so the node can be spliced out. out_parent is set to the
+// ListType whose `head` chain currently contains the matched node.
+static ListNodeType* find_file_entry_with_parent(ListType* list,
+                                                 const char* path,
+                                                 ListType*& out_parent) {
+    if (list == nullptr) return nullptr;
+    for (ListNodeType* node = list->head; node != nullptr; node = node->next) {
+        if (node->path != nullptr && strcmp(node->path, path) == 0) {
+            out_parent = list;
+            return node;
+        }
+        if (node->child != nullptr) {
+            ListNodeType* hit =
+                find_file_entry_with_parent(node->child, path, out_parent);
+            if (hit != nullptr) return hit;
+        }
+    }
+    return nullptr;
+}
+
+// SD entries can live in any of three root menus: _files_menu
+// (gcode/nc/txt), _firmware_menu (.bin), _config_menu (.yaml). The
+// populate function clears and rebuilds all three, so incremental
+// removal must search all three to match.
+static ListNodeType* find_sd_entry_with_parent(ListType* files_root,
+                                               ListType* firmware_root,
+                                               ListType* config_root,
+                                               const char* path,
+                                               ListType*& out_parent) {
+    ListNodeType* hit =
+        find_file_entry_with_parent(files_root, path, out_parent);
+    if (hit != nullptr) return hit;
+    hit = find_file_entry_with_parent(firmware_root, path, out_parent);
+    if (hit != nullptr) return hit;
+    return find_file_entry_with_parent(config_root, path, out_parent);
+}
+
+// Splice `node` out of `parent`'s doubly-linked list and free it.
+// Maintains five invariants (mirrors List::add_entry / remove_entries
+// patterns -- a non-empty list always has exactly one node with
+// selected==true, anchored by active_head):
+//   1. prev/next chain: predecessor's next, successor's prev.
+//   2. parent->head: if removing the head, advance to next.
+//   3. parent->active_head: if it pointed to the removed node,
+//      advance to next (or fall back to head if next is null).
+//   4. Selection: if the removed node was selected, transfer
+//      selected=true to parent->active_head (the new "current"
+//      entry). Without this, get_selected() walks the chain and
+//      returns nullptr; protocol_do_enter then derefs nullptr and
+//      crashes (EXCVADDR=0x0000000c, the offset of display_name).
+//   5. display_name lives inside the path buffer for file entries
+//      (see ListNodeType comments), so freeing path also frees
+//      display_name -- null both pointers before/together.
+static void splice_and_free_node(ListType* parent, ListNodeType* node) {
+    ListNodeType* prev = node->prev;
+    ListNodeType* next = node->next;
+    bool was_selected = node->selected;
+
+    if (parent->head == node) {
+        parent->head = next;
+    }
+    if (parent->active_head == node) {
+        parent->active_head = next ? next : parent->head;
+    }
+    if (prev != nullptr) {
+        prev->next = next;
+    }
+    if (next != nullptr) {
+        next->prev = prev;
+    }
+
+    // Transfer selection if needed. parent->active_head, if non-null,
+    // is the right new "current" entry; if the list is now empty the
+    // selection invariant is vacuous.
+    if (was_selected && parent->active_head != nullptr) {
+        parent->active_head->selected = true;
+    }
+
+    if (node->path != nullptr) {
+        node->display_name = nullptr;  // points into path; invalidate first
+        free(node->path);
+        node->path = nullptr;
+    }
+    free(node);
+}
+
+bool Menu::remove_sd_file_entry(const char* path) {
+    if (path == nullptr) return false;
+    ListType* parent = nullptr;
+    ListNodeType* node = find_sd_entry_with_parent(
+        _files_menu, _firmware_menu, _config_menu, path, parent);
+    if (node == nullptr || parent == nullptr) {
+        return false;
+    }
+    splice_and_free_node(parent, node);
+    return true;
+}
+
+// True if path equals dir_prefix exactly or begins with dir_prefix
+// + "/". Avoids false positives like "sub2" matching prefix "sub".
+static bool path_matches_subtree(const char* path,
+                                 const char* dir_prefix,
+                                 size_t prefix_len) {
+    if (strncmp(path, dir_prefix, prefix_len) != 0) return false;
+    char tail = path[prefix_len];
+    return tail == '\0' || tail == '/';
+}
+
+// Walks parent's children removing any node whose path matches the
+// subtree. Recurses into submenus first so nested matches are caught
+// even if the directory entry itself does not match the prefix.
+// Returns count removed at this level and below.
+//
+// Uses splice_and_free_node so prev/next/active_head invariants are
+// maintained -- the doubly-linked list must stay walkable in both
+// directions, and Menu's get_selected() walks from
+// ListType::active_head, so a stale active_head causes a
+// LoadProhibited crash on the next menu interaction.
+static int remove_subtree_walk(ListType* list,
+                               const char* dir_prefix,
+                               size_t prefix_len) {
+    if (list == nullptr) return 0;
+    int removed = 0;
+    ListNodeType* node = list->head;
+    while (node != nullptr) {
+        ListNodeType* next = node->next;  // capture before potential free
+        if (node->child != nullptr) {
+            removed += remove_subtree_walk(node->child, dir_prefix, prefix_len);
+        }
+        bool match = node->path != nullptr &&
+                     path_matches_subtree(node->path, dir_prefix, prefix_len);
+        if (match) {
+            splice_and_free_node(list, node);
+            ++removed;
+        }
+        node = next;
+    }
+    return removed;
+}
+
+int Menu::remove_sd_subtree(const char* dir_prefix) {
+    if (dir_prefix == nullptr) return 0;
+    size_t prefix_len = strlen(dir_prefix);
+    int removed = 0;
+    // Walk all three SD-content roots; a recursive directory delete
+    // can sweep through gcode/firmware/config files indiscriminately
+    // on disk, so the cache walk has to mirror that.
+    if (_files_menu)    removed += remove_subtree_walk(_files_menu,    dir_prefix, prefix_len);
+    if (_firmware_menu) removed += remove_subtree_walk(_firmware_menu, dir_prefix, prefix_len);
+    if (_config_menu)   removed += remove_subtree_walk(_config_menu,   dir_prefix, prefix_len);
+    return removed;
+}
+
 // Store path and filename of most recent file on SD card
 void Menu::set_recent_file(char *path, bool from_upload) {
     if (from_upload) {

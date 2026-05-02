@@ -9,6 +9,11 @@
 
 #include "Driver/sdspi.h"
 #include "src/Config.h"
+#include "../src/SDMenuEvents.h"
+
+#include <filesystem>
+#include <system_error>
+#include <cstring>
 
 #ifndef USE_SDMMC
 
@@ -299,6 +304,120 @@ void sd_populate_files_menu() {
     }
 
     // Refresh the menu
+    config->_oled->refresh_display(true);
+}
+
+// Incremental SD menu cache mutations. See FluidNC/src/SDMenuEvents.h.
+// Mirrors the sdmmc backend implementation. Note: sdspi.cpp's
+// populate function does NOT auto-mount on SD-event calls -- if the
+// card isn't already mounted, an incremental update against a
+// stale-or-empty cache is meaningless, so we no-op.
+//
+// sdspi's populate currently only handles the gcode class (no .bin
+// or .yaml branches), but we still classify and dispatch: if a .bin
+// or .yaml lands on /sd/ via some path, the firmware/config menus
+// (which Menu owns regardless of backend) get the entry. Worst case
+// it's a small no-op — and matches the sdmmc backend's behavior so
+// users see consistent menu updates across hardware variants.
+
+static bool add_sd_file_for_class(SDMenuEvents::FileClass cls,
+                                  char* path) {
+    using SDMenuEvents::FileClass;
+    switch (cls) {
+        case FileClass::Gcode:
+            return config->_oled->_menu->add_sd_file(path, false, false);
+        case FileClass::Bin:
+            return config->_oled->_menu->add_sd_file(path, true,  false);
+        case FileClass::Cfg:
+            return config->_oled->_menu->add_sd_file(path, false, true);
+        case FileClass::None:
+        default:
+            return false;
+    }
+}
+
+void sd_files_added(const char* full_path) {
+    if (!config || !config->_oled) return;
+    if (!sd_is_mounted) return;
+    const char* relative = SDMenuEvents::strip_sd_prefix(full_path);
+    if (relative == nullptr) return;
+    if (relative[0] == '\0') return;
+    char ext[16];
+    if (!SDMenuEvents::extract_lower_extension(relative, ext, sizeof(ext))) {
+        return;
+    }
+    auto cls = SDMenuEvents::classify_extension(ext);
+    if (cls == SDMenuEvents::FileClass::None) return;
+    config->_oled->_menu->remove_sd_file_entry(relative);
+    char buf[LIST_NAME_MAX_PATH];
+    strncpy(buf, relative, LIST_NAME_MAX_PATH);
+    buf[LIST_NAME_MAX_PATH - 1] = '\0';
+    if (!add_sd_file_for_class(cls, buf)) {
+        log_info("sd_files_added: skipped insert for " << full_path);
+        return;
+    }
+    config->_oled->refresh_display(true);
+}
+
+void sd_files_removed(const char* full_path, bool was_directory) {
+    if (!config || !config->_oled) return;
+    if (!sd_is_mounted) return;
+    const char* relative = SDMenuEvents::strip_sd_prefix(full_path);
+    if (relative == nullptr) return;
+    if (relative[0] == '\0') return;
+    if (was_directory) {
+        int n = config->_oled->_menu->remove_sd_subtree(relative);
+        log_info("sd_files_removed (dir): " << full_path
+                 << " removed " << n << " entries");
+    } else {
+        if (!config->_oled->_menu->remove_sd_file_entry(relative)) {
+            log_warn("sd_files_removed: not in cache: " << full_path);
+            return;
+        }
+    }
+    config->_oled->refresh_display(true);
+}
+
+void sd_files_renamed(const char* old_full_path, const char* new_full_path) {
+    if (!config || !config->_oled) return;
+    if (!sd_is_mounted) return;
+    if (old_full_path == nullptr || new_full_path == nullptr) return;
+    std::error_code ec;
+    bool is_dir = std::filesystem::is_directory(new_full_path, ec);
+    if (ec) {
+        log_warn("sd_files_renamed: stat failed for " << new_full_path
+                 << ": " << ec.message()
+                 << " -- falling back to full rescan");
+        sd_populate_files_menu();
+        return;
+    }
+    if (is_dir) {
+        sd_populate_files_menu();
+        return;
+    }
+    const char* old_rel = SDMenuEvents::strip_sd_prefix(old_full_path);
+    const char* new_rel = SDMenuEvents::strip_sd_prefix(new_full_path);
+    if (old_rel == nullptr || new_rel == nullptr) return;
+    config->_oled->_menu->remove_sd_file_entry(old_rel);
+    config->_oled->_menu->remove_sd_file_entry(new_rel);
+    char ext[16];
+    SDMenuEvents::FileClass cls = SDMenuEvents::FileClass::None;
+    if (SDMenuEvents::extract_lower_extension(new_rel, ext, sizeof(ext))) {
+        cls = SDMenuEvents::classify_extension(ext);
+    }
+    if (cls == SDMenuEvents::FileClass::None) {
+        log_info("sd_files_renamed: new name not menu-eligible: "
+                 << new_full_path);
+        config->_oled->refresh_display(true);
+        return;
+    }
+    char buf[LIST_NAME_MAX_PATH];
+    strncpy(buf, new_rel, LIST_NAME_MAX_PATH);
+    buf[LIST_NAME_MAX_PATH - 1] = '\0';
+    if (!add_sd_file_for_class(cls, buf)) {
+        log_info("sd_files_renamed: skipped insert for "
+                 << new_full_path);
+    }
     config->_oled->refresh_display(true);
 }
 #endif

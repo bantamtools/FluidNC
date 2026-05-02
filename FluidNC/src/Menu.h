@@ -61,6 +61,21 @@ public:
     // completion prefix). Returns true if found and updated.
     // Best-effort — if the entry isn't found, caller logs and proceeds.
     bool rename_sd_file_entry(const char *old_path, const char *new_path);
+
+    // Remove a single file entry from the cached menu by exact path
+    // match. Returns true if found and removed; false otherwise.
+    // Walks recursively into submenus. Empty parent submenus are left
+    // in place (cosmetic). Path is base_path-relative form (e.g.,
+    // "foo.gcode" or "sub/bar.gcode") — callers strip the "/sd/"
+    // prefix before invoking. See SDMenuEvents.h.
+    bool remove_sd_file_entry(const char *path);
+
+    // Remove every cached file entry whose path equals dir_prefix or
+    // starts with dir_prefix + "/". Returns count removed. Used for
+    // recursive directory delete. Empty parent submenus left in place.
+    // dir_prefix is base_path-relative.
+    int remove_sd_subtree(const char *dir_prefix);
+
     void set_recent_file(char *path, bool from_upload = false);
     std::string get_recent_file_path() { return _recent_file_path; }
     std::string get_recent_file_name() { return _recent_file_name; }

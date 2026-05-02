@@ -17,6 +17,7 @@
 #include "../Report.h"     // git_info
 #include "../InputFile.h"  // InputFile
 #include "../CompletionMark.h"  // : strip-on-start helper
+#include "../SDMenuEvents.h"    // sd_files_added/_removed/_renamed
 
 #include "Commands.h"  // COMMANDS::restart_MCU();
 #include "WifiConfig.h"
@@ -439,6 +440,10 @@ namespace WebUI {
         }
         HashFS::delete_file(fpath);
 
+        // Incremental SD menu refresh . Helper no-ops on
+        // /localfs/ paths; updates the cache for /sd/ deletes.
+        sd_files_removed(fpath.c_str(), isDir);
+
         return Error::Ok;
     }
 
@@ -508,6 +513,11 @@ namespace WebUI {
             FluidPath inPath { ipath, fs };
             FluidPath outPath { opath, fs };
             std::filesystem::rename(inPath, outPath);
+            // Incremental SD menu refresh . Helper
+            // no-ops on /localfs/ paths; for /sd/ does
+            // remove(old) + remove(new) + add(new) on the cache,
+            // or falls back to full rescan for directory rename.
+            sd_files_renamed(inPath.c_str(), outPath.c_str());
         } catch (const Error err) {
             log_error_to(out, "Cannot rename " << ipath << " to " << opath);
             return Error::FsFailedRenameFile;

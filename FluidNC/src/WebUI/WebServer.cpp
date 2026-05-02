@@ -5,6 +5,7 @@
 #include "../Config.h"
 #include "../Serial.h"    // is_realtime_command()
 #include "../Settings.h"  // settings_execute_line()
+#include "../SDMenuEvents.h"  // sd_files_added/_removed/_renamed
 
 #ifdef ENABLE_WIFI
 
@@ -948,7 +949,8 @@ namespace WebUI {
                 if (stdfs::remove(fpath / filename, ec)) {
                     sstatus = filename + " deleted";
                     HashFS::delete_file(fpath / filename);
-
+                    // Incremental SD menu refresh .
+                    sd_files_removed((fpath / filename).c_str(), false);
                 } else {
                     sstatus = "Cannot delete ";
                     sstatus += filename + " " + ec.message();
@@ -959,6 +961,8 @@ namespace WebUI {
                 int count = stdfs::remove_all(dirpath, ec);
                 if (count > 0) {
                     sstatus = filename + " deleted";
+                    // Incremental SD menu refresh .
+                    sd_files_removed((fpath / filename).c_str(), true);
                 } else {
                     log_debug("remove_all returned " << count);
                     sstatus = "Cannot delete ";
@@ -971,6 +975,7 @@ namespace WebUI {
                     sstatus = "Cannot create ";
                     sstatus += filename + " " + ec.message();
                 }
+                // No SD-event call: directories are not menu entries.
             } else if (action == "rename") {
                 if (!_webserver->hasArg("newname")) {
                     sstatus = "Missing new filename";
@@ -982,6 +987,9 @@ namespace WebUI {
                         sstatus += filename + " " + ec.message();
                     } else {
                         sstatus = filename + " renamed to " + newname;
+                        // Incremental SD menu refresh .
+                        sd_files_renamed((fpath / filename).c_str(),
+                                         (fpath / newname).c_str());
                     }
                 }
             }
@@ -1157,6 +1165,14 @@ namespace WebUI {
                 }
             }
             log_info("uploadEnd, no error, filepath: " << pathname);
+
+            // Incremental SD menu refresh . Helper
+            // no-ops on /localfs/ paths and applies the extension
+            // allowlist (yaml uploads are filtered out). Must run
+            // BEFORE the set_recent_file block below, since that
+            // mutates pathname via erase(0, 3).
+            sd_files_added(pathname.c_str());
+
             // note path is "/sd/file" or "/sd/path/to/file"
             // want to store as latest file, without "/sd" prefix
             if ( !(pathname.size()>4 && pathname.substr(pathname.size()-4) == "yaml") ) { // (unless it was a config file)
