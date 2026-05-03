@@ -1434,6 +1434,14 @@ void OLED::processDisplayRefresh() {
         return;
     }
 
+    // Auto-clear popups whose cooperative deadline has passed.
+    // Replaces popup_msg's prior vTaskDelay-based auto-clear .
+    // Signed-difference comparison handles millis() rollover.
+    if (_popup_deadline_ms != 0 &&
+        (int32_t)(millis() - _popup_deadline_ms) >= 0) {
+        clear_popup();  // sets _popup_deadline_ms = 0 internally
+    }
+
     // Redraw content when WiFi connection state changes
     static bool prev_wifi_disconnected = false;
     bool curr = wifiDisconnected();
@@ -1477,18 +1485,25 @@ void OLED::show_fw_update_popup() {
 }
 
 void OLED::popup_msg(std::string msg, int dly) {
-
-    // Show error message for 2s then restore display
-    // Use flag to prevent other processes from updating screen
+    // Cooperative auto-clear: draw the popup, then schedule
+    // expiration. processDisplayRefresh() checks the deadline each
+    // protocol-loop tick and calls clear_popup() when it passes.
+    //
+    // The previous implementation used delay_ms (vTaskDelay), which
+    // suspended the protocol task for the full delay window and let
+    // every other task run unrestricted — corrupting the popup
+    // buffer mid-display .
     _popup = true;
     show_error(msg);
-    delay_ms(dly);  
-    _popup = false;
-
-    refresh_display();
+    _popup_deadline_ms = millis() + (uint32_t)dly;
+    if (_popup_deadline_ms == 0) {
+        _popup_deadline_ms = 1;  // sentinel: 0 means "no deadline"
+    }
 }
 
 void OLED::show_persistent_msg(std::string msg) {
+    // Persistent: cancel any pending auto-clear from a prior popup_msg.
+    _popup_deadline_ms = 0;
     _popup = true;
     show_error(msg);
     // clear on user click or other call to clear_popup()
@@ -1505,6 +1520,7 @@ void OLED::clear() {
 
 void OLED::clear_popup() {
     log_info("OLED clear popup called");
+    _popup_deadline_ms = 0;  // explicit clear supersedes pending auto-clear
     _popup = false;
     _error = false;
     refresh_display();

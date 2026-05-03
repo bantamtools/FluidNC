@@ -664,25 +664,78 @@ namespace WebUI {
             return Error::InvalidValue;
         }
 
-        //Stop everything
+        // YAML pins WiFi off: =ON is provably useless (boot would
+        // reassert Off after the reboot). Refuse with a clear message
+        // rather than waste a reboot. Other YAML-pinned cases proceed
+        // normally — they have useful effects (recovery from spurious
+        // off, in-session OFF for temporary memory pressure).
+        if (on == 1 && config->_wifiMode == 0) {
+            log_to(out, "WiFi mode is pinned off by machine config; edit YAML to enable.");
+            return Error::InvalidValue;
+        }
+
+        // Idempotent: re-issuing the current radio state is a no-op.
+        // "Is the radio on?" matches the status-display path above
+        // (line 642): isOn() OR isOn().
+        bool radio_on = wifi_config.isOn() || bt_config.isOn();
+        if ((on == 1 && radio_on) || (on == 0 && !radio_on)) {
+            log_to(out, on ? "Radio already on" : "Radio already off");
+            return Error::Ok;
+        }
+
+        if (on) {
+            // ON: persist wifi_mode from wifi_on_mode (in user-control
+            // mode), then reboot. Boot brings WiFi up with a fresh
+            // heap, sidestepping the bring-up leak in . BT comes
+            // up at boot per its own persisted setting.
+            if (config->_wifiMode == -1) {
+                const char* restoreMode = "STA>AP";  // default
+                switch (wifi_on_mode->get()) {
+                    case 1: restoreMode = "STA"; break;
+                    case 2: restoreMode = "AP"; break;
+                    case 3: restoreMode = "STA>AP"; break;
+                }
+                wifi_mode->setStringValue((char*)restoreMode);
+            }
+            log_to(out, "Restarting to enable WiFi");
+            COMMANDS::restart_MCU();
+            return Error::Ok;
+        }
+
+        // OFF: in-session teardown + persist user intent. Mirrors the
+        // OLED "Turn WiFi OFF" handler at Protocol.cpp.
+        //
+        // Save active mode to wifi_on_mode unconditionally (even when
+        // YAML pins the mode) — wifi_on_mode is the only NVS record
+        // of the live mode and is needed by any future ON path.
+        {
+            int8_t activeMode = (config->_wifiMode >= 0) ? config->_wifiMode : wifi_mode->get();
+            if (activeMode != wifi_on_mode->get()) {
+                const char* modeStr = "STA>AP";  // default
+                switch (activeMode) {
+                    case 1: modeStr = "STA"; break;
+                    case 2: modeStr = "AP"; break;
+                    case 3: modeStr = "STA>AP"; break;
+                }
+                wifi_on_mode->setStringValue((char*)modeStr);
+            }
+        }
         wifi_config.end();
         bt_config.end();
+        if (config->_wifiMode == -1) {
+            // User control: persist OFF to NVS so it survives reboots.
+            // Skip when YAML pins the mode — boot would override.
+            wifi_mode->setStringValue((char*)"Off");
+        }
 
-        //if On start proper service
-        bool radio_up = on && (wifi_config.begin() || bt_config.begin());
-
-        // Refresh the OLED settings menu so the WiFi toggle label and the
-        // WiFi-status submenu reflect the new radio state. The menu-driven
-        // toggle handlers in Protocol.cpp already do this; mirror it here
-        // so $Radio/State=ON|OFF (serial / Web UI ESP115) stays in sync.
+        // Refresh the OLED settings menu so the toggle label and the
+        // status submenu reflect the new state. Menu-driven handlers
+        // already do this; mirror it here for serial/Web UI parity.
         if (config && config->_oled && config->_oled->_menu) {
             config->_oled->_menu->rebuild_settings_menu();
         }
 
-        if (radio_up) {
-            return Error::Ok;
-        }
-        log_msg_to(out, "Radio is Off");
+        log_to(out, config->_wifiMode == -1 ? "WiFi off" : "WiFi off until restart");
         return Error::Ok;
     }
 

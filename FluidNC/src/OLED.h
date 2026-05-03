@@ -125,6 +125,13 @@ private: // AIDAN
 
     int _header_height = 15;
 
+    // Cooperative auto-clear deadline for popup_msg(). 0 = no deadline
+    // pending. Checked from processDisplayRefresh() each protocol-loop
+    // tick; replaces the prior vTaskDelay-based blocking auto-clear
+    // that opened a multi-second race window with concurrent draws
+    // .
+    uint32_t _popup_deadline_ms = 0;
+
     // Jog DRO cached state for incremental updates
     char _jog_prev_val[3][20] = {};
     uint32_t _jog_full_redraw_ms = 0;

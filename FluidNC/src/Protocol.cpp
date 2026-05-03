@@ -27,6 +27,7 @@
 #include "System.h"
 #include "WebUI/RSSReader.h"
 #include "WebUI/WifiConfig.h"
+#include "SSD1306_I2C.h"  // synchronous OLED flush before reboot
 #ifdef ENABLE_WIFI
 #    include <WiFi.h>
 #endif
@@ -1575,7 +1576,10 @@ static void protocol_do_enter() {
                 // Wifi commands
                 } else if (strcmp(config->_oled->_menu->get_selected()->display_name, "Turn WiFi ON") == 0) {
                     // Only reachable when config->_wifiMode == -1 (user control)
-                    // Restore the mode that was active before WiFi was turned off
+                    // Persist the restored mode and reboot. In-session
+                    // wifi_config.begin() exercises the bring-up leak path
+                    // documented in ; rebooting brings WiFi up with a
+                    // fresh heap.
                     const char* restoreMode = "STA>AP";  // default
                     switch (WebUI::wifi_on_mode->get()) {
                         case 1: restoreMode = "STA"; break;
@@ -1583,14 +1587,31 @@ static void protocol_do_enter() {
                         case 3: restoreMode = "STA>AP"; break;
                     }
                     WebUI::wifi_mode->setStringValue((char*)restoreMode);
-                    WebUI::wifi_config.begin();
-                    if (config->_oled && config->_oled->_menu) {
-                        config->_oled->_menu->rebuild_settings_menu();
+                    // Suspend the polling task before touching the OLED.
+                    // The polling task runs on a different core
+                    // (SUPPORT_TASK_CORE) and may concurrently call
+                    // performDisplayUpdate() — without locks on the
+                    // buffer or the I²C bus, two simultaneous I²C
+                    // transmissions would interleave and garble the
+                    // OLED. Suspending here gives the protocol task
+                    // exclusive ownership of the buffer write + flush
+                    // for the brief reboot window. No vTaskResume —
+                    // we're rebooting, the task table is discarded.
+                    vTaskSuspend(pollingTask);
+                    config->_oled->show_persistent_msg("Restarting to enable WiFi");
+                    // Force the OLED buffer to the screen synchronously
+                    // before reboot. SSD1306_I2C::display() only sets a
+                    // dirty flag; the actual I²C push happens later in
+                    // performDisplayUpdate(), called from the (now
+                    // suspended) polling task. Flush here ourselves.
+                    {
+                        SSD1306_I2C* ssd1306 = static_cast<SSD1306_I2C*>(config->_oled->_oled);
+                        if (ssd1306) {
+                            ssd1306->performDisplayUpdate();
+                        }
                     }
-                    // Clear any persistent OLED messages left by begin() (e.g., boot status)
-                    config->_oled->clear_popup();
-                    // popup_msg shown after rebuild so it returns to the updated menu
-                    config->_oled->popup_msg("WiFi on");
+                    ESP.restart();
+                    while (1) {}
                 } else if (strcmp(config->_oled->_menu->get_selected()->display_name, "Turn WiFi OFF") == 0) {
                     // Save current mode for restore-on-toggle, if different
                     {
@@ -1620,8 +1641,16 @@ static void protocol_do_enter() {
                         config->_oled->popup_msg("WiFi off until restart");
                     }
                 } else if (strcmp(config->_oled->_menu->get_selected()->display_name, "WiFi: Reboot to enable") == 0) {
-                    config->_oled->popup_msg("Rebooting...");
+                    // Suspend the polling task and flush synchronously
+                    // (see comment in "Turn WiFi ON" branch above).
+                    vTaskSuspend(pollingTask);
                     config->_oled->show_persistent_msg("Now Rebooting...");
+                    {
+                        SSD1306_I2C* ssd1306 = static_cast<SSD1306_I2C*>(config->_oled->_oled);
+                        if (ssd1306) {
+                            ssd1306->performDisplayUpdate();
+                        }
+                    }
                     ESP.restart();
                     while (1) {}
                 // : completed-file marking toggle. Two labels, one per state.
