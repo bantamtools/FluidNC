@@ -146,7 +146,7 @@ Channel* InputFile::pollLine(char* line) {
 
             config->_oled->_menu->set_completed_file(final_path.c_str());
             config->_oled->_menu->set_last_file_succeeded(true);
-            if (gc_saw_program_end == false) { config->_oled->show_persistent_msg("Warning: Program ended unexpectedly"); }
+            if (gc_saw_program_end == false) { config->_oled->popup_msg("Warning: Program ended unexpectedly", 0); }
             allChannels.kill(this);
             return nullptr;
         }

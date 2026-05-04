@@ -7,6 +7,9 @@
 #include "Limits.h"
 #include "Menu.h"
 
+#include <string>
+#include <vector>
+
 
 // Jogging settings
 #define JOG_X_STEP              1.0
@@ -176,6 +179,13 @@ private: // AIDAN
     void wrapped_draw_string(int16_t y, const std::string& s, font_t font, bool setFont = true);
     void truncated_draw_string(int16_t y, const std::string& s, font_t font);
 
+    // Word-wrap a string into substring lines that each fit within max_w
+    // pixels at the given font. Used by popup_msg for centered multi-line
+    // layout and by wrapped_draw_string for its own draw path. Splits at
+    // the most recent space when possible; falls back to mid-character
+    // breaks for runs without spaces.
+    void split_to_width(const std::string& s, font_t font, int max_w, std::vector<std::string>& out);
+
     void show(Layout& layout, const std::string& msg) { show(layout, msg.c_str()); }
     void show(Layout& layout, const char* msg);
 
@@ -209,7 +219,7 @@ public:
     void refresh_display(bool menu_only = false);
     void processDisplayRefresh();  // Process deferred display updates
     void clear();
-    void popup_msg(std::string msg, int dly = 2000);
+    void popup_msg(const std::string& msg, int dly = 2000, bool preserve_header = true);
     void show_fw_update_popup();
     JogState get_jog_state();
     void set_jog_state(JogState);
@@ -221,9 +231,20 @@ public:
 	void show_run_layout(int hightlight = 2);
 	void show_postrun_layout(int highlight = 1);
 
-	void show_persistent_msg(std::string msg);
 	void clear_popup();
 	bool showing_popup() { return _popup; }
+
+	// Drop any pending encoder rotation accumulated in _enc_diff.
+	// Rotary encoders can emit a spurious rotation pulse from
+	// mechanical wobble at click time; without clearing the
+	// accumulator on click, the polling task's next show_menu()
+	// pass consumes that phantom rotation and shifts the cursor —
+	// visible as a brief menu flash before any action handler's
+	// own rendering takes over. Mirrors the _enc_diff = 0 clear
+	// already in refresh_display(menu_only=true) ; applying
+	// it at click-detection time addresses non-refresh_display
+	// click handlers (e.g. WiFi-toggle popups).
+	void drop_pending_encoder() { _enc_diff = 0; }
 
 	bool is_file_job_running() { return _file_job_running; };
 	void set_file_job_running(bool running);

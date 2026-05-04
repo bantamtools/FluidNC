@@ -262,8 +262,8 @@ void sd_populate_files_menu() {
                             // Show loading progress (starting at 40 files)
                             if (file_count > 39) {
                                 char msg[55];
-                                snprintf(msg, sizeof(msg), "microSD Card:           Reading %d files...", file_count);
-                                config->_oled->show_persistent_msg(msg);
+                                snprintf(msg, sizeof(msg), "microSD Card:\nReading %d files...", file_count);
+                                config->_oled->popup_msg(msg, 0);
                                 config->_oled->processDisplayRefresh(); // Force display update
                             }
 
@@ -276,8 +276,8 @@ void sd_populate_files_menu() {
                                 log_warn("Memory limit reached: " << file_count << " files read; stopping scan (heap: " << current_heap << " bytes)");
                                 config->_oled->clear_popup();  // Clear loading message first
                                 char msg[55];
-                                snprintf(msg, sizeof(msg), "File limit reached: Read %d files from microSD.", file_count);
-                                config->_oled->show_persistent_msg(msg);
+                                snprintf(msg, sizeof(msg), "File limit reached:\nRead %d files from microSD.", file_count);
+                                config->_oled->popup_msg(msg, 0);
                                 limit_reached = true;
                                 break;
                             }
@@ -312,8 +312,8 @@ void sd_populate_files_menu() {
                         log_warn("Absolute file limit reached: " << file_count << " files read, stopping scan");
                         config->_oled->clear_popup();  // Clear loading message first
                         char msg[55];
-                        snprintf(msg, sizeof(msg), "File limit reached: Read %d files from microSD.", file_count);
-                        config->_oled->show_persistent_msg(msg);
+                        snprintf(msg, sizeof(msg), "File limit reached:\nRead %d files from microSD.", file_count);
+                        config->_oled->popup_msg(msg, 0);
                         limit_reached = true;
                         break;
                     }

@@ -246,7 +246,7 @@ void Menu::enter_submenu(void) {
         if (is_files_menu()) {
             if(_files_menu->head->next == NULL){ // Check if entry after back is null or not. If null, present message, else, enter file menu.
                 log_info("No files detected on SD");
-                config->_oled->show_persistent_msg("No files present.                 Check SD");
+                config->_oled->popup_msg("No files present.\nCheck SD", 0);
                 config->_oled->_menu->exit_submenu();
             } else {
                 update_selection(4, 1); // move forward by one

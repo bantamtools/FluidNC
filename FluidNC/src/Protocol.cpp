@@ -397,8 +397,9 @@ static void check_startup_state() {
         report_error_message(Message::ConfigAlarmLock);
         // Add popup for recovery
         if (config && config->_oled) {
-            config->_oled->show_persistent_msg(
-                "Config file error.          Press button to load recovery config and restart."
+            config->_oled->popup_msg(
+                "Config file error.\nPress button to load recovery config and restart.",
+                0
             );
         }
     } else {
@@ -1356,6 +1357,18 @@ static void protocol_do_card_detect(void* arg) {
 static void protocol_do_enter() {
     log_info("Button press detected");
 
+    // Drop any pending encoder rotation accumulated by mechanical
+    // wobble at click time — otherwise the polling task's next
+    // show_menu() pass consumes the phantom pulse and briefly
+    // shifts the cursor before any action handler's own rendering
+    // takes over (visible as a "menu flash" before WiFi-toggle
+    // popups). Same reasoning as the _enc_diff clear already in
+    // refresh_display(menu_only=true) per , just applied here
+    // at click-detection time so it covers all action handlers.
+    if (config && config->_oled) {
+        config->_oled->drop_pending_encoder();
+    }
+
     // Check if parking is in progress
     if (sys.parkingInProgress) {
         log_info("Button dismissed during parking operation");
@@ -1557,7 +1570,7 @@ static void protocol_do_enter() {
                         
                     } else if (strcmp(config->_oled->_menu->get_selected()->display_name, "Run Homing") == 0) {
                         // Display "Homing..." message
-                        config->_oled->show_persistent_msg("Homing...");
+                        config->_oled->popup_msg("Homing...", 0);
                         
                         // Start homing and block until complete
                         Machine::Homing::run_cycles(Machine::Homing::AllCycles);
@@ -1598,7 +1611,7 @@ static void protocol_do_enter() {
                     // for the brief reboot window. No vTaskResume —
                     // we're rebooting, the task table is discarded.
                     vTaskSuspend(pollingTask);
-                    config->_oled->show_persistent_msg("Restarting to enable WiFi");
+                    config->_oled->popup_msg("Restarting to enable WiFi", 0);
                     // Force the OLED buffer to the screen synchronously
                     // before reboot. SSD1306_I2C::display() only sets a
                     // dirty flag; the actual I²C push happens later in
@@ -1627,6 +1640,16 @@ static void protocol_do_enter() {
                         }
                     }
                     WebUI::wifi_config.end();  // calls StopWiFi()
+
+                    // Suspend the polling task while we modify menu data
+                    // and write the popup buffer. The polling task runs on
+                    // a different core (SUPPORT_TASK_CORE) and can race
+                    // with rebuild_settings_menu (reading the doubly-linked
+                    // list mid-modification) and popup_msg (writing the
+                    // OLED buffer concurrently with show_menu). Same race
+                    // protection the reboot branches use; paired with
+                    // resume since we're not rebooting.
+                    vTaskSuspend(pollingTask);
                     if (config->_wifiMode == -1) {
                         // User control: persist to NVS
                         WebUI::wifi_mode->setStringValue((char*)"Off");
@@ -1640,11 +1663,12 @@ static void protocol_do_enter() {
                     } else {
                         config->_oled->popup_msg("WiFi off until restart");
                     }
+                    vTaskResume(pollingTask);
                 } else if (strcmp(config->_oled->_menu->get_selected()->display_name, "WiFi: Reboot to enable") == 0) {
                     // Suspend the polling task and flush synchronously
                     // (see comment in "Turn WiFi ON" branch above).
                     vTaskSuspend(pollingTask);
-                    config->_oled->show_persistent_msg("Now Rebooting...");
+                    config->_oled->popup_msg("Now Rebooting...", 0);
                     {
                         SSD1306_I2C* ssd1306 = static_cast<SSD1306_I2C*>(config->_oled->_oled);
                         if (ssd1306) {
@@ -1717,7 +1741,7 @@ static void protocol_do_enter() {
                     config->_oled->show_home_layout();
 
                 } else if (strcmp(config->_oled->_menu->get_selected()->display_name, "TEST2") == 0) {
-                    config->_oled->show_persistent_msg("Blah blahdee bla blah foobar quxbaazloremipsumdolorsitamat.");
+                    config->_oled->popup_msg("Blah blahdee bla blah foobar quxbaazloremipsumdolorsitamat.", 0);
 
                 } else if (strcmp(config->_oled->_menu->get_selected()->display_name, "Run Latest") == 0) {
                     // run most recent (mod date or just uploaded) gcode file, must be homed
@@ -1822,13 +1846,13 @@ static void protocol_do_enter() {
                 } else if(config->_oled->_menu->is_firmware_menu()) {
                     std::string fw_file = config->_oled->_menu->get_selected()->display_name;
                     log_info("Selected: " << fw_file);
-                    config->_oled->show_persistent_msg("Updating Firmware            Plotter will restart...");
+                    config->_oled->popup_msg("Updating Firmware\nPlotter will restart...", 0);
                     Flashing::update_firmware_from_sdcard(fw_file);
                 // install config if config menu
                 } else if(config->_oled->_menu->is_config_menu()) {
                     std::string cfg_file = config->_oled->_menu->get_selected()->display_name;
                     log_info("Config Selected: " << cfg_file);
-                    config->_oled->show_persistent_msg("Updating Config File            Plotter will restart...");
+                    config->_oled->popup_msg("Updating Config File\nPlotter will restart...", 0);
                     // This will copy the given file to local internal storage with name "config.yaml"
                     Flashing::update_config_from_sdcard(cfg_file, true);
                 // Run file command if files menu
@@ -1862,7 +1886,7 @@ static void protocol_do_enter() {
                             //config->_oled->popup_msg("Machine not homed");
                             // New behavior: auto-home before file run if not homed
                             config->_oled->set_file_awaiting_homing(path_to_open);
-                            config->_oled->show_persistent_msg("Homing before file run...");
+                            config->_oled->popup_msg("Homing before file run...", 0);
                             Machine::Homing::run_cycles(Machine::Homing::AllCycles);
                         } else {
                             log_info("Passing path to InputFile: " << path_to_open);
@@ -1912,7 +1936,7 @@ static void protocol_do_enter() {
                             //config->_oled->popup_msg("Machine not homed");
                             // New behavior: auto-home before file run if not homed
                             config->_oled->set_file_awaiting_homing(path_to_open);
-                            config->_oled->show_persistent_msg("Homing before file run...");
+                            config->_oled->popup_msg("Homing before file run...", 0);
                             Machine::Homing::run_cycles(Machine::Homing::AllCycles);
                         } else {
                             log_info("Passing path to InputFile: " << path_to_open);

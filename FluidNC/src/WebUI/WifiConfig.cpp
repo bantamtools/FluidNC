@@ -562,9 +562,11 @@ namespace WebUI {
 
     // Show a status message on the OLED during boot, when the normal
     // polling loop isn't running.  Forces an I2C push to the display.
+    // Uses popup_msg(s, 0) for persistent semantics (no auto-clear);
+    // see WifiSetupFile.cpp for the same idiom and reasoning.
     static void wifi_oled_status(const char* msg) {
         if (config && config->_oled) {
-            config->_oled->show_persistent_msg(std::string(msg));
+            config->_oled->popup_msg(std::string(msg), 0);
             SSD1306_I2C* ssd1306 = static_cast<SSD1306_I2C*>(config->_oled->_oled);
             if (ssd1306) {
                 ssd1306->performDisplayUpdate();

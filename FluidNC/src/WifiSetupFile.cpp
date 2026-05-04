@@ -13,10 +13,14 @@
 
 static const char* WIFI_SETUP_PATH = "/sd/wifi_setup.txt";
 
-// Show a persistent OLED message and force display update during boot
+// Show a persistent OLED message and force display update during boot.
+// Uses popup_msg(s, 0) for persistent semantics (no auto-clear); the
+// explicit performDisplayUpdate flush is required because the polling
+// task hasn't been started yet at boot, so no one else is going to push
+// the buffer for us.
 static void wifi_setup_oled_msg(const char* msg) {
     if (config && config->_oled) {
-        config->_oled->show_persistent_msg(std::string(msg));
+        config->_oled->popup_msg(std::string(msg), 0);
         SSD1306_I2C* ssd1306 = static_cast<SSD1306_I2C*>(config->_oled->_oled);
         if (ssd1306) {
             ssd1306->performDisplayUpdate();

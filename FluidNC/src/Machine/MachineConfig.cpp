@@ -67,8 +67,8 @@ void copyRecoveryConfigAndRestart() {
     } else {
         log_error("Local FS is neither spiffs nor littlefs");
         config->_oled->clear_popup();
-        config->_oled->show_persistent_msg(
-            "ERROR: Unknown\nfilesystem type.\nCannot recover."
+        config->_oled->popup_msg(
+            "ERROR: Unknown\nfilesystem type.\nCannot recover.", 0
         );
         return;
     }
@@ -99,12 +99,12 @@ retry_write:
         }
         
         config->_oled->clear_popup();
-        config->_oled->show_persistent_msg(
-            "ERROR: Cannot delete old config.     Filesystem error."
+        config->_oled->popup_msg(
+            "ERROR: Cannot delete old config.\nFilesystem error.", 0
         );
         return;
     }
-    
+
     // Step 3: Write new config
     std::ofstream outputFile(cfg_out_path.c_str());
     if (!outputFile.is_open()) {
@@ -122,12 +122,12 @@ retry_write:
         }
         
         config->_oled->clear_popup();
-        config->_oled->show_persistent_msg(
-            "ERROR: Cannot write recovery config. Filesystem error."
+        config->_oled->popup_msg(
+            "ERROR: Cannot write recovery config.\nFilesystem error.", 0
         );
         return;
     }
-    
+
     outputFile << recoveryYaml;
     outputFile.close();
     
@@ -148,8 +148,8 @@ retry_write:
         }
         
         config->_oled->clear_popup();
-        config->_oled->show_persistent_msg(
-            "ERROR: Config verify failed.         Filesystem error."
+        config->_oled->popup_msg(
+            "ERROR: Config verify failed.\nFilesystem error.", 0
         );
         return;
     }
@@ -157,7 +157,7 @@ retry_write:
     
     // Show restart message
     config->_oled->clear_popup();
-    config->_oled->show_persistent_msg("Restarting...");
+    config->_oled->popup_msg("Restarting...", 0);
     
     // Small delay to ensure message is displayed and written to OLED
     delay_ms(250);

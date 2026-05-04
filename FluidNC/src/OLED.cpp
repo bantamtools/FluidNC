@@ -7,6 +7,8 @@
 #include <cmath>       // ceilf, floorf
 #include <cstdio>      // snprintf
 #include <cstring>     // memcpy, memset
+#include <string>      // std::string
+#include <vector>      // std::vector — split_to_width / popup_msg
 #include "WebUI/WebServer.h"   // WebUI::Web_Server::getUploadBytesReceived(), getUploadTotalSize()
 #include "xmodem.h"            // xmodem_bytes_received
 
@@ -1484,29 +1486,100 @@ void OLED::show_fw_update_popup() {
     _popup = false;
 }
 
-void OLED::popup_msg(std::string msg, int dly) {
-    // Cooperative auto-clear: draw the popup, then schedule
-    // expiration. processDisplayRefresh() checks the deadline each
-    // protocol-loop tick and calls clear_popup() when it passes.
+void OLED::popup_msg(const std::string& msg, int dly, bool preserve_header) {
+    // Unified popup display . One function for all transient and
+    // persistent popups; replaces the prior popup_msg + show_persistent_msg
+    // pair. Centered horizontally, line block centered vertically.
+    // Multi-line via embedded '\n'; long lines are word-wrapped to fit
+    // display width.
     //
-    // The previous implementation used delay_ms (vTaskDelay), which
-    // suspended the protocol task for the full delay window and let
-    // every other task run unrestricted — corrupting the popup
-    // buffer mid-display .
+    // dly > 0 (default 2000): auto-clear after the interval via the
+    //   cooperative deadline (_popup_deadline_ms) checked from
+    //   processDisplayRefresh() each protocol-loop tick. Mechanism
+    //   from  — avoids vTaskDelay's race window.
+    // dly == 0: persistent. Clears only via clear_popup() or
+    //   process_clear_command() (existing user-click path).
+    //
+    // preserve_header == true (default): clearContentAreaFast (rows
+    //   16-63 only — header preserved). Vertical centering inside
+    //   the content area. Avoids the visual disruption of headers
+    //   blinking off and back, and sidesteps the show_state /
+    //   show_radio_info partial-repaint issue (those header painters
+    //   don't check _popup; if the header is wiped, their periodic
+    //   repaint produces a partial-restore artifact).
+    // preserve_header == false: clearScreenFast (full-screen wipe).
+    //   Use when explicit visual emphasis is needed — e.g. a future
+    //   migration of show_fw_update_popup that wants to take over
+    //   the whole display.
     _popup = true;
-    show_error(msg);
-    _popup_deadline_ms = millis() + (uint32_t)dly;
-    if (_popup_deadline_ms == 0) {
-        _popup_deadline_ms = 1;  // sentinel: 0 means "no deadline"
-    }
-}
 
-void OLED::show_persistent_msg(std::string msg) {
-    // Persistent: cancel any pending auto-clear from a prior popup_msg.
-    _popup_deadline_ms = 0;
-    _popup = true;
-    show_error(msg);
-    // clear on user click or other call to clear_popup()
+    // Split on '\n' into raw lines (preserve empty lines).
+    std::vector<std::string> raw;
+    {
+        size_t start = 0;
+        for (size_t i = 0; i <= msg.size(); ++i) {
+            if (i == msg.size() || msg[i] == '\n') {
+                raw.emplace_back(msg.substr(start, i - start));
+                start = i + 1;
+            }
+        }
+    }
+
+    // Word-wrap each raw line to display width.
+    std::vector<std::string> lines;
+    for (const auto& line : raw) {
+        if (line.empty()) {
+            lines.emplace_back();  // preserve blank lines
+        } else {
+            split_to_width(line, DejaVu_Sans_10, _width, lines);
+        }
+    }
+
+    // Vertical centering. Anchor and floor depend on preserve_header.
+    // For preserve_header == true, content_y/content_h are constants
+    // (16, 48) matching clearContentAreaFast's actual page-aligned
+    // wipe — NOT _header_height (15). Row 15 is page 1 / bit 7 and is
+    // never touched by clearContentAreaFast, so anchoring at row 16
+    // ensures the popup text top lands on a known-cleared row.
+    const int line_h  = font_height(DejaVu_Sans_10);
+    const int block_h = (int)lines.size() * line_h;
+    int       y;
+    if (preserve_header) {
+        constexpr int content_y = 16;
+        constexpr int content_h = 48;
+        y = content_y + (content_h - block_h) / 2;
+        if (y < content_y) {
+            y = content_y;
+        }
+    } else {
+        y = (_height - block_h) / 2;
+        if (y < 0) {
+            y = 0;
+        }
+    }
+
+    if (preserve_header) {
+        clearContentAreaFast();
+    } else {
+        clearScreenFast();
+    }
+    _oled->setFont(DejaVu_Sans_10);
+    _oled->setTextAlignment(TEXT_ALIGN_CENTER);
+    const int cx = _width / 2;
+    for (const auto& l : lines) {
+        _oled->drawString(cx, y, l.c_str());
+        y += line_h;
+    }
+    _oled->display();
+
+    if (dly > 0) {
+        _popup_deadline_ms = millis() + (uint32_t)dly;
+        if (_popup_deadline_ms == 0) {
+            _popup_deadline_ms = 1;  // sentinel: 0 means "no deadline"
+        }
+    } else {
+        _popup_deadline_ms = 0;  // persistent
+    }
 }
 
 // manual clear for errors that stick around (like unexpected end of file)
@@ -2396,39 +2469,69 @@ void OLED::showJogHeaderFast(bool moving) {
     #endif
 }
 
-void OLED::wrapped_draw_string(int16_t y, const std::string& s, font_t font, bool setFont) {
-    if (setFont) { // only want to do this once, not on recursion
-        _oled->setFont(font);
-        _oled->setTextAlignment(TEXT_ALIGN_LEFT);
-    }
-
-    if (y > _height) {
-        // we've wrapped down past the bottom of the screen; bail.
+// Word-wrap a string into substring lines that each fit within max_w pixels
+// at the given font. Splits at the most recent space when possible; falls
+// back to mid-character breaks for runs without spaces. Used by both
+// popup_msg (centered draw) and wrapped_draw_string (left-aligned draw).
+// Centralized in  to deduplicate the wrap algorithm.
+void OLED::split_to_width(const std::string& s, font_t font, int max_w, std::vector<std::string>& out) {
+    if (s.empty()) {
+        out.emplace_back();
         return;
     }
 
-    size_t slen   = s.length();
-    size_t swidth = 0;
-    size_t i;
-    size_t lastSpace = 0;
-    for (i = 0; i < slen && swidth < _width; i++) {
+    size_t       slen      = s.length();
+    size_t       swidth    = 0;
+    size_t       i;
+    size_t       lastSpace = 0;
+    for (i = 0; i < slen && swidth < (size_t)max_w; i++) {
         swidth += char_width(s[i], font);
-        if (s[i] == ' ') { lastSpace = i; }
-        if (swidth > _width) {
+        if (s[i] == ' ') {
+            lastSpace = i;
+        }
+        if (swidth > (size_t)max_w) {
             break;
         }
     }
-    if (swidth < _width) {
-        _oled->drawString(0, y, s.c_str());
+    if (swidth < (size_t)max_w) {
+        out.emplace_back(s);
+        return;
+    }
+    if (lastSpace == 0) {
+        // No spaces found in this width; break at character.
+        out.emplace_back(s.substr(0, i));
+        split_to_width(s.substr(i, slen), font, max_w, out);
     } else {
-        if (lastSpace == 0) { // no spaces found in this entire screen width, break at character
-            _oled->drawString(0, y, s.substr(0, i).c_str());
-            wrapped_draw_string(y + font_height(font) - 1, s.substr(i, slen).c_str(), font, false);
-        } else { // break at most recent space
-            _oled->drawString(0, y, s.substr(0, lastSpace).c_str());
-            // +1 on recursion to skip the space
-            wrapped_draw_string(y + font_height(font) - 1, s.substr(lastSpace+1, slen).c_str(), font, false);
+        // Break at most recent space (skip the space itself on the
+        // continuation line).
+        out.emplace_back(s.substr(0, lastSpace));
+        split_to_width(s.substr(lastSpace + 1, slen), font, max_w, out);
+    }
+}
+
+void OLED::wrapped_draw_string(int16_t y, const std::string& s, font_t font, bool setFont) {
+    if (setFont) {
+        _oled->setFont(font);
+        _oled->setTextAlignment(TEXT_ALIGN_LEFT);
+    }
+    if (y > _height) {
+        // Wrapped past the bottom of the screen; nothing to draw.
+        return;
+    }
+
+    // Use the shared wrap algorithm. Draw each line at x=0 (left-aligned),
+    // advancing y by font_height - 1 per line (preserves the historical
+    // 1-pixel inter-line overlap behavior).
+    std::vector<std::string> lines;
+    split_to_width(s, font, _width, lines);
+
+    const int line_h = font_height(font) - 1;
+    for (const auto& line : lines) {
+        if (y > _height) {
+            break;
         }
+        _oled->drawString(0, y, line.c_str());
+        y += line_h;
     }
 }
 
