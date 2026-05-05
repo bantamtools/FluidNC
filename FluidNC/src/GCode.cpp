@@ -398,7 +398,10 @@ static void gcode_comment_msg(char* comment) {
                     || (f_maj == o_maj && f_min > o_min)
                     || (f_maj == o_maj && f_min == o_min && f_pat > o_pat)) {
                     if (config && config->_oled) {
-                        config->_oled->show_fw_update_popup();
+                        config->_oled->popup_msg(
+                            "Firmware update\navailable now at:\nbantam.tools/fw",
+                            2000,
+                            false);
                         fw_update_notified = true;
                     }
                 }

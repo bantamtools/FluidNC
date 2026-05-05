@@ -220,7 +220,6 @@ public:
     void processDisplayRefresh();  // Process deferred display updates
     void clear();
     void popup_msg(const std::string& msg, int dly = 2000, bool preserve_header = true);
-    void show_fw_update_popup();
     JogState get_jog_state();
     void set_jog_state(JogState);
     bool is_active();

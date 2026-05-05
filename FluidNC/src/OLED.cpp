@@ -696,7 +696,13 @@ void OLED::show_file() {
     // Exit if file/download not running or no filename. Elapsed-time state is
     // managed by the raw-state edge handlers and set_file_job_running(); this
     // function is a pure reader of _run_start_time / _prev_run_time.
-    if ((!_file_job_running && !_download_mode) || (_filename.length() == 0)) {
+    // _popup guard mirrors show_dro's pattern: skip drawing while a popup is
+    // displayed so the popup buffer isn't overpainted by clearContentAreaFast
+    // below. Without this, popups that fire while _file_job_running is true
+    // (e.g. the firmware-update notification from GCode.cpp's version-check
+    // parser) are wiped within milliseconds by the next status-report-driven
+    // show_all() call.
+    if (_popup || (!_file_job_running && !_download_mode) || (_filename.length() == 0)) {
         return;
     }
 
@@ -1463,29 +1469,6 @@ void OLED::processDisplayRefresh() {
     }
 }
 
-// Display a popup message temporarily
-void OLED::show_fw_update_popup() {
-    _popup = true;
-    clearScreenFast();
-
-    _oled->setFont(DejaVu_Sans_10);
-    _oled->setTextAlignment(TEXT_ALIGN_CENTER);
-    int cx = _width / 2;
-    int y = _header_height;
-    _oled->drawString(cx, y, "Firmware update");
-    _oled->drawString(cx, y + 13, "available now at:");
-    _oled->drawString(cx, y + 26, "bantam.tools/fw");
-    _oled->display();
-
-    delay_ms(1000);
-    clearScreenFast();  // Wipe buffer so no stale content lingers
-    // Leave _popup true briefly — it suppresses the transient
-    // "run" screen frame. The next show_state/show_file/M0 pause
-    // will clear it naturally via clear_popup() or process_clear_command().
-    // As a fallback, clear it after a short delay so it doesn't stick.
-    _popup = false;
-}
-
 void OLED::popup_msg(const std::string& msg, int dly, bool preserve_header) {
     // Unified popup display . One function for all transient and
     // persistent popups; replaces the prior popup_msg + show_persistent_msg
@@ -1508,9 +1491,7 @@ void OLED::popup_msg(const std::string& msg, int dly, bool preserve_header) {
     //   don't check _popup; if the header is wiped, their periodic
     //   repaint produces a partial-restore artifact).
     // preserve_header == false: clearScreenFast (full-screen wipe).
-    //   Use when explicit visual emphasis is needed — e.g. a future
-    //   migration of show_fw_update_popup that wants to take over
-    //   the whole display.
+    //   Use when explicit visual emphasis is needed.
     _popup = true;
 
     // Split on '\n' into raw lines (preserve empty lines).
@@ -1552,9 +1533,17 @@ void OLED::popup_msg(const std::string& msg, int dly, bool preserve_header) {
             y = content_y;
         }
     } else {
-        y = (_height - block_h) / 2;
-        if (y < 0) {
-            y = 0;
+        // Anchor text in the content area (rows 16-63) even though the
+        // wipe is full-screen. show_state() doesn't check _popup, so its
+        // status-report-driven clearHeaderWithSeparator() repaints rows
+        // 0-15 within milliseconds and clips any popup text there. The
+        // full-screen wipe still produces a brief takeover frame; text
+        // just doesn't fight the header for the same pixels.
+        constexpr int content_y = 16;
+        constexpr int content_h = 48;
+        y = content_y + (content_h - block_h) / 2;
+        if (y < content_y) {
+            y = content_y;
         }
     }
 
