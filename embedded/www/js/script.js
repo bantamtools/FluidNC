@@ -130,10 +130,7 @@ if(display_time){
 } else {
     document.getElementById('FS_time').innerHTML = "Time";
 }
- if (display_message) {
-    
-    document.getElementById('MSG').innerHTML = "File index.html.gz is missing, please upload it";
- } else {
+ if (!display_message) {
      document.getElementById('MSG').innerHTML = "<a href='/' class= 'btn btn-primary'>Go to ESP3D interface</a>";
  }
  document.getElementById('file_list').innerHTML=content;

@@ -15,6 +15,7 @@
 #include "../Configuration/JsonGenerator.h"
 #include "../Uart.h"       // Uart0.baud
 #include "../Report.h"     // git_info
+#include "../Menu.h"       // git_info_short
 #include "../InputFile.h"  // InputFile
 #include "../CompletionMark.h"  // : strip-on-start helper
 #include "../SDMenuEvents.h"    // sd_files_added/_removed/_renamed
@@ -158,8 +159,8 @@ namespace WebUI {
 
     // Used by js/connectdlg.js
     static Error showFwInfo(char* parameter, AuthenticationLevel auth_level, Channel& out) {  // ESP800
-        LogStream s(out, "FW version: FluidNC ");
-        s << git_info;
+        LogStream s(out, "FW version: Bantam Tools Serama Firmware v");
+        s << git_info_short;
         // TODO: change grbl-embedded to FluidNC after fixing WebUI
         s << " # FW target:grbl-embedded  # FW HW:";
 
