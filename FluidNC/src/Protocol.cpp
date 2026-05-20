@@ -92,12 +92,30 @@ union SpindleStop {
 
 static SpindleStop spindle_stop_ovr;
 
+// Forward declarations for the polling-task / main-loop handshake globals
+// defined later in this file. protocol_reset() clears them so a line that
+// was grabbed by the polling task but not yet dispatched does not survive
+// the reset boundary.
+extern Channel* activeChannel;
+extern char     activeLine[];
+
 void protocol_reset() {
     probeState             = ProbeState::Off;
     soft_limit             = false;
     rtReset                = false;
     rtSafetyDoor           = false;
     spindle_stop_ovr.value = 0;
+
+    // Drop any line the polling task had stashed for the main loop but
+    // had not yet been dispatched. After reset, gc_init() zeros gc_state
+    // (including feed_rate); without this clear, the next iteration of
+    // protocol_main_loop would dispatch the stale line against a freshly
+    // zeroed parser and raise Error 22 (Gcode undefined feed rate) for any
+    // G1/G2/G3 line that relies on the prior modal feed rate. The pointer
+    // may also reference a channel that is in the kill queue and about to
+    // be deleted; clearing here prevents a downstream dereference.
+    activeChannel = nullptr;
+    activeLine[0] = '\0';
 
     // Do not clear rtAlarm because it might have been set during configuration
     // rtAlarm = ExecAlarm::None;
