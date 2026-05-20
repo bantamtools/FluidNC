@@ -68,8 +68,8 @@ void constrainToSoftLimits(float* cartesian) {
         if (axisSetting->_softLimits && cartesian[axis] != current_position[axis]) {
             // When outside the axis range, only small nudges to clear switches are allowed
             bool move_positive = cartesian[axis] > current_position[axis];
-            if ((!move_positive && (current_position[axis] < limitsMinPosition(axis))) ||
-                (move_positive && (current_position[axis] > limitsMaxPosition(axis)))) {
+            if ((!move_positive && (current_position[axis] < axisSetting->_softMin)) ||
+                (move_positive && (current_position[axis] > axisSetting->_softMax))) {
                 // only allow a nudge if a switch is active
                 if (bitnum_is_false(lim_pin_state, Machine::Axes::motor_bit(axis, 0)) &&
                     bitnum_is_false(lim_pin_state, Machine::Axes::motor_bit(axis, 1))) {
@@ -101,10 +101,10 @@ void constrainToSoftLimits(float* cartesian) {
                 continue;
             }
 
-            if (cartesian[axis] < limitsMinPosition(axis)) {
-                cartesian[axis] = limitsMinPosition(axis);
-            } else if (cartesian[axis] > limitsMaxPosition(axis)) {
-                cartesian[axis] = limitsMaxPosition(axis);
+            if (cartesian[axis] < axisSetting->_softMin) {
+                cartesian[axis] = axisSetting->_softMin;
+            } else if (cartesian[axis] > axisSetting->_softMax) {
+                cartesian[axis] = axisSetting->_softMax;
             } else {
                 continue;
             }
@@ -123,7 +123,7 @@ void limits_soft_check(float* cartesian) {
     auto n_axis = config->_axes->_numberAxis;
 
     for (int axis = 0; axis < n_axis; axis++) {
-        if (axes->_axis[axis]->_softLimits && (cartesian[axis] < limitsMinPosition(axis) || cartesian[axis] > limitsMaxPosition(axis))) {
+        if (axes->_axis[axis]->_softLimits && (cartesian[axis] < axes->_axis[axis]->_softMin || cartesian[axis] > axes->_axis[axis]->_softMax)) {
             log_info("Soft limit on " << Machine::Axes::_names[axis] << " target:" << cartesian[axis]);
             limit_error = true;
         }

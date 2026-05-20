@@ -89,6 +89,19 @@ namespace Machine {
         void group(Configuration::HandlerBase& handler) override;
         void afterParse() override;
 
+        // Soft-limit configuration entry points called by gcode comment parser
+        // (Media{X,Y}{Min,Max,Off} family). Values are in machine coords (G53);
+        // writes go to the dedicated _softMin / _softMax fields on each Axis.
+        // See internal tracker.
+        void setSoftLimitMin(int axis, float value);
+        void setSoftLimitMax(int axis, float value);
+        void disableSoftLimits(int axis);
+
+        // Re-run boot-time derivation for every axis. Called at M30 and at
+        // mc_reset's late-reset hook to wipe any in-job Media* overrides and
+        // restore each axis to the config-defined state. See .
+        void restoreSoftLimitDefaults();
+
         ~Axes();
     };
 }

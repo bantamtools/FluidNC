@@ -1056,6 +1056,10 @@ static void protocol_do_late_reset() {
     // turn off all User I/O immediately
     config->_userOutputs->all_off();
 
+    // Restore per-axis soft-limit defaults on abort/alarm/soft-reset so an in-job
+    // Media* override does not leak into the next attempt. See .
+    config->_axes->restoreSoftLimitDefaults();
+
     // do we need to stop a running file job?
     allChannels.stopJob();
 }

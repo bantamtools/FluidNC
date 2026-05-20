@@ -133,12 +133,12 @@ void gc_reset_winding_offsets() {
     }
 }
 
-// Parses a Park Height value using the house read_float() parser and
-// requires the entire remaining text to be consumed (apart from trailing
-// whitespace). Returns true on success. Rejects empty input, non-numeric
-// input, and trailing junk such as scientific-notation suffixes that
-// read_float() does not recognize.
-static bool parse_park_value(const char* text, float* out) {
+// Parses a single float from a comment-body slice. Tolerates leading and trailing
+// space/tab. Requires the entire remaining text to be consumed (apart from trailing
+// whitespace). Returns true on success. Rejects empty input, non-numeric input, and
+// trailing junk such as scientific-notation suffixes that read_float() does not
+// recognize.
+static bool parse_comment_float(const char* text, float* out) {
     while (*text == ' ' || *text == '\t') text++;
     if (*text == '\0') return false;
 
@@ -165,7 +165,7 @@ static void apply_park_height(const char* value_str, bool deprecated) {
     if (!config || !config->_parking || !config->_axes) return;
 
     float value;
-    if (!parse_park_value(value_str, &value)) {
+    if (!parse_comment_float(value_str, &value)) {
         log_warn("Park Height: unparseable value: " << value_str);
         return;
     }
@@ -237,12 +237,6 @@ static void gcode_comment_msg(char* comment) {
                 apply_park_height(text + 15, /*deprecated=*/true);
                 return;
             }
-            // Typo path: "Install Height" with no colon
-            if (strncmp(text + 1, "nstall Height", 13) == 0) {
-                log_warn("Install Height: missing ':' separator "
-                         "(also: Install Height is deprecated; use Park Height)");
-                return;
-            }
             break;
 
         case 'T':
@@ -276,11 +270,6 @@ static void gcode_comment_msg(char* comment) {
                 apply_park_height(text + 12, /*deprecated=*/false);
                 return;
             }
-            // Typo path: "Park Height" with no colon
-            if (strncmp(text + 1, "ark Height", 10) == 0) {
-                log_warn("Park Height: missing ':' separator");
-                return;
-            }
             break;
 
         case 'A':
@@ -294,12 +283,8 @@ static void gcode_comment_msg(char* comment) {
 
                     const char* colon = strchr(text, ':');
                     if (colon) {
-                        const char* numStart = colon + 1;
-                        while (*numStart == ' ' || *numStart == '\t') numStart++;
-
-                        size_t char_counter = numStart - comment;
                         float accel;
-                        if (read_float(comment, &char_counter, &accel) && accel >= 10) {
+                        if (parse_comment_float(colon + 1, &accel) && accel >= 10) {
                             int axis1 = -1;
                             int axis2 = -1;
 
@@ -356,6 +341,41 @@ static void gcode_comment_msg(char* comment) {
                     strcpy(msg + 61, "...");
                 }
                 log_info("GCode Comment..." << msg);
+                return;
+            }
+
+            // Media{X,Y}{Min,Max,Off}: soft-limit configuration. See  and
+            // docs/coordinate-system.md §5.
+            if (text[1] == 'e' && text[2] == 'd' && text[3] == 'i' && text[4] == 'a') {
+                char axis_char = text[5];
+                int  axis_idx  = (axis_char == 'X') ? X_AXIS
+                               : (axis_char == 'Y') ? Y_AXIS
+                               : -1;
+                if (axis_idx < 0) return;
+
+                // (MediaXOff) / (MediaYOff): value-less; verify trailing whitespace then '\0'
+                if (text[6] == 'O' && text[7] == 'f' && text[8] == 'f') {
+                    const char* after = text + 9;
+                    while (*after == ' ' || *after == '\t') after++;
+                    if (*after == '\0') {
+                        config->_axes->disableSoftLimits(axis_idx);
+                    }
+                    return;
+                }
+
+                if (text[6] == 'M') {
+                    bool is_min = (text[7] == 'i' && text[8] == 'n');
+                    bool is_max = (text[7] == 'a' && text[8] == 'x');
+                    if ((is_min || is_max) && text[9] == ':') {
+                        float value;
+                        if (parse_comment_float(text + 10, &value)) {
+                            if (is_min) config->_axes->setSoftLimitMin(axis_idx, value);
+                            else        config->_axes->setSoftLimitMax(axis_idx, value);
+                        }
+                        return;
+                    }
+                }
+                // Media + axis but unrecognized suffix — claimed by us, drop silently
                 return;
             }
             break;
@@ -2115,6 +2135,11 @@ Error gc_execute_line(char* line) {
         case ProgramFlow::CompletedM2:
         case ProgramFlow::CompletedM30:
             protocol_buffer_synchronize();  // Sync and finish all remaining buffered motions before moving on.
+
+            // Restore per-axis soft-limit defaults so any in-job Media* overrides
+            // do not leak into the next job. Fires on both M2 and M30 (shared
+            // case body). See .
+            config->_axes->restoreSoftLimitDefaults();
 
             // Upon program complete, only a subset of g-codes reset to certain defaults, according to
             // LinuxCNC's program end descriptions and testing. Only modal groups [G-code 1,2,3,5,7,12]

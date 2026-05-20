@@ -3,6 +3,7 @@
 #include "MachineConfig.h"  // config
 
 #include <cstring>
+#include <limits>
 
 namespace Machine {
     void Axis::group(Configuration::HandlerBase& handler) {
@@ -39,6 +40,45 @@ namespace Machine {
         if (_motors[0] == nullptr) {
             _motors[0] = new Machine::Motor(_axis, 0);
         }
+        // Capture the config-time soft_limits choice into the immutable
+        // _softLimitsConfig and populate the live _softMin / _softMax / _softLimits
+        // fields. (Issue.) After this point, _softLimits is mutable at
+        // runtime; _softLimitsConfig is not.
+        _softLimitsConfig = _softLimits;
+        deriveSoftLimitDefaults();
+    }
+
+    SoftLimitState Axis::computeSoftLimitDefaults() const {
+        SoftLimitState s{};
+        if (!_softLimitsConfig) {
+            s.min     = std::numeric_limits<float>::quiet_NaN();
+            s.max     = std::numeric_limits<float>::quiet_NaN();
+            s.enabled = false;
+            return s;
+        }
+        // Mirror the existing limitsMinPosition()/limitsMaxPosition() shape so
+        // config-derived bounds match the previous behavior on machines that don't
+        // emit Media* comments. The 0.5 mm tolerance is the historical
+        // SOFT_LIMITS_ERR from Limits.cpp.
+        constexpr float kBootErr = 0.5f;
+        const float     mpos     = (_homing != nullptr) ? _homing->_mpos : 0.0f;
+        const bool      positive = (_homing == nullptr) || _homing->_positiveDirection;
+        if (positive) {
+            s.min = mpos - _maxTravel - kBootErr;
+            s.max = mpos + kBootErr;
+        } else {
+            s.min = mpos - kBootErr;
+            s.max = mpos + _maxTravel + kBootErr;
+        }
+        s.enabled = true;
+        return s;
+    }
+
+    void Axis::deriveSoftLimitDefaults() {
+        const SoftLimitState s = computeSoftLimitDefaults();
+        _softMin    = s.min;
+        _softMax    = s.max;
+        _softLimits = s.enabled;
     }
 
     void Axis::init() {

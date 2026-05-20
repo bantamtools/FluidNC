@@ -1,5 +1,8 @@
 #include "Axes.h"
 
+#include <cmath>
+#include <limits>
+
 #include "../Motors/MotorDriver.h"
 #include "../Motors/NullMotor.h"
 #include "../Config.h"
@@ -299,6 +302,59 @@ namespace Machine {
         }
 
         return retval;
+    }
+
+    void Axes::setSoftLimitMin(int axis, float value) {
+        if (axis < 0 || axis >= _numberAxis) return;
+        auto a = _axis[axis];
+        a->_softMin    = value;
+        a->_softLimits = !std::isnan(a->_softMin) && !std::isnan(a->_softMax);
+        log_info("Media: setSoftLimitMin axis=" << axis << " value=" << value
+                 << " active=" << (a->_softLimits ? "yes" : "no"));
+    }
+
+    void Axes::setSoftLimitMax(int axis, float value) {
+        if (axis < 0 || axis >= _numberAxis) return;
+        auto a = _axis[axis];
+        a->_softMax    = value;
+        a->_softLimits = !std::isnan(a->_softMin) && !std::isnan(a->_softMax);
+        log_info("Media: setSoftLimitMax axis=" << axis << " value=" << value
+                 << " active=" << (a->_softLimits ? "yes" : "no"));
+    }
+
+    void Axes::disableSoftLimits(int axis) {
+        if (axis < 0 || axis >= _numberAxis) return;
+        auto a = _axis[axis];
+        a->_softMin    = std::numeric_limits<float>::quiet_NaN();
+        a->_softMax    = std::numeric_limits<float>::quiet_NaN();
+        a->_softLimits = false;
+        log_info("Media: disableSoftLimits axis=" << axis);
+    }
+
+    void Axes::restoreSoftLimitDefaults() {
+        bool any_changed = false;
+        for (int axis = 0; axis < _numberAxis; axis++) {
+            auto       a      = _axis[axis];
+            const auto target = a->computeSoftLimitDefaults();
+
+            // Skip if every field of target already matches.
+            // NaN-safe: NaN != NaN by IEEE 754, so for each bound treat
+            // (both NaN) as equal in addition to plain `==`.
+            if (target.enabled == a->_softLimits &&
+                ((std::isnan(target.min) && std::isnan(a->_softMin)) ||
+                 target.min == a->_softMin) &&
+                ((std::isnan(target.max) && std::isnan(a->_softMax)) ||
+                 target.max == a->_softMax)) {
+                continue;
+            }
+            a->_softMin    = target.min;
+            a->_softMax    = target.max;
+            a->_softLimits = target.enabled;
+            any_changed    = true;
+        }
+        if (any_changed) {
+            log_info("Soft-limit defaults restored");
+        }
     }
 
     Axes::~Axes() {
