@@ -68,8 +68,8 @@ void constrainToSoftLimits(float* cartesian) {
         if (axisSetting->_softLimits && cartesian[axis] != current_position[axis]) {
             // When outside the axis range, only small nudges to clear switches are allowed
             bool move_positive = cartesian[axis] > current_position[axis];
-            if ((!move_positive && (current_position[axis] < axisSetting->_softMin)) ||
-                (move_positive && (current_position[axis] > axisSetting->_softMax))) {
+            if ((!move_positive && (current_position[axis] < limitsMinPosition(axis))) ||
+                (move_positive && (current_position[axis] > limitsMaxPosition(axis)))) {
                 // only allow a nudge if a switch is active
                 if (bitnum_is_false(lim_pin_state, Machine::Axes::motor_bit(axis, 0)) &&
                     bitnum_is_false(lim_pin_state, Machine::Axes::motor_bit(axis, 1))) {
@@ -101,10 +101,10 @@ void constrainToSoftLimits(float* cartesian) {
                 continue;
             }
 
-            if (cartesian[axis] < axisSetting->_softMin) {
-                cartesian[axis] = axisSetting->_softMin;
-            } else if (cartesian[axis] > axisSetting->_softMax) {
-                cartesian[axis] = axisSetting->_softMax;
+            if (cartesian[axis] < limitsMinPosition(axis)) {
+                cartesian[axis] = limitsMinPosition(axis);
+            } else if (cartesian[axis] > limitsMaxPosition(axis)) {
+                cartesian[axis] = limitsMaxPosition(axis);
             } else {
                 continue;
             }
@@ -123,7 +123,8 @@ void limits_soft_check(float* cartesian) {
     auto n_axis = config->_axes->_numberAxis;
 
     for (int axis = 0; axis < n_axis; axis++) {
-        if (axes->_axis[axis]->_softLimits && (cartesian[axis] < axes->_axis[axis]->_softMin || cartesian[axis] > axes->_axis[axis]->_softMax)) {
+        if (axes->_axis[axis]->_softLimits &&
+            (cartesian[axis] < limitsMinPosition(axis) || cartesian[axis] > limitsMaxPosition(axis))) {
             log_info("Soft limit on " << Machine::Axes::_names[axis] << " target:" << cartesian[axis]);
             limit_error = true;
         }
@@ -178,25 +179,24 @@ void limitCheckTask(void* pvParameters) {
 }
 #endif
 
-// Margin of error allowed when checking soft limits in mm
-#define SOFT_LIMITS_ERR 0.5f; 
-
 float limitsMaxPosition(size_t axis) {
-    auto  axisConfig = config->_axes->_axis[axis];
-    auto  homing     = axisConfig->_homing;
-    float mpos       = (homing != nullptr) ? homing->_mpos : 0;
-    auto  maxtravel  = axisConfig->_maxTravel;
-
-    //return (homing == nullptr || homing->_positiveDirection) ? mpos + maxtravel : mpos;
-    return ((homing == nullptr || homing->_positiveDirection) ? mpos : mpos + maxtravel) + SOFT_LIMITS_ERR;
+    auto a = config->_axes->_axis[axis];
+    if (a->_softLimits) {
+        return a->_softMax + SoftLimitTolerance;
+    }
+    auto  homing   = a->_homing;
+    float mpos     = (homing != nullptr) ? homing->_mpos : 0.0f;
+    bool  positive = (homing == nullptr) || homing->_positiveDirection;
+    return (positive ? mpos : mpos + a->_maxTravel) + SoftLimitTolerance;
 }
 
 float limitsMinPosition(size_t axis) {
-    auto  axisConfig = config->_axes->_axis[axis];
-    auto  homing     = axisConfig->_homing;
-    float mpos       = (homing != nullptr) ? homing->_mpos : 0;
-    auto  maxtravel  = axisConfig->_maxTravel;
-
-    //return (homing == nullptr || homing->_positiveDirection) ? mpos : mpos - maxtravel;
-    return ((homing == nullptr || homing->_positiveDirection) ? mpos - maxtravel : mpos) - SOFT_LIMITS_ERR;
+    auto a = config->_axes->_axis[axis];
+    if (a->_softLimits) {
+        return a->_softMin - SoftLimitTolerance;
+    }
+    auto  homing   = a->_homing;
+    float mpos     = (homing != nullptr) ? homing->_mpos : 0.0f;
+    bool  positive = (homing == nullptr) || homing->_positiveDirection;
+    return (positive ? mpos - a->_maxTravel : mpos) - SoftLimitTolerance;
 }

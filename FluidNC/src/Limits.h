@@ -10,6 +10,10 @@
 
 extern bool soft_limit;
 
+// Margin of error in mm applied to soft-limit bounds on read.
+// Stored bounds are raw (user-facing); helpers apply this on the way out.
+inline constexpr float SoftLimitTolerance = 0.5f;
+
 // Initialize the limits module
 void limits_init();
 

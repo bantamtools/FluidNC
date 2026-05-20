@@ -47,15 +47,12 @@ namespace Machine {
         float _rapid_acceleration = _acceleration;
         float _maxTravel    = 1000.0f;
         bool  _softLimits   = false;
-        // Soft-limit runtime state . _softMin / _softMax hold the active
-        // bounds in machine coords; NaN means "cleared." _softLimitsConfig is set
-        // once at boot from the config's soft_limits: true/false choice and MUST
-        // NOT be modified thereafter — Axes::restoreSoftLimitDefaults() re-derives
-        // against it at every M2/M30 and mc_reset, so a write here would silently
-        // change the post-restore state of every subsequent job. The existing
-        // _softLimits field above becomes a live cached boolean:
-        // !isnan(_softMin) && !isnan(_softMax). The hot path reads _softLimits
-        // directly.
+        // Soft-limit runtime state. _softMin / _softMax hold the raw bounds
+        // in machine coords; helpers in Limits.* apply the on-read tolerance.
+        // NaN means "cleared" — required for the re-enable gating in
+        // Axes::setSoftLimitMin/Max. _softLimitsConfig is the immutable boot
+        // value and MUST NOT be modified at runtime. _softLimits is the
+        // live gate that the hot path checks.
         float _softMin           = std::numeric_limits<float>::quiet_NaN();
         float _softMax           = std::numeric_limits<float>::quiet_NaN();
         bool  _softLimitsConfig  = false;

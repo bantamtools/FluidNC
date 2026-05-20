@@ -307,6 +307,7 @@ namespace Machine {
     void Axes::setSoftLimitMin(int axis, float value) {
         if (axis < 0 || axis >= _numberAxis) return;
         auto a = _axis[axis];
+        // value is the user-facing bound; tolerance is applied on read.
         a->_softMin    = value;
         a->_softLimits = !std::isnan(a->_softMin) && !std::isnan(a->_softMax);
         log_info("Media: setSoftLimitMin axis=" << axis << " value=" << value
@@ -316,6 +317,7 @@ namespace Machine {
     void Axes::setSoftLimitMax(int axis, float value) {
         if (axis < 0 || axis >= _numberAxis) return;
         auto a = _axis[axis];
+        // value is the user-facing bound; tolerance is applied on read.
         a->_softMax    = value;
         a->_softLimits = !std::isnan(a->_softMin) && !std::isnan(a->_softMax);
         log_info("Media: setSoftLimitMax axis=" << axis << " value=" << value

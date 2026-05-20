@@ -56,19 +56,16 @@ namespace Machine {
             s.enabled = false;
             return s;
         }
-        // Mirror the existing limitsMinPosition()/limitsMaxPosition() shape so
-        // config-derived bounds match the previous behavior on machines that don't
-        // emit Media* comments. The 0.5 mm tolerance is the historical
-        // SOFT_LIMITS_ERR from Limits.cpp.
-        constexpr float kBootErr = 0.5f;
-        const float     mpos     = (_homing != nullptr) ? _homing->_mpos : 0.0f;
-        const bool      positive = (_homing == nullptr) || _homing->_positiveDirection;
+        // The 0.5 mm tolerance is applied on read by the helpers in
+        // Limits.cpp. Storage is raw.
+        const float mpos     = (_homing != nullptr) ? _homing->_mpos : 0.0f;
+        const bool  positive = (_homing == nullptr) || _homing->_positiveDirection;
         if (positive) {
-            s.min = mpos - _maxTravel - kBootErr;
-            s.max = mpos + kBootErr;
+            s.min = mpos - _maxTravel;
+            s.max = mpos;
         } else {
-            s.min = mpos - kBootErr;
-            s.max = mpos + _maxTravel + kBootErr;
+            s.min = mpos;
+            s.max = mpos + _maxTravel;
         }
         s.enabled = true;
         return s;
