@@ -12,6 +12,8 @@
 
 #include "../Settings.h"
 #include "../Machine/MachineConfig.h"
+#include "../Machine/Homing.h"
+#include "../OLED.h"
 #include "../Configuration/JsonGenerator.h"
 #include "../Uart.h"       // Uart0.baud
 #include "../Report.h"     // git_info
@@ -370,7 +372,8 @@ namespace WebUI {
         return showFile("", parameter, auth_level, out);
     }
 
-    static Error runFile(const char* fs, char* parameter, AuthenticationLevel auth_level, Channel& out) {
+    static Error runFile(const char* fs, char* parameter,
+                         AuthenticationLevel auth_level, Channel& out) {
         Error err;
         if (sys.state == State::Alarm || sys.state == State::ConfigAlarm) {
             log_to(out, "Alarm");
@@ -380,27 +383,42 @@ namespace WebUI {
             log_to(out, "Busy");
             return Error::IdleError;
         }
-        // : strip the completion prefix on $SD/Run — same action-layer
-        // semantic as OLED-initiated runs. WebUI does not auto-home, so
-        // there is no homing branch here; strip immediately before openFile.
-        // Only applies to the SD filesystem; localfs ($LocalFS/Run) is
-        // separate and does not use the completion-marking convention.
+
+        // : strip completion prefix at action layer (SD only).
         std::string stripped_storage;
         const char* path_to_open = parameter;
         if (strcmp(fs, "sd") == 0) {
-            path_to_open = CompletionMark::resolve_with_strip(parameter, stripped_storage);
+            path_to_open = CompletionMark::resolve_with_strip(
+                parameter, stripped_storage);
         }
 
+        // Auto-home before running if unhomed. Restricted to fs=="sd"
+        // because the post-homing observer in OLED::parse_status_report
+        // hardcodes the SD filesystem when reopening the stashed path —
+        // a LocalFS path stashed via the same field would reopen against
+        // SD, finding the wrong file. LocalFS callers take the
+        // immediate-open path.
+        const bool homed   = config->_axes->_homed;
+        const bool canHome = config->_kinematics->canHome(0);
+        const bool eggbot  =
+            config->getMachineType() == Machine::MachineType::EggBot;
+        if (strcmp(fs, "sd") == 0 && !homed && canHome && !eggbot) {
+            log_info("Auto-home before remote file run: " << path_to_open);
+            config->_oled->set_file_awaiting_homing(path_to_open);
+            config->_oled->popup_msg("Homing before file run...", 0);
+            Machine::Homing::run_cycles(Machine::Homing::AllCycles);
+            return Error::Ok;
+        }
+
+        // Immediate-open path — homed, can't home, EggBot, or LocalFS.
+        // openFile() handles empty-parameter validation, leading-slash
+        // normalization, and try/catch around the InputFile constructor.
         InputFile* theFile;
-        if ((err = openFile(fs, const_cast<char*>(path_to_open), auth_level, out, theFile)) != Error::Ok) {
+        if ((err = openFile(fs, const_cast<char*>(path_to_open),
+                            auth_level, out, theFile)) != Error::Ok) {
             return err;
         }
-        // for unclear reasons, setting menu var here crashes. Setting from InputFile object instead.
-        //config->_oled->_menu->set_completed_file(parameter); // store run file path
-
         allChannels.registration(theFile);
-
-        //report_realtime_status(out);
         return Error::Ok;
     }
 
