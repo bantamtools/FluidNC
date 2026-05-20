@@ -347,7 +347,13 @@ static void gcode_comment_msg(char* comment) {
 
             // Media{X,Y}{Min,Max,Off}: soft-limit configuration. See  and
             // docs/coordinate-system.md §5.
-            if (text[1] == 'e' && text[2] == 'd' && text[3] == 'i' && text[4] == 'a') {
+            //
+            // Temporarily disabled via `if (0)`: the whole (MediaX*/MediaY*)
+            // family is skipped and each is treated as an ordinary ignored
+            // comment. To re-enable, delete the `if (0)` line and uncomment the
+            // original guard below.
+            // if (text[1] == 'e' && text[2] == 'd' && text[3] == 'i' && text[4] == 'a') {
+            if (0) {
                 char axis_char = text[5];
                 int  axis_idx  = (axis_char == 'X') ? X_AXIS
                                : (axis_char == 'Y') ? Y_AXIS
