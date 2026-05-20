@@ -24,7 +24,7 @@ enum class Override : uint8_t {
 // NOTE: Modal group values must be sequential and starting from zero.
 
 enum class ModalGroup : uint8_t {
-    MG0  = 0,   // [G4,G10,G28,G28.1,G30,G30.1,G53,G92,G92.1] Non-modal
+    MG0  = 0,   // [G4,G10,G28,G28.1,G28.3,G30,G30.1,G53,G92,G92.1] Non-modal
     MG1  = 1,   // [G0,G1,G2,G3,G38.2,G38.3,G38.4,G38.5,G80] Motion
     MG2  = 2,   // [G17,G18,G19] Plane selection
     MG3  = 3,   // [G90,G91] Distance mode
@@ -63,6 +63,7 @@ enum class NonModal : uint8_t {
     AbsoluteOverride      = 53,   // G53 (Do not alter value)
     SetCoordinateOffset   = 92,   // G92 (Do not alter value)
     ResetCoordinateOffset = 102,  //G92.1 (Do not alter value)
+    SetMachinePosition    = 58,   // G28.3 (Do not alter value)
 };
 
 // Modal Group G1: Motion modes

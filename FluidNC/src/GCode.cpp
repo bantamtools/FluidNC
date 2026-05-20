@@ -15,6 +15,7 @@
 #include "Machine/UserOutputs.h"  // setAnalogPercent
 #include "Platform.h"             // WEAK_LINK
 #include "Planner.h"              // plan_sync_position
+#include "System.h"               // set_motor_steps_from_mpos
 
 #include "Machine/MachineConfig.h"
 
@@ -677,6 +678,16 @@ Error gc_execute_line(char* line) {
                         break;
 
                     case 28:
+                        if (mantissa == 30) {  // G28.3 — set machine position without motion.
+                            gc_block.non_modal_command = NonModal::SetMachinePosition;
+                            if (axis_command != AxisCommand::None) {
+                                FAIL(Error::GcodeAxisCommandConflict);
+                            }
+                            axis_command = AxisCommand::NonModal;
+                            mantissa     = 0;          // mark as valid non-integer G command
+                            mg_word_bit  = ModalGroup::MG0;
+                            break;
+                        }
                         gc_block.non_modal_command = mantissa ? NonModal::SetHome0 : NonModal::GoHome0;
                         goto check_mantissa;
                     case 30:
@@ -1492,7 +1503,10 @@ Error gc_execute_line(char* line) {
                         } else {
                             // Update specified value according to distance mode or ignore if absolute override is active.
                             // NOTE: G53 is never active with G28/30 since they are in the same modal group.
-                            if (gc_block.non_modal_command != NonModal::AbsoluteOverride) {
+                            // G28.3 also bypasses this pass: its values are raw G53 machine coordinates,
+                            // not subject to WCS / G92 / distance-mode interpretation.
+                            if (gc_block.non_modal_command != NonModal::AbsoluteOverride
+                                && gc_block.non_modal_command != NonModal::SetMachinePosition) {
                                 // Apply coordinate offsets based on distance mode.
                                 if (gc_block.modal.distance == Distance::Absolute) {
                                     gc_block.values.xyz[idx] += block_coord_system[idx] + gc_state.coord_offset[idx];
@@ -1543,6 +1557,13 @@ Error gc_execute_line(char* line) {
                 case NonModal::SetHome1:  // G30.1
                     // [G28.1/30.1 Errors]: Cutter compensation is enabled.
                     // NOTE: If axis words are passed here, they are interpreted as an implicit motion mode.
+                    break;
+                case NonModal::SetMachinePosition:  // G28.3
+                    // [G28.3 Errors]: axis words are required — the command exists to
+                    // assert per-axis values at the current physical position.
+                    if (!axis_words) {
+                        FAIL(Error::GcodeNoAxisWords);
+                    }
                     break;
                 case NonModal::ResetCoordinateOffset:
                     // NOTE: If axis words are passed here, they are interpreted as an implicit motion mode.
@@ -2053,6 +2074,56 @@ Error gc_execute_line(char* line) {
             coords[CoordIndex::G30]->set(gc_state.position);
             gc_ngc_changed(CoordIndex::G30);
             break;
+        case NonModal::SetMachinePosition: {  // G28.3
+            // Update gc_state.position for each axis named in the block, then
+            // write the resulting mpos into the motor step counters and snap
+            // the parser's and planner's position vectors to match. No motion
+            // is enqueued and no motion is halted.
+            //
+            // Precondition: no motion may be in flight on the axes named in
+            // this block. The firmware does NOT enforce this — calling G28.3
+            // with named-axis motion in flight is undefined behavior and will
+            // corrupt machine state. Generators are responsible for ensuring
+            // the precondition holds.
+            //
+            // Two safe emission patterns:
+            //
+            //   1. M0 / G28.3 — operator-gated. M0's executor calls
+            //      protocol_buffer_synchronize() before entering pause, so
+            //      the planner is fully drained by the time the operator
+            //      presses resume and the next line (G28.3) is parsed.
+            //
+            //   2. G4 P0.x / G28.3 — automated workflows. G4 enqueues a
+            //      C-axis dwell segment rather than draining the planner;
+            //      this is safe ONLY because on this firmware C is reserved
+            //      for G4 dwell timing, is unwired, and has no user-facing
+            //      consumers. G28.3 must never name C (would race with the
+            //      in-flight dwell and may hang the stepper task). XYZAB
+            //      are the only legal G28.3 axes.
+            //
+            // M2 / M30 and spindle/coolant state changes also drain via
+            // protocol_buffer_synchronize() but carry side effects that
+            // typically make them inappropriate as pure sync barriers.
+            //
+            // See issue.
+            auto n_axis = config->_axes->_numberAxis;
+            for (size_t axis = 0; axis < n_axis; ++axis) {
+                if (bitnum_is_true(axis_words, axis)) {
+                    gc_state.position[axis] = gc_block.values.xyz[axis];
+                }
+            }
+            set_motor_steps_from_mpos(gc_state.position);
+            // Snap the parser's and planner's position vectors to the
+            // freshly-written motor counters. Same pattern as homing
+            // (Machine/Homing.cpp) and axis unwinding — without these,
+            // the planner's pl.position stays stale and the next motion
+            // command will compute an incorrect delta and lurch.
+            gc_sync_position();
+            plan_sync_position();
+            gc_wco_changed();  // mpos shifted; cached work-coord reads must
+                               // invalidate even though WCO itself is unchanged.
+            break;
+        }
         case NonModal::SetCoordinateOffset:
             copyAxes(gc_state.coord_offset, gc_block.values.xyz);
             gc_ngc_changed(CoordIndex::G92);
