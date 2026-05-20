@@ -1433,10 +1433,6 @@ static void protocol_do_enter() {
         if (millis() >= threshold) {
             // Long press - Cancel
             log_info("Cancel requested during hold");
-            // Only mark as unhomed if the machine has real homing capability
-            if (config->_axes->hasRealHomingCycles()) {
-                config->_axes->set_unhomed();
-            }
             protocol_send_event(&resetEvent);
         } else {
             // Short press - Resume
