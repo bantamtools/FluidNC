@@ -30,6 +30,10 @@ static bool  jog_target_dirty = false;
 static uint32_t jog_last_tick_ms = 0;
 static State jog_prev_sys_state = State::Idle;
 static char  jog_active_axis = '\0';  // Track which axis is being jogged
+// True while a jog the OLED issued is still executing — emitted, but the machine
+// has not yet completed the Jog->Idle cycle. Blocks the idle resync from snapping
+// jog_target to a not-yet-updated mpos while our own command is in flight.
+static bool  jog_in_flight = false;
 
 // Bantam Tools logo (XBM format)
 static uint8_t bantam_logo_bits[] PROGMEM = {
@@ -247,6 +251,7 @@ void OLED::set_jog_state(JogState state) {
         jog_target_initialized = false;
         jog_target_dirty = false;
         jog_active_axis = '\0';
+        jog_in_flight = false;
         _jog_cmd_ready = false;
         memset(_jog_prev_val, 0, sizeof(_jog_prev_val));
         _jog_full_redraw_ms = 0;  // Force full redraw on first update
@@ -256,6 +261,7 @@ void OLED::set_jog_state(JogState state) {
         // move finish naturally (no jog cancel)
         _jog_cmd_ready = false;
         jog_target_dirty = false;
+        jog_in_flight = false;
     }
     jog_state = state;
 }
@@ -439,6 +445,10 @@ Channel* OLED::pollLine(char* line) {
                          axis_char, jog_target[axis_index], JOG_FEEDRATE);
                 _jog_cmd_ready = true;
                 jog_target_dirty = false;
+                // In flight only when this command will actually move the machine.
+                // A no-op (e.g. clamped at a limit) leaves it clear so the resync
+                // stays available.
+                jog_in_flight = fabsf(jog_target[axis_index] - get_mpos()[axis_index]) > 0.05f;
             }
         }
     }
@@ -450,9 +460,14 @@ Channel* OLED::pollLine(char* line) {
         bool user_quiet = (now - jog_last_tick_ms >= 100);
         bool machine_idle = (sys.state == State::Idle);
 
-        if (user_quiet && machine_idle) {
+        if (user_quiet && machine_idle && !jog_in_flight) {
             memcpy(jog_target, get_mpos(), sizeof(float) * MAX_N_AXIS);
         }
+    }
+
+    // A jog we issued has landed once the machine returns to Idle from Jog.
+    if (jog_in_flight && jog_prev_sys_state == State::Jog && sys.state == State::Idle) {
+        jog_in_flight = false;
     }
 
     // Track state transitions for idle detection

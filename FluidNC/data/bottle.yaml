@@ -1,0 +1,199 @@
+name: "Bottle Plotter"
+board: "Serama Hen D"
+meta: "0.0.18" 
+
+planner_blocks: 16
+
+start:
+  must_home: false
+
+control:
+  enter_pin: gpio.36:low
+  long_press_ms: 1000
+
+# Stepper UART
+uart1:
+  txd_pin: gpio.43
+  rxd_pin: gpio.44
+  baud: 115200
+  mode: 8N1
+
+stepping:
+  engine: TIMED
+  idle_ms: 255
+  dir_delay_us: 1
+  pulse_us: 4
+  disable_delay_us: 1
+
+parking:
+  enable: true
+  axis: Z
+  pullout_distance_mm: 0
+  pullout_rate_mm_per_min: 1000
+  target_mpos_mm: 0
+  rate_mm_per_min: 2000
+  park_on_feedhold: true
+
+axes:
+  shared_stepper_disable_pin: NO_PIN
+  shared_stepper_reset_pin: NO_PIN
+
+
+  # X: 40 mm per revolution (20 teeth @ 2 mm pitch)
+  # With 16 X microstepping, that's 3200 steps/rev
+  #   3200 steps / 40 mm = 80 steps/mm.
+  # Running in coolstep mode for cooler motor, at the cost
+  #  of higher noise level.
+  x:
+    steps_per_mm: 80
+    max_rate_mm_per_min: 10000
+    acceleration_mm_per_sec2: 2000
+    rapid_acceleration_mm_per_sec2: 5000
+    max_travel_mm: 348
+    soft_limits: false
+    homing:
+      cycle: 2
+      mpos_mm: 348
+      positive_direction: true
+      feed_mm_per_min: 4000
+      seek_mm_per_min: 4000
+
+    motor0:
+      limit_pos_pin: gpio.3:high:pu
+      pulloff_mm: 2
+      tmc_2209:
+        uart_num: 1
+        addr: 0
+        r_sense_ohms: 0.100
+        run_amps: 0.500
+        hold_amps: 0.500
+        microsteps: 16
+        stallguard: 0
+        stallguard_debug: false
+        toff_disable: 0
+        toff_stealthchop: 5
+        toff_coolstep: 3
+        run_mode: CoolStep
+        homing_mode: StealthChop
+        use_enable: true
+        direction_pin: gpio.16:low
+        step_pin: gpio.17
+        disable_pin: gpio.15:high
+    motor1:
+      null_motor:
+
+  a:
+    # 8 microsteps * 200 steps/rev = 1600 steps per motor revolution.
+    # 4:1 gearing with belt drive -> 6400 steps per bottle revolution.
+    # Using "mm as degrees", 6400 steps / 360 mm = 17.777...
+    steps_per_mm: 17.7777777778
+    max_rate_mm_per_min: 7200
+    # 7200: 20 revolutions per minute; one rev every 3 seconds.
+    acceleration_mm_per_sec2: 10000
+    rapid_acceleration_mm_per_sec2: 2000
+    max_travel_mm: 360
+    unwind_g0: 360
+    soft_limits: false
+    homing:
+      cycle: -1
+      mpos_mm: 0
+
+    motor0:
+      tmc_2209:
+        uart_num: 1
+        addr: 1
+        r_sense_ohms: 0.100
+        run_amps: 0.500
+        hold_amps: 0.500
+        microsteps: 8
+        stallguard: 0
+        stallguard_debug: false
+        toff_disable: 0
+        toff_stealthchop: 5
+        toff_coolstep: 3
+        run_mode: StealthChop
+        homing_mode: StealthChop
+        use_enable: true
+        direction_pin: gpio.21:low
+        step_pin: gpio.26
+        disable_pin: gpio.18:high
+    motor1:
+      null_motor:
+
+  z:
+    steps_per_mm: 40
+    max_rate_mm_per_min: 10000
+    acceleration_mm_per_sec2: 2000
+    rapid_acceleration_mm_per_sec2: 5000
+    max_travel_mm: 46.5
+    soft_limits: false
+    homing:
+      cycle: 1
+      mpos_mm: 46.5
+      positive_direction: true
+      feed_mm_per_min: 1600
+      seek_mm_per_min: 1600
+      
+    motor0:
+      limit_pos_pin: gpio.4:high:pu
+      pulloff_mm: 1
+      tmc_2209:
+        uart_num: 1
+        addr: 2
+        r_sense_ohms: 0.100
+        run_amps: 0.500
+        hold_amps: 0.500
+        microsteps: 8
+        stallguard: 0
+        stallguard_debug: false
+        toff_disable: 0
+        toff_stealthchop: 5
+        toff_coolstep: 3
+        run_mode: StealthChop
+        homing_mode: StealthChop
+        use_enable: true
+        direction_pin: gpio.33:high
+        step_pin: gpio.34
+        disable_pin: gpio.47:high
+    motor1:
+      null_motor:
+
+
+# OLED
+i2c0:
+   sda_pin: gpio.41
+   scl_pin: gpio.40
+   frequency: 400000
+        
+oled:
+   i2c_num: 0
+   i2c_address: 60
+   width: 128
+   height: 64
+   radio_delay_ms: 2000
+
+# Encoder
+encoder:
+  a_pin: gpio.35
+  b_pin: gpio.48
+  old_scroll_behavior: true  # Optional, defaults to false  
+
+# Configure SD card in SDMMC mode
+sdcard:
+ frequency_hz: 3500000
+ width: 4
+ clk_pin: gpio.10
+ cmd_pin: gpio.9
+ d0_pin: gpio.8
+ d1_pin: gpio.7
+ d2_pin: gpio.13
+ d3_pin: gpio.12
+ cd_pin: gpio.14
+
+macros:
+  startup_line0: G90&G1X0F5000
+  startup_line1:
+  macro0:
+  macro1:
+  macro2:
+  macro3:
