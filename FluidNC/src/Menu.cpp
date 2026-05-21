@@ -3,6 +3,7 @@
 #include "Machine/MachineConfig.h"
 #include "SettingsDefinitions.h"   // : completion_marking
 #include "WebUI/WifiConfig.h"
+#include <cstring>  // strrchr
 #include <Esp.h>
 #include <WiFi.h>
 
@@ -822,8 +823,14 @@ void Menu::set_recent_file(char *path, bool from_upload) {
 
 // Store path and filename of file we're running
 void Menu::set_completed_file(const char *path) {
+    if (!path) {
+        path = "";
+    }
     _completed_file_path = path;
-    _completed_file_name = strrchr(path, '/') + 1;
+    // strrchr returns nullptr when there is no '/'; fall back to the whole
+    // path as the name rather than dereferencing nullptr + 1.
+    const char* slash    = strrchr(path, '/');
+    _completed_file_name = slash ? slash + 1 : path;
     log_info("Completed path set to " << path);
 }
 void Menu::set_completed_file_from_recent() {

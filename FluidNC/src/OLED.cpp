@@ -4,6 +4,8 @@
 #include "WebUI/WifiConfig.h"  // wifi_config.Hostname()
 #include "Protocol.h"          // protocol_send_event, feedHoldEvent, cycleStartEvent, pollingPaused
 #include "System.h"    // For sys.parkingInProgress access
+#include "InputFile.h"  // InputFile (post-homing file reopen)
+#include "Error.h"      // Error (InputFile constructor throws)
 #include <cmath>       // ceilf, floorf
 #include <cstdio>      // snprintf
 #include <cstring>     // memcpy, memset
@@ -1915,11 +1917,25 @@ void OLED::parse_status_report() {
             log_info("Detected successful homing completion");
             if(_file_awaiting_homing.length() != 0) {
                 clear_popup(); // clear homing before run message
-                log_info("Running file after homing: " << _file_awaiting_homing);
-                _menu->set_completed_file(_file_awaiting_homing.c_str()); // store run file path
-                InputFile *infile = new InputFile("sd", _file_awaiting_homing.c_str(), WebUI::AuthenticationLevel::LEVEL_ADMIN, allChannels);
-                allChannels.registration(infile);
+                // The auto-home stash bypasses WebSettings openFile(), which
+                // normalizes a leading slash and guards the InputFile
+                // constructor. Apply the same handling here so a slash-less
+                // path neither reopens the wrong file nor escapes as an
+                // unhandled exception.
+                std::string run_path = _file_awaiting_homing;
+                if (run_path[0] != '/') {
+                    run_path = "/" + run_path;
+                }
                 _file_awaiting_homing = "";
+                log_info("Running file after homing: " << run_path);
+                _menu->set_completed_file(run_path.c_str()); // store run file path
+                try {
+                    InputFile* infile = new InputFile(
+                        "sd", run_path.c_str(), WebUI::AuthenticationLevel::LEVEL_ADMIN, allChannels);
+                    allChannels.registration(infile);
+                } catch (Error err) {
+                    show_error("Could not open file after homing.");
+                }
             }
         } else {
             log_info("Detected unsuccessful homing");
