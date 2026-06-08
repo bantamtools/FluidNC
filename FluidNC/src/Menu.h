@@ -1,6 +1,9 @@
 #pragma once
 
 #include "List.h"
+#include "SDFiles/SDFileTable.h"
+#include "SDFiles/SDBrowser.h"
+#include <string>
 
 extern const char* git_info_short;
 
@@ -9,7 +12,10 @@ class Menu : public List {
 private:
 
     ListType *_main_menu, *_files_menu, *_jogging_menu, *_rss_menu, *_settings_menu, *_version_menu, *_run_menu, *_postrun_menu, *_current_menu, *_firmware_menu, *_config_menu, *_confirm_menu, *_homing_choice_menu, *_wifi_info_menu, *_next_file_ordering_menu;
-    ListType* _saved_directory_menu;  // Pointer to directory where file was selected
+    sdfiles::SDFileTable _sd_table;
+    sdfiles::SDBrowser _sd_browser;
+    bool               _sd_browse_active = false;
+    char               _sd_title_buf[sdfiles::kMaxNameLen + 1];
     std::string _recent_file_path;
     std::string _recent_file_name;
     bool _recent_file_is_new_upload;
@@ -26,6 +32,12 @@ public:
 
     Menu();
     ~Menu();
+
+    sdfiles::SDFileTable& sd_table() { return _sd_table; }
+    const sdfiles::SDFileTable& sd_table() const { return _sd_table; }
+    sdfiles::SDBrowser& sd_browser() { return _sd_browser; }
+    bool sd_browse_active() const { return _sd_browse_active; }
+    void set_sd_browse_active(bool active) { _sd_browse_active = active; }
 
     bool is_files_menu();
     bool is_rss_menu();
@@ -54,14 +66,6 @@ public:
     void prep_for_sd_update();
     void finish_sd_update();
 
-    // : rename a single file menu entry in place after an on-disk
-    // rename. Walks the file tree to find the entry whose path matches
-    // old_path, then shifts the basename within the existing buffer
-    // (the buffer was sized at scan time with extra slack for the
-    // completion prefix). Returns true if found and updated.
-    // Best-effort — if the entry isn't found, caller logs and proceeds.
-    bool rename_sd_file_entry(const char *old_path, const char *new_path);
-
     // Remove a single file entry from the cached menu by exact path
     // match. Returns true if found and removed; false otherwise.
     // Walks recursively into submenus. Empty parent submenus are left
@@ -83,14 +87,31 @@ public:
     std::string get_completed_file_path() { return _completed_file_path; }
     std::string get_completed_file_name() { return _completed_file_name; }
     void set_completed_file_from_recent();
+
+    // Render-ready end-of-job state, computed from the arena marks at call time.
+    struct PostrunState {
+        bool        show_run_next;    // true => three-icon layout
+        bool        folder_complete;  // true => show "All files complete!"
+        std::string next_name;        // basename of the next file (empty if none)
+        std::string next_path;        // base-relative path of the next file (for launch)
+    };
+    // Resolves the just-run file (get_completed_file_path) to its arena entry, then asks
+    // NextRunFile for the next target and completion state. Safe when marking is disabled
+    // or the file cannot be resolved (returns show_run_next = false).
+    PostrunState compute_postrun_state();
     void set_last_file_succeeded(bool success) { _last_file_succeeded = success; }
     bool get_last_file_succeeded() { return _last_file_succeeded; }
     void return_to_run_menu();
     void go_to_postrun_menu();
-    void go_to_files_menu();
+    // Rebuilds the postrun menu entries to match next-file availability and sets the
+    // default highlight. Call on postrun entry and after a HOLD-skip changes the next file.
+    void rebuild_postrun_menu();
     void go_to_homing_choice_menu();
-    void save_current_directory();
-    void go_to_saved_directory();
+    // Re-activates SD arena browsing anchored at the files menu without
+    // resetting the browser's current directory. The browser's current
+    // directory persists across a file run, so this resumes the view where
+    // the user left off.
+    void resume_sd_browse();
     bool is_descendant_of(ListType* menu, ListType* ancestor);
     bool is_in_files_hierarchy();
     void update_selection(int max_active_entries, int enc_diff);

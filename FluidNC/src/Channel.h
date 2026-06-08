@@ -22,6 +22,8 @@
 #include <Stream.h>
 #include <freertos/FreeRTOS.h>  // TickType_T
 #include <queue>
+#include <atomic>
+#include <cstdint>
 
 class Channel : public Stream {
 public:
@@ -56,6 +58,15 @@ protected:
     // would cause a double-free when the kill queue is drained.
     bool _killed = false;
 
+    // Number of queued output messages (LogMessage) that still hold a raw
+    // pointer to this channel and have not yet been delivered. The output
+    // pipeline in Protocol.cpp increments it when a message is queued and
+    // decrements it after the message is delivered or dropped. AllChannels
+    // ::pollLine() will not free a killed channel while this is nonzero, so
+    // the output task never delivers a message to a freed channel. Touched
+    // from the producer, output, and polling tasks, hence atomic.
+    std::atomic<int32_t> _pendingOut { 0 };
+
 public:
     // Accessor used by AllChannels::kill() to make enqueue idempotent.
     bool setKilled() {
@@ -65,6 +76,14 @@ public:
         _killed = true;
         return true;
     }
+
+    // Output-queue reference accounting. Increment when a LogMessage that
+    // points at this channel is queued; decrement once it has been delivered
+    // or dropped. pendingOut() reports whether any queued message still
+    // references this channel.
+    void    pendingOutInc() { _pendingOut.fetch_add(1, std::memory_order_acq_rel); }
+    void    pendingOutDec() { _pendingOut.fetch_sub(1, std::memory_order_acq_rel); }
+    int32_t pendingOut() const { return _pendingOut.load(std::memory_order_acquire); }
 
     Channel(const char* name, bool addCR = false) : _name(name), _linelen(0), _addCR(addCR) {}
     virtual ~Channel() = default;

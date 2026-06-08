@@ -10,11 +10,19 @@
 #include "Driver/sdmmc.h"
 #include "src/Config.h"
 #include "../src/SDMenuEvents.h"
+#include "src/SDFiles/SDScan.h"
+#include "src/SDFiles/SDFileTable.h"
+#include "src/SDFiles/MenuSortConfig.h"
+#include "src/SDFiles/FsTime.h"
 
 #include <unordered_set>
 #include <filesystem>
 #include <system_error>
 #include <cstring>
+#include <cstdio>
+#include <chrono>
+#include <cstdint>
+#include <mutex>
 
 #ifdef USE_SDMMC
 
@@ -27,6 +35,12 @@ static const std::unordered_set<std::string>allowed_config_ext({".yaml"});
 
 static bool sd_is_mounted = false;
 static uint32_t _freq_hz = 20000000;
+
+// Tracks physical card presence as reported by the card-detect pin.
+// True means a card is physically seated; false means absent.
+// Updated by sd_set_card_present() when a card-detect pin is configured.
+// Remains true (permissive) on boards with no card-detect pin.
+static bool sd_cd_pin_present = true;
 
 static esp_err_t mount_to_vfs_fat(int max_files, sdmmc_card_t* card, uint8_t pdrv, const char* base_path) {
     FATFS*    fs = NULL;
@@ -125,6 +139,15 @@ std::error_code sd_mount(int max_files) {
         return std::error_code(ESP_OK, std::system_category());
     }
 
+    // When a card-detect pin is configured and reports no card, skip the
+    // blocking mount call — esp_vfs_fat_sdmmc_mount() hangs indefinitely
+    // when no card is present. Boards with no card-detect pin leave
+    // sd_cd_pin_present true, so this guard never fires for them.
+    if (!sd_cd_pin_present) {
+        log_info("sd_mount: no card detected, skipping mount");
+        return std::error_code(ESP_ERR_NOT_FOUND, std::system_category());
+    }
+
     // Mount SD card
     err = esp_vfs_fat_sdmmc_mount(base_path, &host_config, &slot_config, &mount_config, &card);
 
@@ -169,11 +192,55 @@ bool sd_card_is_present() {
     return sd_is_mounted;
 }
 
+// Called by CardDetectPin::update() to record physical card presence.
+// Only boards with a card-detect pin call this; on boards without one,
+// sd_cd_pin_present stays true and sd_mount() always attempts the mount.
+void sd_set_card_present(bool present) {
+    sd_cd_pin_present = present;
+}
+
+// Returns the last-write-time of full_path as a mtime sort key, or 0 on error.
+static uint32_t mtime_for_path(const char* full_path) {
+    std::error_code ec;
+    auto t = std::filesystem::last_write_time(full_path, ec);
+    return ec ? 0 : sdfiles::toMtimeSeconds(t);
+}
+
+// Opens the SD browser for `cls` on menu `m`. If the resulting list is empty
+// (only the Back row), shows the appropriate "no files" popup instead of
+// activating the browser. Mirrors Menu::enter_submenu()'s empty-list handling
+// so both code paths stay consistent.
+static void sd_reopen_browser(Menu* m, sdfiles::FileClass cls) {
+    m->sd_browser().open(cls);
+    size_t row_count;
+    {
+        std::lock_guard<std::recursive_mutex> lk(m->sd_table().mutex());
+        row_count = m->sd_browser().rowCount(m->sd_table());
+    }
+    if (row_count == 1) {
+        // Only the Back row — nothing to browse.
+        const char* empty_msg;
+        if (!sd_card_is_present()) {
+            empty_msg = "No microSD Card";
+        } else if (cls == sdfiles::FileClass::Firmware) {
+            empty_msg = "No firmware files\non microSD Card";
+        } else if (cls == sdfiles::FileClass::Config) {
+            empty_msg = "No config files\non microSD Card";
+        } else {
+            empty_msg = "No G-code files\non microSD Card";
+        }
+        log_info("No files of the selected type on SD");
+        config->_oled->popup_msg(empty_msg, 0, true, OLED::PopupLevel::Status);
+        // Leave _sd_browse_active false — don't enter an empty list view.
+    } else {
+        m->set_sd_browse_active(true);
+    }
+}
+
 void sd_populate_files_menu() {
     std::error_code ec;
     const std::filesystem::path fpath{base_path};
     char file_ext[LIST_NAME_MAX_PATH];
-    char file_path[LIST_NAME_MAX_PATH];
     std::filesystem::file_time_type most_recent_time; // inits to zero epoch? May be platform dependent tho...
     char recent_file_path[LIST_NAME_MAX_PATH];
     recent_file_path[0] = '\0';
@@ -191,13 +258,32 @@ void sd_populate_files_menu() {
 
     log_info("Populating Files Menu");
 
+    // One lock for the whole rebuild: the arena reset + disk scan + rebuildIndex must be
+    // atomic against the other core's readers. Recursive mutex -- the progress popups and
+    // the trailing refresh_display() below re-enter via show_menu(). This holds the lock
+    // across the (seconds-long) scan, briefly freezing the scroll-render; accepted for the
+    // rare card-insert / boot / rename-fallback paths.
+    std::lock_guard<std::recursive_mutex> lk(config->_oled->_menu->sd_table().mutex());
+
     // Clear the file list to start
     config->_oled->_menu->prep_for_sd_update();
 
     // Only scan if card is actually mounted
     if (!sd_is_mounted) {
         log_info("SD card not mounted, skipping file scan");
+        // Capture whether the user was actively browsing an SD list before
+        // clearing that state, so removal-while-browsing can show a popup.
+        bool was_browsing = config->_oled->_menu->sd_browse_active();
+        // Clear the arena and reset browser state so the OLED shows an
+        // empty, safe list rather than stale entries from before removal.
+        config->_oled->_menu->sd_table().reset();
+        config->_oled->_menu->sd_browser().resetToRoot();
+        config->_oled->_menu->set_sd_browse_active(false);
         config->_oled->_menu->finish_sd_update();
+        // Inform the user when a card is removed while they are browsing.
+        if (was_browsing) {
+            config->_oled->popup_msg("No microSD Card", 0, true, OLED::PopupLevel::Status);
+        }
         config->_oled->refresh_display(true);
         return;
     }
@@ -206,6 +292,10 @@ void sd_populate_files_menu() {
     if (sd_is_mounted) {
         log_info("SD is mounted");
         try {
+            // The arena is the sole source of SD content. Reset here; rebuildIndex
+            // once after the loop.
+            config->_oled->_menu->sd_table().reset();
+
             // Iterate through the top level directory
             auto iter = std::filesystem::recursive_directory_iterator { fpath, ec };
             if (!ec) {
@@ -223,6 +313,15 @@ void sd_populate_files_menu() {
                         continue; // Skip cond
                     }
 
+                    if (dir_entry.is_directory()) {
+                        std::string full_path  = dir_entry.path().string();
+                        std::string short_path = full_path.substr(strlen(base_path));
+                        sdfiles::SDScan::addScannedEntry(
+                            config->_oled->_menu->sd_table(),
+                            short_path.c_str(), /*isDir=*/true, /*mtime=*/0,
+                            sdfiles::FileClass::Gcode);  // class don't-care for dirs
+                    }
+
                     // Get the file extension and convert to lowercase
                     std::string extension = dir_entry.path().extension().string();
                     std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
@@ -234,8 +333,15 @@ void sd_populate_files_menu() {
                         std::string full_path = dir_entry.path().string();
                         std::string short_path = full_path.substr(strlen(base_path));
 
-                        strncpy(file_path, short_path.c_str(), LIST_NAME_MAX_PATH);
-                        added = config->_oled->_menu->add_sd_file(file_path, false); // Flag for adding G-code file
+                        uint32_t mtime = 0;
+                        try { mtime = sdfiles::toMtimeSeconds(dir_entry.last_write_time()); } catch (...) {}
+
+                        // The arena accept/reject decides whether this file counts
+                        // toward the menu, recent-file tracking, and progress popups.
+                        added = sdfiles::SDScan::addScannedEntry(
+                            config->_oled->_menu->sd_table(),
+                            short_path.c_str(), /*isDir=*/false, mtime,
+                            sdfiles::FileClass::Gcode);
                         if (added) {
                             file_count++;
                         }
@@ -254,32 +360,23 @@ void sd_populate_files_menu() {
                             }
                         }
 
-                        // Log heap status and check memory limit every 20 files
+                        // Log free heap every 20 files for diagnostics. File entries live
+                        // in the fixed arena, so loading does not consume heap per file
+                        // (free heap stays flat across a scan) -- the arena full() check
+                        // below is the real, heap-independent bound. No heap watchdog: a
+                        // free-heap threshold here only reflected the baseline (WiFi + the
+                        // arena), not the scan, so it spuriously truncated the list when
+                        // WiFi left less than the threshold free.
                         if (file_count % 20 == 0) {
-                            uint32_t current_heap = ESP.getFreeHeap();
-                            log_info("Files read: " << file_count << ", Heap: " << current_heap << " bytes");
+                            log_info("Files read: " << file_count
+                                     << ", Heap: " << ESP.getFreeHeap() << " bytes");
 
                             // Show loading progress (starting at 40 files)
                             if (file_count > 39) {
                                 char msg[55];
                                 snprintf(msg, sizeof(msg), "microSD Card:\nReading %d files...", file_count);
-                                config->_oled->popup_msg(msg, 0);
+                                config->_oled->popup_msg(msg, 0, true, OLED::PopupLevel::Status);
                                 config->_oled->processDisplayRefresh(); // Force display update
-                            }
-
-                            // Stop if heap drops below safe threshold (50 kB)
-                            // WiFi stack is already allocated by scan time;
-                            // 50 kB reserves room for HTTP/telnet transients,
-                            // RSS fetches, filesystem iterators, FreeRTOS overhead,
-                            // and heap fragmentation from many small file entries.
-                            if (current_heap < 50000) {
-                                log_warn("Memory limit reached: " << file_count << " files read; stopping scan (heap: " << current_heap << " bytes)");
-                                config->_oled->clear_popup();  // Clear loading message first
-                                char msg[55];
-                                snprintf(msg, sizeof(msg), "File limit reached:\nRead %d files from microSD.", file_count);
-                                config->_oled->popup_msg(msg, 0);
-                                limit_reached = true;
-                                break;
                             }
                         }
                     }
@@ -289,8 +386,12 @@ void sd_populate_files_menu() {
                         std::string full_path = dir_entry.path().string();
                         std::string short_path = full_path.substr(strlen(base_path));
 
-                        strncpy(file_path, short_path.c_str(), LIST_NAME_MAX_PATH);
-                        if (config->_oled->_menu->add_sd_file(file_path, true)) { // Flag for adding binary file
+                        uint32_t mtime = 0;
+                        try { mtime = sdfiles::toMtimeSeconds(dir_entry.last_write_time()); } catch (...) {}
+                        if (sdfiles::SDScan::addScannedEntry(
+                                config->_oled->_menu->sd_table(),
+                                short_path.c_str(), /*isDir=*/false, mtime,
+                                sdfiles::FileClass::Firmware)) {
                             file_count++;
                         }
                         //SAVE CONFIG PATH TO CONFIG
@@ -301,19 +402,36 @@ void sd_populate_files_menu() {
                         std::string full_path = dir_entry.path().string();
                         std::string short_path = full_path.substr(strlen(base_path));
 
-                        strncpy(file_path, short_path.c_str(), LIST_NAME_MAX_PATH);
-                        if (config->_oled->_menu->add_sd_file(file_path, false, true)) { // Flag for adding config file
+                        uint32_t mtime = 0;
+                        try { mtime = sdfiles::toMtimeSeconds(dir_entry.last_write_time()); } catch (...) {}
+                        if (sdfiles::SDScan::addScannedEntry(
+                                config->_oled->_menu->sd_table(),
+                                short_path.c_str(), /*isDir=*/false, mtime,
+                                sdfiles::FileClass::Config)) {
                             file_count++;
                         }
+                    }
+
+                    // Stop once the arena can hold no more entries. Further adds are
+                    // rejected, so file_count freezes and the other stop conditions never
+                    // fire; breaking here avoids grinding the rest of the card.
+                    if (config->_oled->_menu->sd_table().full()) {
+                        log_warn("Arena capacity reached: " << file_count << " files; stopping scan");
+                        config->_oled->clear_popup(OLED::PopupLevel::Status);
+                        char msg[55];
+                        snprintf(msg, sizeof(msg), "File limit reached:\nRead %d files from microSD.", file_count);
+                        config->_oled->popup_msg(msg, 0, true, OLED::PopupLevel::Status);
+                        limit_reached = true;
+                        break;
                     }
 
                     // Check if we've reached the absolute file limit
                     if (file_count >= MAX_SD_FILES) {
                         log_warn("Absolute file limit reached: " << file_count << " files read, stopping scan");
-                        config->_oled->clear_popup();  // Clear loading message first
+                        config->_oled->clear_popup(OLED::PopupLevel::Status);  // Clear loading message first
                         char msg[55];
                         snprintf(msg, sizeof(msg), "File limit reached:\nRead %d files from microSD.", file_count);
-                        config->_oled->popup_msg(msg, 0);
+                        config->_oled->popup_msg(msg, 0, true, OLED::PopupLevel::Status);
                         limit_reached = true;
                         break;
                     }
@@ -325,6 +443,31 @@ void sd_populate_files_menu() {
                     config->_oled->_menu->set_recent_file(recent_file_path);
                 } else {
                     log_info("No Files Detected on SD");
+                }
+
+                // Sort the freshly-populated arena using the configured sort mode.
+                config->_oled->_menu->sd_table().rebuildIndex(sdfiles::menuSortMode());
+
+                // A full rescan reassigned EntryIds, so the browser's currentDir must
+                // reset to root (its class filter is preserved).
+                config->_oled->_menu->sd_browser().resetToRoot();
+
+                // Clear any stale popup (e.g. "No microSD Card" from a prior
+                // removal) so the freshly-populated list is shown immediately.
+                // Re-open the browser for whichever SD class menu the user is
+                // sitting on, so inserting a card while the list is empty (or
+                // while a no-card popup is up) shows the populated list rather
+                // than leaving the view empty or stuck on the popup.
+                config->_oled->clear_popup(OLED::PopupLevel::Status);
+                {
+                    auto* m = config->_oled->_menu;
+                    if (m->is_files_menu()) {
+                        sd_reopen_browser(m, sdfiles::FileClass::Gcode);
+                    } else if (m->is_firmware_menu()) {
+                        sd_reopen_browser(m, sdfiles::FileClass::Firmware);
+                    } else if (m->is_config_menu()) {
+                        sd_reopen_browser(m, sdfiles::FileClass::Config);
+                    }
                 }
 
             }
@@ -349,7 +492,7 @@ void sd_populate_files_menu() {
 
     // Clear loading progress message (unless we hit a limit or error and are showing that message)
     if (!limit_reached && !scan_error) {
-        config->_oled->clear_popup();
+        config->_oled->clear_popup(OLED::PopupLevel::Status);
     }
 
     // Log final memory usage after all files loaded
@@ -368,21 +511,14 @@ void sd_populate_files_menu() {
 // _firmware_menu, config (.yaml) -> _config_menu. Anything outside
 // those classes is filtered (no menu entry to add or remove).
 
-// Map a FileClass to add_sd_file's (isBin, isCfg) flag pair.
-// Mirrors the dispatch in sd_populate_files_menu above.
-static bool add_sd_file_for_class(SDMenuEvents::FileClass cls,
-                                  char* path) {
-    using SDMenuEvents::FileClass;
+// Map the event classifier's FileClass to the arena's FileClass. Called only with a
+// menu-eligible class (the event functions return early on FileClass::None).
+static sdfiles::FileClass to_arena_class(SDMenuEvents::FileClass cls) {
     switch (cls) {
-        case FileClass::Gcode:
-            return config->_oled->_menu->add_sd_file(path, false, false);
-        case FileClass::Bin:
-            return config->_oled->_menu->add_sd_file(path, true,  false);
-        case FileClass::Cfg:
-            return config->_oled->_menu->add_sd_file(path, false, true);
-        case FileClass::None:
-        default:
-            return false;
+        case SDMenuEvents::FileClass::Bin: return sdfiles::FileClass::Firmware;
+        case SDMenuEvents::FileClass::Cfg: return sdfiles::FileClass::Config;
+        case SDMenuEvents::FileClass::Gcode:
+        default:                           return sdfiles::FileClass::Gcode;
     }
 }
 
@@ -398,23 +534,19 @@ void sd_files_added(const char* full_path) {
     }
     auto cls = SDMenuEvents::classify_extension(ext);
     if (cls == SDMenuEvents::FileClass::None) return;
-    // Idempotency: defend against overwrite-uploads producing a
-    // duplicate cache entry. add_sd_file itself does not check
-    // whether the path is already present; it always appends.
-    // remove_sd_file_entry returns false harmlessly if not found,
-    // and walks all three SD menus so it works regardless of class.
-    config->_oled->_menu->remove_sd_file_entry(relative);
-    // add_sd_file takes char*, so make a mutable copy.
-    char buf[LIST_NAME_MAX_PATH];
-    strncpy(buf, relative, LIST_NAME_MAX_PATH);
-    buf[LIST_NAME_MAX_PATH - 1] = '\0';
-    if (!add_sd_file_for_class(cls, buf)) {
-        // Hidden file (basename starts with `.`) or path-buffer
-        // alloc failure. Both are recoverable for the menu cache --
-        // hidden files are intentionally not shown, and an alloc
-        // failure would surface in the populate path too.
-        log_info("sd_files_added: skipped insert for " << full_path);
-        return;
+    // Upsert into the arena. addOrReplaceEntry is idempotent (overwrite-uploads
+    // do not produce duplicates) and rejects hidden dotfiles internally. mtime is
+    // read from the filesystem so date-based sort orders reflect the actual file
+    // timestamp. A rejection (hidden file or full arena) skips the resort/refresh below.
+    {
+        std::lock_guard<std::recursive_mutex> lk(config->_oled->_menu->sd_table().mutex());
+        if (!sdfiles::SDScan::addOrReplaceEntry(config->_oled->_menu->sd_table(), relative,
+                                                /*isDir=*/false, mtime_for_path(full_path),
+                                                to_arena_class(cls))) {
+            log_info("sd_files_added: skipped insert for " << full_path);
+            return;
+        }
+        config->_oled->_menu->sd_table().rebuildIndex(sdfiles::menuSortMode());
     }
     config->_oled->refresh_display(true);
 }
@@ -425,15 +557,20 @@ void sd_files_removed(const char* full_path, bool was_directory) {
     const char* relative = SDMenuEvents::strip_sd_prefix(full_path);
     if (relative == nullptr) return;
     if (relative[0] == '\0') return;
-    if (was_directory) {
-        int n = config->_oled->_menu->remove_sd_subtree(relative);
-        log_info("sd_files_removed (dir): " << full_path
-                 << " removed " << n << " entries");
-    } else {
-        if (!config->_oled->_menu->remove_sd_file_entry(relative)) {
-            log_warn("sd_files_removed: not in cache: " << full_path);
-            return;
+    {
+        std::lock_guard<std::recursive_mutex> lk(config->_oled->_menu->sd_table().mutex());
+        if (was_directory) {
+            sdfiles::SDScan::removeSubtreeByPath(config->_oled->_menu->sd_table(), relative);
+            log_info("sd_files_removed (dir): " << full_path);
+        } else {
+            if (!sdfiles::SDScan::removeEntryByPath(config->_oled->_menu->sd_table(), relative)) {
+                log_warn("sd_files_removed: not in cache: " << full_path);
+                return;
+            }
         }
+        // rebuildIndex runs only on a successful file removal; a directory removal always
+        // proceeds to resort the view.
+        config->_oled->_menu->sd_table().rebuildIndex(sdfiles::menuSortMode());
     }
     config->_oled->refresh_display(true);
 }
@@ -462,32 +599,33 @@ void sd_files_renamed(const char* old_full_path, const char* new_full_path) {
     const char* old_rel = SDMenuEvents::strip_sd_prefix(old_full_path);
     const char* new_rel = SDMenuEvents::strip_sd_prefix(new_full_path);
     if (old_rel == nullptr || new_rel == nullptr) return;
-    config->_oled->_menu->remove_sd_file_entry(old_rel);
-    config->_oled->_menu->remove_sd_file_entry(new_rel); // overwrite case
-    // Classify the new path so we add to the right menu (rename
-    // can change the class, e.g. .gcode -> .yaml). If the new name
-    // is not menu-eligible, skip the add and accept the resulting
-    // disappearance from the menu -- on-disk state is the source
-    // of truth, and old_rel is already removed.
+    // Classify the new path (pure, no arena access) so we add to the right menu --
+    // a rename can change the class (.gcode -> .yaml). A non-eligible new name skips
+    // the add: on-disk state is the source of truth, and old_rel is removed regardless.
     char ext[16];
     SDMenuEvents::FileClass cls = SDMenuEvents::FileClass::None;
     if (SDMenuEvents::extract_lower_extension(new_rel, ext, sizeof(ext))) {
         cls = SDMenuEvents::classify_extension(ext);
     }
-    if (cls == SDMenuEvents::FileClass::None) {
-        log_info("sd_files_renamed: new name not menu-eligible: "
-                 << new_full_path);
-        config->_oled->refresh_display(true);
-        return;
-    }
-    char buf[LIST_NAME_MAX_PATH];
-    strncpy(buf, new_rel, LIST_NAME_MAX_PATH);
-    buf[LIST_NAME_MAX_PATH - 1] = '\0';
-    if (!add_sd_file_for_class(cls, buf)) {
-        // Hidden basename or alloc failure; same handling as
-        // sd_files_added.
-        log_info("sd_files_renamed: skipped insert for "
-                 << new_full_path);
+    {
+        std::lock_guard<std::recursive_mutex> lk(config->_oled->_menu->sd_table().mutex());
+        // Remove both the old path and the new path (overwrite case) from the arena.
+        sdfiles::SDScan::removeEntryByPath(config->_oled->_menu->sd_table(), old_rel);
+        sdfiles::SDScan::removeEntryByPath(config->_oled->_menu->sd_table(), new_rel);
+        if (cls == SDMenuEvents::FileClass::None) {
+            log_info("sd_files_renamed: new name not menu-eligible: " << new_full_path);
+        } else {
+            // Add the new path. addOrReplaceEntry rejects hidden dotfiles internally;
+            // on rejection old_rel is already removed (drops a rename-to-hidden). mtime
+            // comes from the new path; FatFS does not update the timestamp on rename.
+            bool added = sdfiles::SDScan::addOrReplaceEntry(config->_oled->_menu->sd_table(), new_rel,
+                                                            /*isDir=*/false, mtime_for_path(new_full_path),
+                                                            to_arena_class(cls));
+            if (!added) {
+                log_info("sd_files_renamed: arena rejected new name (hidden or full): " << new_full_path);
+            }
+        }
+        config->_oled->_menu->sd_table().rebuildIndex(sdfiles::menuSortMode());
     }
     config->_oled->refresh_display(true);
 }

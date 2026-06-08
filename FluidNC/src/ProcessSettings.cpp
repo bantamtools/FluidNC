@@ -29,6 +29,7 @@
 #else
 #include "Driver/sdspi.h"         // sd_populate_files_menu()
 #endif
+#include "SDMenuEvents.h"          // sd_files_added()
 
 #include "FluidPath.h"
 #include "HashFS.h"
@@ -36,6 +37,7 @@
 #include <cstring>
 #include <map>
 #include <filesystem>
+#include <string>
 
 // WG Readable and writable as guest
 // WU Readable and writable as user and admin
@@ -643,7 +645,16 @@ static Error xmodem_receive(const char* value, WebUI::AuthenticationLevel auth_l
         config->_oled->setBusy(BusyReason::FileUpload);
     }
 
-    delay_ms(1000);
+    // Quiesce the output pipeline before the byte-exact XModem transfer .
+    // A just-completed `$h` leaves a burst of broadcast log/status output that
+    // output_loop is still flushing; flushing it (and its per-broadcast OLED
+    // I2C render) concurrently with the transfer races on the shared USB channel
+    // and crashes the firmware ("crash on Studio upload"). pollingPaused above
+    // stops new autoreports; drain_messages() then waits until output_loop has
+    // emptied the queue. The fixed delay_ms(1000) alone was not enough against a
+    // homing-sized backlog.
+    drain_messages();
+    delay_ms(1000);  // Delay for FluidTerm to handle command echoing
     int size = xmodemReceive(&out, outfile);
 
     // Clear busy screen
@@ -662,9 +673,21 @@ static Error xmodem_receive(const char* value, WebUI::AuthenticationLevel auth_l
     delete outfile;
     HashFS::rehash_file(fname);
 
-    // Refresh SD card file list if the file was written to SD
+    // Incrementally refresh the SD file menu if the file was written to SD,
+    // unifying with the WiFi/HTTP upload path (avoids the full-rescan freeze).
     if (strncmp(value, "/sd/", 4) == 0) {
-        sd_populate_files_menu();
+        sd_files_added(value);
+        // Mirror the WiFi/HTTP path: flag the uploaded file as the recent
+        // (new-upload) file, unless it is a config (.yaml).
+        if (config && config->_oled) {
+            std::string vpath = value;
+            if (!(vpath.size() > 4 && vpath.substr(vpath.size() - 4) == "yaml")) {
+                char recent_file_path[LIST_NAME_MAX_PATH];
+                strncpy(recent_file_path, vpath.erase(0, 3).c_str(), LIST_NAME_MAX_PATH);
+                recent_file_path[LIST_NAME_MAX_PATH - 1] = '\0';
+                config->_oled->_menu->set_recent_file(recent_file_path, true);
+            }
+        }
     }
 
     return size < 0 ? Error::UploadFailed : Error::Ok;

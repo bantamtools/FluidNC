@@ -44,6 +44,14 @@ enum class BusyStage : uint8_t {
 class OLED : public Channel, public Configuration::Configurable {
 public:
 
+    // Popup priority. A new popup displaces the one on screen only if its level
+    // is >= the current popup's (equal = last-wins, so same-level popups update
+    // each other; lower resists and is dropped). Critical popups are forced
+    // persistent (never auto-clear). Default is Normal; only ambient background
+    // status (SD scan / card state / network) opts down to Status so it can never
+    // eat a foreground message.
+    enum class PopupLevel { Status, Normal, Critical };
+
     struct Layout {
         uint8_t                    _x;
         uint8_t                    _y;
@@ -102,6 +110,7 @@ private: // AIDAN
 	bool _startupConfigWarning = false;
 
     bool _popup = false;
+    PopupLevel _popup_level = PopupLevel::Normal;  // priority of the popup on screen
 
     // BusyScreen state machine
     volatile BusyReason _busy_reason = BusyReason::None;  // volatile: written by WebServer task
@@ -175,6 +184,7 @@ private: // AIDAN
     void show_all(float *axes, bool isMpos, bool *limits);
 
     void draw_checkbox(int16_t x, int16_t y, int16_t width, int16_t height, bool checked);
+    void draw_postrun_icon(int x, bool selected, const uint8_t* bits);
 
     void wrapped_draw_string(int16_t y, const std::string& s, font_t font, bool setFont = true);
     void truncated_draw_string(int16_t y, const std::string& s, font_t font);
@@ -219,7 +229,8 @@ public:
     void refresh_display(bool menu_only = false);
     void processDisplayRefresh();  // Process deferred display updates
     void clear();
-    void popup_msg(const std::string& msg, int dly = 2000, bool preserve_header = true);
+    void popup_msg(const std::string& msg, int dly = 2000, bool preserve_header = true,
+                   PopupLevel level = PopupLevel::Normal);
     JogState get_jog_state();
     void set_jog_state(JogState);
     bool is_active();
@@ -231,6 +242,10 @@ public:
 	void show_postrun_layout(int highlight = 1);
 
 	void clear_popup();
+	// Scoped dismiss: clears the popup only if its level is <= max_level, so the
+	// background SD/network layer can drop its own status popup without wiping a
+	// foreground (Normal/Critical) message.
+	void clear_popup(PopupLevel max_level);
 	bool showing_popup() { return _popup; }
 
 	// Drop any pending encoder rotation accumulated in _enc_diff.

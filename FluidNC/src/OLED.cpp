@@ -6,11 +6,14 @@
 #include "System.h"    // For sys.parkingInProgress access
 #include "InputFile.h"  // InputFile (post-homing file reopen)
 #include "Error.h"      // Error (InputFile constructor throws)
+#include "SDFiles/SDFileTable.h"
+#include "SDFiles/SDBrowser.h"
 #include <cmath>       // ceilf, floorf
 #include <cstdio>      // snprintf
 #include <cstring>     // memcpy, memset
 #include <string>      // std::string
 #include <vector>      // std::vector — split_to_width / popup_msg
+#include <mutex>       // std::unique_lock — arena lock across the SD render
 #include "WebUI/WebServer.h"   // WebUI::Web_Server::getUploadBytesReceived(), getUploadTotalSize()
 #include "xmodem.h"            // xmodem_bytes_received
 
@@ -640,16 +643,37 @@ void OLED::show_menu() {
         _oled->setColor(WHITE);
     }
 
+    // Hold the arena lock across the selection update AND the row draw so the SD
+    // list cannot be rebuilt from the other core mid-render. Recursive mutex:
+    // clear_popup()->refresh_display()->show_menu() can re-enter from a write path.
+    // Released before the I2C flush below so display() does not run under the lock.
+    std::unique_lock<std::recursive_mutex> arenaLock(_menu->sd_table().mutex());
+
+    // Re-anchor the SD cursor to the current table before applying input or drawing,
+    // so a list mutated from another task (upload/delete/rename/card events) doesn't
+    // leave the highlight on the wrong file.
+    if (_menu->sd_browse_active()) {
+        _menu->sd_browser().reconcile(_menu->sd_table(), menu_max_active_entries);
+    }
+
     // Update the menu selection if not jogging
     if (jog_state == JogState::Idle) {
         // for old encoders, scroll on every tick; for new ones, every other tick
         //  (newer encoders send two transitions per tick)
         if (config->_encoder->_old_scroll_behavior) {
-            _menu->update_selection(menu_max_active_entries, _enc_diff);
+            if (_menu->sd_browse_active()) {
+                _menu->sd_browser().moveSelection(_menu->sd_table(), _enc_diff, menu_max_active_entries);
+            } else {
+                _menu->update_selection(menu_max_active_entries, _enc_diff);
+            }
             _enc_diff = 0; // Reset to prevent multiple scrolls
         } else {
             if (encoder_scroll_count > 0) {
-                _menu->update_selection(menu_max_active_entries, _enc_diff);
+                if (_menu->sd_browse_active()) {
+                    _menu->sd_browser().moveSelection(_menu->sd_table(), _enc_diff, menu_max_active_entries);
+                } else {
+                    _menu->update_selection(menu_max_active_entries, _enc_diff);
+                }
                 _enc_diff = 0; // Reset to prevent multiple scrolls
                 encoder_scroll_count = 0;
             } else {
@@ -658,6 +682,46 @@ void OLED::show_menu() {
         }
     }
 
+    if (_menu->sd_browse_active()) {
+        const sdfiles::SDFileTable& t = _menu->sd_table();
+        sdfiles::SDBrowser& b = _menu->sd_browser();
+        uint16_t top  = b.scrollTop();
+        uint16_t rows = b.rowCount(t);
+        for (int i = 0; i < menu_max_active_entries; ++i) {
+            uint16_t row = static_cast<uint16_t>(top + i);
+            if (row >= rows) break;
+            bool sel = (row == b.selected());
+            (sel) ? _oled->setColor(WHITE) : _oled->setColor(BLACK);
+            _oled->fillRect(0, _header_height + (menu_height * i) + 1, menu_width, menu_height);
+            (sel) ? _oled->setColor(BLACK) : _oled->setColor(WHITE);
+
+            char label[sdfiles::kCompletionPrefixLen + sdfiles::kMaxNameLen + 1];
+            if (sdfiles::SDBrowser::isBackRow(row)) {
+                std::snprintf(label, sizeof(label), "%s", BACK_LABEL);
+            } else {
+                sdfiles::EntryId id = b.entryAtRow(t, row);
+                size_t off = 0;
+                if (id != sdfiles::kInvalidEntry && t.isCompleted(id)) {
+                    std::memcpy(label, sdfiles::kCompletionPrefix, sdfiles::kCompletionPrefixLen);
+                    off = sdfiles::kCompletionPrefixLen;
+                }
+                if (id != sdfiles::kInvalidEntry) {
+                    t.copyName(id, label + off, sizeof(label) - off);
+                    // Mark directories with a trailing '/' to distinguish them from files.
+                    if (t.isDir(id)) {
+                        size_t len = std::strlen(label);
+                        if (len + 1 < sizeof(label)) {
+                            label[len]     = '/';
+                            label[len + 1] = '\0';
+                        }
+                    }
+                } else {
+                    label[off] = '\0';
+                }
+            }
+            truncated_draw_string(_header_height + (menu_height * i), label, DejaVu_Sans_10);
+        }
+    } else {
     // Traverse the list and print out each menu entry name
     ListNodeType *entry = _menu->get_active_head(); // Start at the beginning of the active window
     int i = 0;
@@ -675,6 +739,8 @@ void OLED::show_menu() {
         entry = entry->next;
         i++;
     }
+    }
+    arenaLock.unlock();  // arena reads are done; keep the I2C flush out of the lock
     _oled->display();
     _oled->setColor(WHITE); // if last entry was highlighted this could've been left on black, which is unexpected
     _enc_scroll_lockout = false;  // Unlock scrolling to use menu (if needed)
@@ -1109,14 +1175,11 @@ void OLED::show_radio_info() {
 }
 
 void OLED::show_error(std::string msg) {
-
-    // Clear anything left in error message area
-    clearContentAreaFast();
-
-    // Draw message
-    //truncated_draw_string(_header_height, msg, DejaVu_Sans_10);
-    wrapped_draw_string(_header_height, msg, DejaVu_Sans_10);
-    _oled->display();    
+    // Route errors through the unified popup path at Critical priority: persistent
+    // (never auto-clears) and not displaceable by lower-priority popups, so a
+    // must-see error participates in the popup lifecycle (preemption, clear_popup)
+    // rather than the prior stateless draw that the next render could paint over.
+    popup_msg(msg, 0, /*preserve_header=*/true, PopupLevel::Critical);
 }
 
 void OLED::show_all(float *axes, bool isMpos, bool *limits) {
@@ -1357,60 +1420,89 @@ void OLED::show_run_layout(int hightlight) {  // run menu
     _oled->display();
 }
 
-void OLED::show_postrun_layout(int hightlight) {  // run menu
-    log_info("Show postrun layout");
+void OLED::draw_postrun_icon(int x, bool selected, const uint8_t* bits) {
+    // Draws a 24x24 icon at (x,20); when selected, renders it inverse-video
+    // inside a 28x28 highlight box at (x-2,18).
+    if (selected) {
+        _oled->fillRect(x - 2, 18, 28, 28);
+        _oled->setColor(BLACK);
+        _oled->drawXbm(x, 20, 24, 24, bits);
+        _oled->setColor(WHITE);
+    } else {
+        _oled->drawXbm(x, 20, 24, 24, bits);
+    }
+}
+
+void OLED::show_postrun_layout(int highlight) {
     // _saved_run_time is latched by commit_elapsed_time(), invoked from the
     // set_file_job_running(true->false) transition before this menu becomes
     // routable. This function is a pure reader.
-    // clear entire screen and set text state
+    Menu::PostrunState state = _menu->compute_postrun_state();
+
     clearScreenFast();
     _oled->setTextAlignment(TEXT_ALIGN_LEFT);
     _oled->setFont(DejaVu_Sans_10);
-    // top text
-    // get selected menu text
-    ListNodeType *entry = _menu->get_active_head();
+
+    // Find the highlighted entry's label by walking the active window.
+    ListNodeType* entry = _menu->get_active_head();
+    const char* selected_label = nullptr;
     int i = 0;
     while (entry && entry->display_name && i < 4) {
-        if (entry->selected) {
-            if (strcmp(entry->display_name, BACK_LABEL) == 0) { // special case, override
-                if (_menu->get_last_file_succeeded() ) {
-                    // calc previous run time
-                    char completed_msg[24];
-                    snprintf(completed_msg, 24, "Completed in: %02d:%02d:%02d", 
-                        (_saved_run_time / 3600),          // hours
-                        ((_saved_run_time % 3600) / 60),   // minutes
-                        ((_saved_run_time % 3600) % 60));  // seconds
-                    show_state_text(completed_msg);
-                } else {
-                    show_state_text("Plot Cancelled");
-                }
-            } else {
-                show_state_text(entry->display_name);
-            }
-        }
+        if (entry->selected) { selected_label = entry->display_name; }
         entry = entry->next;
         i++;
     }
-    // two icons
-    if (hightlight == 1) {
-        _oled->fillRect(18, 18, 28, 28);
-        _oled->setColor(BLACK);
-        _oled->drawXbm(20, 20, 24, 24, left_icon_bits);
-        _oled->setColor(WHITE);
-    } else {
-        _oled->drawXbm(20, 20, 24, 24, left_icon_bits);
-    }
-    if (hightlight == 2) {
-        _oled->fillRect(82, 18, 28, 28);
-        _oled->setColor(BLACK);
-        _oled->drawXbm(84, 20, 24, 24, draw_icon_bits);
-        _oled->setColor(WHITE);
-    } else {
-        _oled->drawXbm(84, 20, 24, 24, draw_icon_bits);
+    bool back_selected = selected_label && strcmp(selected_label, BACK_LABEL) == 0;
+    bool next_selected = selected_label &&
+                         strcmp(selected_label, "Run Next (HOLD to skip)") == 0;
+    bool run_again_selected = selected_label && strcmp(selected_label, "Run Again") == 0;
+
+    // Top line: Back shows the run outcome WITH elapsed time (latched for both success
+    // and cancel). After a cancel, Run Again's label also carries the "Canceled" status,
+    // so it stays visible when Run Again is the cancel-default highlight (no room for a
+    // separate status line). Other entries show their own label.
+    if (back_selected) {
+        char run_time_msg[24];
+        snprintf(run_time_msg, 24, "%s %02d:%02d:%02d",
+            _menu->get_last_file_succeeded() ? "Completed in:" : "Canceled at",
+            (_saved_run_time / 3600),
+            ((_saved_run_time % 3600) / 60),
+            ((_saved_run_time % 3600) % 60));
+        show_state_text(run_time_msg);
+    } else if (run_again_selected && !_menu->get_last_file_succeeded()) {
+        show_state_text("Canceled. Restart file?");
+    } else if (selected_label) {
+        show_state_text(selected_label);
     }
 
-    // bottom text : most recent file name
-    show(bottomTextLayout, _menu->get_completed_file_name());
+    // Icons: three-up when a next file is available, two-up otherwise.
+    if (state.show_run_next) {
+        draw_postrun_icon(10,  highlight == 1, left_icon_bits);
+        draw_postrun_icon(52,  highlight == 2, draw_icon_bits);
+        draw_postrun_icon(94,  highlight == 3, draw_again_icon_bits);
+    } else {
+        draw_postrun_icon(20,  highlight == 1, left_icon_bits);
+        draw_postrun_icon(84,  highlight == 2, draw_again_icon_bits);
+    }
+
+    // Bottom line: Run Next -> next file; Back -> "All files complete!" when the folder is
+    // done, else "Return to file list" (the filename serves no purpose on Back); Run Again
+    // -> the just-run file (there it's useful — the file that would be restarted).
+    if (next_selected) {
+        show(bottomTextLayout, state.next_name.c_str());
+    } else if (back_selected) {
+        if (state.folder_complete) {
+            // Centered celebratory message on the done screen.
+            _oled->setFont(DejaVu_Sans_10);
+            _oled->setTextAlignment(TEXT_ALIGN_CENTER);
+            _oled->drawString(_width / 2, 52, "All files complete!");
+            _oled->setTextAlignment(TEXT_ALIGN_LEFT);
+        } else {
+            show(bottomTextLayout, "Return to file list");
+        }
+    } else {
+        show(bottomTextLayout, _menu->get_completed_file_name());
+    }
 
     drawWifiDisconnectX();
     _oled->display();
@@ -1486,7 +1578,7 @@ void OLED::processDisplayRefresh() {
     }
 }
 
-void OLED::popup_msg(const std::string& msg, int dly, bool preserve_header) {
+void OLED::popup_msg(const std::string& msg, int dly, bool preserve_header, PopupLevel level) {
     // Unified popup display . One function for all transient and
     // persistent popups; replaces the prior popup_msg + show_persistent_msg
     // pair. Centered horizontally, line block centered vertically.
@@ -1509,7 +1601,19 @@ void OLED::popup_msg(const std::string& msg, int dly, bool preserve_header) {
     //   repaint produces a partial-restore artifact).
     // preserve_header == false: clearScreenFast (full-screen wipe).
     //   Use when explicit visual emphasis is needed.
-    _popup = true;
+    //
+    // level (default Normal): a lower-priority popup never displaces a higher-
+    //   priority one already on screen; an equal level updates in place (e.g. the
+    //   SD "Reading N files..." progress counter). Critical is forced persistent
+    //   so a must-see message cannot silently auto-clear.
+    if (_popup && level < _popup_level) {
+        return;
+    }
+    if (level == PopupLevel::Critical) {
+        dly = 0;
+    }
+    _popup       = true;
+    _popup_level = level;
 
     // Split on '\n' into raw lines (preserve empty lines).
     std::vector<std::string> raw;
@@ -1550,17 +1654,14 @@ void OLED::popup_msg(const std::string& msg, int dly, bool preserve_header) {
             y = content_y;
         }
     } else {
-        // Anchor text in the content area (rows 16-63) even though the
-        // wipe is full-screen. show_state() doesn't check _popup, so its
-        // status-report-driven clearHeaderWithSeparator() repaints rows
-        // 0-15 within milliseconds and clips any popup text there. The
-        // full-screen wipe still produces a brief takeover frame; text
-        // just doesn't fight the header for the same pixels.
-        constexpr int content_y = 16;
-        constexpr int content_h = 48;
-        y = content_y + (content_h - block_h) / 2;
-        if (y < content_y) {
-            y = content_y;
+        // Full-screen wipe: center over the whole 64px panel so a short popup sits at
+        // true vertical center instead of low in the content area. Never start above
+        // row 16, though — show_state() (DRO-style screens) can repaint rows 0-15 and
+        // clip text there. The only current preserve_header=false caller is the postrun
+        // skip toast, where show_state does not run, so the clamp is purely defensive.
+        y = (64 - block_h) / 2;
+        if (y < 16) {
+            y = 16;
         }
     }
 
@@ -1601,8 +1702,17 @@ void OLED::clear_popup() {
     log_info("OLED clear popup called");
     _popup_deadline_ms = 0;  // explicit clear supersedes pending auto-clear
     _popup = false;
+    _popup_level = PopupLevel::Normal;
     _error = false;
     refresh_display();
+}
+
+void OLED::clear_popup(PopupLevel max_level) {
+    // Dismiss only if the current popup is at or below max_level, so the background
+    // SD/network layer can drop its own status popup without wiping a foreground one.
+    if (_popup && _popup_level <= max_level) {
+        clear_popup();
+    }
 }
 
 // --- BusyScreen implementation ---

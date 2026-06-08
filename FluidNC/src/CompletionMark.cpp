@@ -5,6 +5,7 @@
 #include <cstring>
 #include <exception>
 #include <filesystem>
+#include <mutex>
 #include <string>
 
 #include "FluidPath.h"
@@ -12,6 +13,9 @@
 #include "Machine/MachineConfig.h"  // config->_oled->_menu for menu state sync
 #include "Menu.h"
 #include "OLED.h"
+#include "SDFiles/MenuSortConfig.h"  // sdfiles::menuSortMode()
+#include "SDFiles/SDFileTable.h"     // sd_table().mutex() — arena lock
+#include "SDFiles/SDScan.h"          // sdfiles::SDScan::applyCompletionTransition
 #include "SettingsDefinitions.h"
 
 namespace CompletionMark {
@@ -135,28 +139,31 @@ static const char* strip_sd_prefix(const char* p) {
     return p + 3;
 }
 
-// After a successful on-disk rename, propagate the change into the
-// in-memory file menu so the file browser shows the new name without a
-// re-scan. Best-effort — if the entry isn't in the menu (file added
-// outside our scan path, menu rebuilt mid-flight, etc.), log and
-// continue. The disk is the source of truth.
-static void sync_menu_after_rename(const char* old_path, const char* new_path) {
+// After a successful on-disk rename, propagates the completion state change into the
+// arena (SDFileTable). `source_path` is the pre-rename fully-qualified path;
+// `dest_path` is the post-rename path.
+//
+// When a same-canonical twin is collapsed, the sorted index changes, so rebuildIndex
+// and a full repaint are triggered. When only the completed bit flips (no removal),
+// the sort position is unchanged and no rebuild is needed.
+static void sync_menu_after_transition(const char* source_path,
+                                       const char*  dest_path) {
     if (config == nullptr || config->_oled == nullptr || config->_oled->_menu == nullptr) {
         return;
     }
-    // FileStream::path() returns the fully-qualified canonical form
-    // (e.g. "/sd/foo.gcode") via FluidPath, but the menu cache keys
-    // entries by base_path-relative form ("/foo.gcode"). Strip the
-    // mount prefix before the lookup so the strcmp in
-    // Menu::rename_sd_file_entry actually matches. Without this
-    // strip the lookup silently fails and the menu never reflects
-    // the rename until the next full populate. (Issue.)
-    const char* old_rel = strip_sd_prefix(old_path);
-    const char* new_rel = strip_sd_prefix(new_path);
-    if (!config->_oled->_menu->rename_sd_file_entry(old_rel, new_rel)) {
-        log_info("CompletionMark: menu entry not found for " << old_path
-                 << " (renamed on disk to " << new_path
-                 << "); browser will reflect the change on next scan");
+    const char* source_rel = strip_sd_prefix(source_path);
+    const char* dest_rel   = strip_sd_prefix(dest_path);
+    bool indexChanged;
+    {
+        std::lock_guard<std::recursive_mutex> lk(config->_oled->_menu->sd_table().mutex());
+        indexChanged = sdfiles::SDScan::applyCompletionTransition(
+            config->_oled->_menu->sd_table(), source_rel, dest_rel);
+        if (indexChanged) {
+            config->_oled->_menu->sd_table().rebuildIndex(sdfiles::menuSortMode());
+        }
+    }
+    if (indexChanged) {
+        config->_oled->refresh_display(true);
     }
 }
 
@@ -171,7 +178,7 @@ Error mark_completed(const char* path) {
     }
     Error e = rename_with_clobber(path, marked.c_str());
     if (e == Error::Ok) {
-        sync_menu_after_rename(path, marked.c_str());
+        sync_menu_after_transition(path, marked.c_str());
     }
     return e;
 }
@@ -193,7 +200,7 @@ Error unmark_completed(const char* path) {
     }
     Error e = rename_with_clobber(path, unmarked.c_str());
     if (e == Error::Ok) {
-        sync_menu_after_rename(path, unmarked.c_str());
+        sync_menu_after_transition(path, unmarked.c_str());
     }
     return e;
 }

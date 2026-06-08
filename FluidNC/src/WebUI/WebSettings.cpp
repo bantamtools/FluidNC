@@ -28,6 +28,7 @@
 #include "src/HashFS.h"
 
 #include <cstring>
+#include <filesystem>
 #include <sstream>
 #include <iomanip>
 
@@ -335,6 +336,9 @@ namespace WebUI {
 
         try {
             theFile = new InputFile(fs, path.c_str(), auth_level, out);
+        } catch (const std::filesystem::filesystem_error&) {
+            log_to(out, "SD card not present or failed to mount");
+            return Error::FsFailedMount;
         } catch (Error err) { return err; }
         return Error::Ok;
     }

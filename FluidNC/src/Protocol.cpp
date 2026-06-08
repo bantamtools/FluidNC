@@ -10,6 +10,7 @@
 #include "Protocol.h"
 #include "CompletionMark.h"  // : strip-on-start helper
 #include "Config.h"
+#include "Error.h"
 #include "Event.h"
 #include "Menu.h"
 
@@ -28,12 +29,16 @@
 #include "WebUI/RSSReader.h"
 #include "WebUI/WifiConfig.h"
 #include "SSD1306_I2C.h"  // synchronous OLED flush before reboot
+#include "SDFiles/SDFileTable.h"  // sd_table().mutex() — arena lock for the run-file path
+#include "SDFiles/SDBrowser.h"    // SDBrowser::activate
 #ifdef ENABLE_WIFI
 #    include <WiFi.h>
 #endif
 
+#include <filesystem>
 #include <string>
 #include <cstring>  // strcmp
+#include <mutex>    // std::unique_lock — arena lock across activate -> path copy-out
 
 // External function for config recovery
 extern void copyRecoveryConfigAndRestart();
@@ -141,6 +146,85 @@ struct LogMessage {
     bool     isString;
 };
 
+// Count of messages dropped because the output queue stayed full past the
+// bounded enqueue wait. Nonzero means a channel was not draining (e.g. the host
+// stopped reading); the data is discarded rather than wedging the producer.
+static uint32_t messages_dropped = 0;
+
+// Deliver one queued message to its channel, reclaiming a heap string payload.
+static void deliver_message(const LogMessage& msg) {
+    if (msg.channel) {
+        if (msg.isString) {
+            std::string* s = static_cast<std::string*>(msg.line);
+            if (s) {
+                msg.channel->println(s->c_str());
+            }
+            delete s;
+        } else {
+            const char* cp = static_cast<const char*>(msg.line);
+            if (cp) {
+                msg.channel->println(cp);
+            }
+        }
+        // Release the reference taken in enqueue_message AFTER the last use of
+        // msg.channel above. While this is nonzero the kill-drain defers
+        // freeing the channel, so a delivery in progress keeps the channel
+        // alive for its whole duration.
+        msg.channel->pendingOutDec();
+    } else if (msg.isString) {
+        delete static_cast<std::string*>(msg.line);
+    }
+}
+
+// "ok" and "error:N" are the gcode-protocol acknowledgements a sender blocks on
+// before sending the next line; everything else (status reports, [MSG:...]
+// logs) is informational and may be dropped under back-pressure.
+static inline bool is_ack_line(const char* s) {
+    return s && ((s[0] == 'o' && s[1] == 'k' && s[2] == '\0') || strncmp(s, "error:", 6) == 0);
+}
+
+// Enqueue a message for the output task with a BOUNDED wait and a drop policy.
+// The historical code spun forever in xQueueSend when the 10-deep queue was
+// full, so a single blocked/slow channel write back-pressured and wedged every
+// task that logged or acked -- including the protocol task . Now no
+// caller ever blocks indefinitely:
+//   - The output task is the SOLE drainer; it must never wait on (or re-enter
+//     via) its own queue. A message it generates while delivering another (e.g.
+//     a per-channel write that fans into a broadcast log) is dropped instead of
+//     self-deadlocking on space only it can free.
+//   - Acks get a short bounded wait, then drop; informational lines drop
+//     immediately when the queue is full.
+static void enqueue_message(LogMessage& msg, bool droppable) {
+    // Count this queued reference to the channel up front; deliver_message
+    // releases it after delivery, and every drop path below releases it too.
+    // The kill-drain in AllChannels::pollLine() will not free the channel
+    // while the count is nonzero.
+    if (msg.channel) {
+        msg.channel->pendingOutInc();
+    }
+    if (outputTask && xTaskGetCurrentTaskHandle() == outputTask) {
+        if (msg.channel) {
+            msg.channel->pendingOutDec();
+        }
+        if (msg.isString) {
+            delete static_cast<std::string*>(msg.line);
+        }
+        ++messages_dropped;
+        return;
+    }
+    TickType_t wait = droppable ? 0 : pdMS_TO_TICKS(250);
+    if (xQueueSend(message_queue, &msg, wait)) {
+        return;
+    }
+    if (msg.channel) {
+        msg.channel->pendingOutDec();
+    }
+    if (msg.isString) {
+        delete static_cast<std::string*>(msg.line);
+    }
+    ++messages_dropped;
+}
+
 void drain_messages() {
     while (uxQueueMessagesWaiting(message_queue)) {
         vTaskDelay(1);  // Let the output task finish sending data
@@ -155,7 +239,7 @@ void drain_messages() {
 void send_line(Channel& channel, const char* line) {
     if (outputTask) {
         LogMessage msg { &channel, (void*)line, false };
-        while (!xQueueSend(message_queue, &msg, 10)) {}
+        enqueue_message(msg, !is_ack_line(line));
     } else {
         channel.println(line);
     }
@@ -172,7 +256,7 @@ void send_line(Channel& channel, const char* line) {
 void send_line(Channel& channel, const std::string* line) {
     if (outputTask) {
         LogMessage msg { &channel, (void*)line, true };
-        while (!xQueueSend(message_queue, &msg, 10)) {}
+        enqueue_message(msg, !is_ack_line(line->c_str()));
     } else {
         channel.println(line->c_str());
         delete line;
@@ -205,16 +289,7 @@ void output_loop(void* unused) {
     while (true) {
         LogMessage message;
         if (xQueueReceive(message_queue, &message, 0)) {
-            if (message.channel) {
-                if (message.isString) {
-                    std::string* s = static_cast<std::string*>(message.line);
-                    if (s) message.channel->println(s->c_str());
-                    delete s;
-                } else {
-                    const char* cp = static_cast<const char*>(message.line);
-                    if (cp) message.channel->println(cp);
-                }
-            }
+            deliver_message(message);
         }
         vTaskDelay(0);
 #ifdef DEBUG_MEMORY_WATERMARKS
@@ -1376,6 +1451,31 @@ static void protocol_do_card_detect(void* arg) {
     // Do nothing, use update() in CardDetectPin instead
 }
 
+// Launches an SD gcode file by base-relative path. Strips any completion prefix,
+// constructs the InputFile, and registers it. Reports open failures via popups.
+// Does NOT set the completed-file path or home — callers own those.
+static void launch_sd_file(const char* path) {
+    if (path == nullptr || path[0] == '\0') {
+        config->_oled->popup_msg("Previously run file not found");
+        log_info("launch_sd_file: empty path");
+        return;
+    }
+    std::string stripped_storage;
+    const char* path_to_open = CompletionMark::resolve_with_strip(path, stripped_storage);
+    log_info("launch_sd_file: " << path_to_open);
+    try {
+        InputFile* infile = new InputFile(
+            "sd", path_to_open, WebUI::AuthenticationLevel::LEVEL_ADMIN, allChannels);
+        allChannels.registration(infile);
+    } catch (const std::filesystem::filesystem_error& e) {
+        log_error("Cannot open SD file: " << e.what());
+        config->_oled->popup_msg("microSD card not\ndetected", 3000);
+    } catch (Error) {
+        log_error("Cannot open SD file: " << path_to_open);
+        config->_oled->popup_msg("Cannot open\nSD file", 3000);
+    }
+}
+
 static void protocol_do_enter() {
     log_info("Button press detected");
 
@@ -1519,8 +1619,80 @@ static void protocol_do_enter() {
                     break;
                 }
             
-                // Home command
-                if (strcmp(config->_oled->_menu->get_selected()->display_name, "Home") == 0) {
+                if (config->_oled->_menu->sd_browse_active()) {
+                    sdfiles::EntryId outFile = sdfiles::kInvalidEntry;
+                    // Hold the arena lock from id-resolution (activate) THROUGH the
+                    // copyName/fullPath copy-out below, so a concurrent poller mutation
+                    // cannot invalidate outFile between resolve and read. Released in each
+                    // branch before the heavy work (flash / run / popup / I2C).
+                    std::unique_lock<std::recursive_mutex> arenaLock(
+                        config->_oled->_menu->sd_table().mutex());
+                    sdfiles::SDBrowser::Activation act =
+                        config->_oled->_menu->sd_browser().activate(
+                            config->_oled->_menu->sd_table(), outFile);
+                    if (act == sdfiles::SDBrowser::Activation::ExitedToMain) {
+                        arenaLock.unlock();
+                        config->_oled->_menu->set_sd_browse_active(false);
+                        config->_oled->_menu->exit_submenu();
+                    } else if (act == sdfiles::SDBrowser::Activation::EnteredDir ||
+                               act == sdfiles::SDBrowser::Activation::ExitedToParent) {
+                        arenaLock.unlock();
+                        config->_oled->refresh_display();
+                    } else if (act == sdfiles::SDBrowser::Activation::SelectedFile) {
+                        sdfiles::FileClass cls = config->_oled->_menu->sd_browser().classFilter();
+                        if (cls == sdfiles::FileClass::Firmware) {
+                            char nm[sdfiles::kMaxNameLen + 1];
+                            config->_oled->_menu->sd_table().copyName(outFile, nm, sizeof(nm));
+                            arenaLock.unlock();
+                            std::string fw_file = nm;
+                            log_info("Selected: " << fw_file);
+                            config->_oled->popup_msg("Updating Firmware\nPlotter will restart...", 0);
+                            Flashing::update_firmware_from_sdcard(fw_file);
+                        } else if (cls == sdfiles::FileClass::Config) {
+                            char nm[sdfiles::kMaxNameLen + 1];
+                            config->_oled->_menu->sd_table().copyName(outFile, nm, sizeof(nm));
+                            arenaLock.unlock();
+                            std::string cfg_file = nm;
+                            log_info("Config Selected: " << cfg_file);
+                            config->_oled->popup_msg("Updating Config File\nPlotter will restart...", 0);
+                            Flashing::update_config_from_sdcard(cfg_file, true);
+                        } else {
+                            char pathbuf[LIST_NAME_MAX_PATH];
+                            bool path_ok = config->_oled->_menu->sd_table().fullPath(
+                                outFile, pathbuf, sizeof(pathbuf), /*includeCompletionMark=*/true);
+                            arenaLock.unlock();
+                            if (!path_ok) {
+                                config->_oled->popup_msg("Path too long to run", 0);
+                            } else {
+                                std::string stripped_storage;
+                                const char* path_to_open =
+                                    CompletionMark::resolve_with_strip(pathbuf, stripped_storage);
+                                if (!config->_axes->_homed && config->_kinematics->canHome(0) &&
+                                        !(config->getMachineType() == Machine::MachineType::EggBot)) {
+                                    log_info("Unhomed. About to home before running file: " << path_to_open);
+                                    config->_oled->set_file_awaiting_homing(path_to_open);
+                                    config->_oled->popup_msg("Homing before file run...", 0);
+                                    Machine::Homing::run_cycles(Machine::Homing::AllCycles);
+                                } else {
+                                    log_info("Passing path to InputFile: " << path_to_open);
+                                    config->_oled->_menu->set_completed_file(path_to_open);
+                                    try {
+                                        InputFile* infile = new InputFile(
+                                            "sd", path_to_open, WebUI::AuthenticationLevel::LEVEL_ADMIN, allChannels);
+                                        allChannels.registration(infile);
+                                    } catch (const std::filesystem::filesystem_error& e) {
+                                        log_error("Cannot open SD file: " << e.what());
+                                        config->_oled->popup_msg("microSD card not\ndetected", 3000);
+                                    } catch (Error) {
+                                        log_error("Cannot open SD file: " << path_to_open);
+                                        config->_oled->popup_msg("Cannot open\nSD file", 3000);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    // act == None: nothing to do.
+                } else if (strcmp(config->_oled->_menu->get_selected()->display_name, "Home") == 0) {
                     if (config->getMachineType() == Machine::MachineType::EggBot) { // motor power toggle for EggBot only
                         // Clear calibration state when toggling motor lock
                         clearRcServoCalibration();
@@ -1782,23 +1954,62 @@ static void protocol_do_enter() {
 
                 } else if (strcmp(config->_oled->_menu->get_selected()->display_name, "Run Again") == 0) {
                     // run gcode file that was just run, must be homed
-                    if (config->_oled->_menu->get_completed_file_path().c_str() == "") {
+                    if (config->_oled->_menu->get_completed_file_path().empty()) {
                         config->_oled->popup_msg("Previously run file not found");
                         log_info("Run Again file path was empty");
                     } else if (!config->_axes->_homed && config->_kinematics->canHome(0) &&
                                 !(config->getMachineType() == Machine::MachineType::EggBot)) {
                         config->_oled->popup_msg("Machine not homed");
-                        log_info("Debug path during unhomed: " << config->_oled->_menu->get_completed_file_path().c_str());
                     } else {
-                        // : strip the completion prefix on re-run if present.
-                        // Copy locally — get_completed_file_path() returns by value.
                         std::string source_path = config->_oled->_menu->get_completed_file_path();
-                        log_info("Passing path to InputFile from Run Again: " << source_path);
-                        std::string stripped_storage;
-                        const char* path_to_open = CompletionMark::resolve_with_strip(
-                            source_path.c_str(), stripped_storage);
-                        InputFile *infile = new InputFile("sd", path_to_open, WebUI::AuthenticationLevel::LEVEL_ADMIN, allChannels);
-                        allChannels.registration(infile);
+                        launch_sd_file(source_path.c_str());
+                    }
+
+                } else if (strcmp(config->_oled->_menu->get_selected()->display_name,
+                                  "Run Next (HOLD to skip)") == 0) {
+                    Menu::PostrunState st = config->_oled->_menu->compute_postrun_state();
+                    if (!st.show_run_next || st.next_path.empty()) {
+                        log_info("Run Next: no next file");
+                    } else {
+                        // Distinguish short press (launch) from long press (skip).
+                        // Block-poll is safe here: the machine is idle on the postrun screen.
+                        uint32_t threshold = millis() + config->_control->_long_press_ms;
+                        while (config->_control->enter_pressed() && millis() < threshold) {
+                            delay_ms(10);
+                        }
+                        bool is_hold = (millis() >= threshold);
+
+                        if (is_hold) {
+                            // HOLD: skip the upcoming file by marking it completed without
+                            // plotting it. Show a brief toast naming the skipped file, then
+                            // let the cooperative popup auto-clear restore the postrun screen.
+                            std::string skip_path = st.next_path;
+                            std::string skip_name = st.next_name;
+                            CompletionMark::mark_completed(skip_path.c_str());
+                            std::string toast = "Skipping (marking \xE2\x9C\x93):\n" + skip_name;
+                            // Full-screen wipe (preserve_header=false) so the postrun top
+                            // line ("Run Next (HOLD to skip)") doesn't linger above the
+                            // centered toast. 3s so the skipped filename is readable.
+                            config->_oled->popup_msg(toast, 3000, /*preserve_header=*/false);
+                            // If skipping exhausted all remaining next files, drop the
+                            // "Run Next" entry so the screen returns to the two-icon layout.
+                            if (!config->_oled->_menu->compute_postrun_state().show_run_next) {
+                                config->_oled->_menu->rebuild_postrun_menu();
+                            }
+                        } else {
+                            // Short press: mark the just-run file done, then launch next.
+                            if (!config->_axes->_homed && config->_kinematics->canHome(0) &&
+                                    !(config->getMachineType() == Machine::MachineType::EggBot)) {
+                                config->_oled->popup_msg("Machine not homed");
+                            } else {
+                                std::string j = config->_oled->_menu->get_completed_file_path();
+                                if (!j.empty()) {
+                                    CompletionMark::mark_completed(j.c_str());  // idempotent
+                                }
+                                std::string next_path = st.next_path;  // copy before launch
+                                launch_sd_file(next_path.c_str());
+                            }
+                        }
                     }
 
                 } else if (strcmp(config->_oled->_menu->get_selected()->display_name, "Z Calibration Position") == 0) {
@@ -1853,119 +2064,19 @@ static void protocol_do_enter() {
                     config->_oled->_menu->return_to_run_menu();
                 // Back button
                 } else if (strcmp(config->_oled->_menu->get_selected()->display_name, BACK_LABEL) == 0) {
-                    // Special handling for postrun menu - go directly to saved directory
+                    // Postrun menu Back resumes the SD arena browser at the pre-run directory
                     if (config->_oled->_menu->is_postrun_menu()) {
-                        log_info("Postrun Back button - going to saved directory");
-                        config->_oled->_menu->go_to_saved_directory();
+                        log_info("Postrun Back button - resuming arena browse");
+                        config->_oled->_menu->resume_sd_browse();
                     } else {
                         config->_oled->_menu->exit_submenu();
                     }
-                // install FW if firmware menu
-                } else if(config->_oled->_menu->is_firmware_menu()) {
-                    std::string fw_file = config->_oled->_menu->get_selected()->display_name;
-                    log_info("Selected: " << fw_file);
-                    config->_oled->popup_msg("Updating Firmware\nPlotter will restart...", 0);
-                    Flashing::update_firmware_from_sdcard(fw_file);
-                // install config if config menu
-                } else if(config->_oled->_menu->is_config_menu()) {
-                    std::string cfg_file = config->_oled->_menu->get_selected()->display_name;
-                    log_info("Config Selected: " << cfg_file);
-                    config->_oled->popup_msg("Updating Config File\nPlotter will restart...", 0);
-                    // This will copy the given file to local internal storage with name "config.yaml"
-                    Flashing::update_config_from_sdcard(cfg_file, true);
-                // Run file command if files menu
-                } else if (config->_oled->_menu->is_files_menu()) {
-
-                    ListNodeType *selected_entry = config->_oled->_menu->get_selected();
-
-                    // Check if the selected entry is a folder (has a child submenu)
-                    if (selected_entry->child != NULL) { // this works now after setup fixes
-                        // It's a folder, enter the submenu
-                        log_info("Entering submenu");
-                        config->_oled->_menu->enter_submenu();
-                    } else {
-                        // It's a file, execute the file
-
-                        // : strip at the action layer, before the homing branch.
-                        // The auto-home path stashes the path via set_file_awaiting_homing
-                        // and opens the file later in OLED.cpp; the immediate path opens
-                        // it now. Both branches must see the already-stripped name.
-                        std::string stripped_storage;
-                        const char* path_to_open = CompletionMark::resolve_with_strip(
-                            selected_entry->path, stripped_storage);
-
-                        // Auto-home if trying to run unhomed (unless no motors home)
-                        //  Unfortunately latest EggBot config doesn't return false from canHome() even though
-                        //  it seems like it should, so also exclude it explicitly.
-                        if (!config->_axes->_homed && config->_kinematics->canHome(0) &&
-                                !(config->getMachineType() == Machine::MachineType::EggBot)) {
-                            log_info("Unhomed. About to home before running file: " << path_to_open);
-                            // Display error
-                            //config->_oled->popup_msg("Machine not homed");
-                            // New behavior: auto-home before file run if not homed
-                            config->_oled->set_file_awaiting_homing(path_to_open);
-                            config->_oled->popup_msg("Homing before file run...", 0);
-                            Machine::Homing::run_cycles(Machine::Homing::AllCycles);
-                        } else {
-                            log_info("Passing path to InputFile: " << path_to_open);
-                            config->_oled->_menu->save_current_directory(); // save directory before running file
-                            config->_oled->_menu->set_completed_file(path_to_open); // store run file path
-                            InputFile *infile = new InputFile("sd", path_to_open, WebUI::AuthenticationLevel::LEVEL_ADMIN, allChannels);
-                            allChannels.registration(infile);
-                        }
-                    }
-
-
                 // Download file command if RSS menu
                 } else if (config->_oled->_menu->is_rss_menu()) {
 #ifdef ENABLE_WIFI
                     WebUI::rssReader.download_file(config->_oled->_menu->get_selected()->path, config->_oled->_menu->get_selected()->display_name);
 #endif
-                } else if (!(config->_oled->_menu->is_settings_menu() || config->_oled->_menu->is_version_menu() || config->_oled->_menu->is_wifi_info_menu())) {
-                    // treat other unlabeled menus as files_menu because it's probably a files subfolder
-                    ListNodeType *selected_entry = config->_oled->_menu->get_selected();
-
-                    // Check if the selected entry is a folder (has a child submenu)
-                    if (selected_entry->child != NULL) {
-                        // Check if we're entering the files menu specifically
-                        if (selected_entry->child == config->_oled->_menu->files_menu()) {
-                            // This is "Browse Files" from main menu - try to go to saved directory
-                            log_info("Browse Files selected - restoring to saved directory");
-                            config->_oled->_menu->go_to_saved_directory();
-                        } else {
-                            // It's a regular folder, enter the submenu normally
-                            log_info("Entering submenu");
-                            config->_oled->_menu->enter_submenu();
-                        }
-                    } else if (selected_entry->path != NULL) {
-                        // It's a file, execute the file
-
-                        // : strip at the action layer, before the homing branch.
-                        // Same pattern as file-browser action #1 above.
-                        std::string stripped_storage;
-                        const char* path_to_open = CompletionMark::resolve_with_strip(
-                            selected_entry->path, stripped_storage);
-
-                        // Auto-home if trying to run unhomed (unless no motors home)
-                        if (!config->_axes->_homed && config->_kinematics->canHome(0) &&
-                                !(config->getMachineType() == Machine::MachineType::EggBot)) {
-                            log_info("Unhomed. About to home before running file: " << path_to_open);
-                            // Display error
-                            //config->_oled->popup_msg("Machine not homed");
-                            // New behavior: auto-home before file run if not homed
-                            config->_oled->set_file_awaiting_homing(path_to_open);
-                            config->_oled->popup_msg("Homing before file run...", 0);
-                            Machine::Homing::run_cycles(Machine::Homing::AllCycles);
-                        } else {
-                            log_info("Passing path to InputFile: " << path_to_open);
-                            config->_oled->_menu->save_current_directory(); // save directory before running file
-                            config->_oled->_menu->set_completed_file(path_to_open); // store run file path
-                            InputFile *infile = new InputFile("sd", path_to_open, WebUI::AuthenticationLevel::LEVEL_ADMIN, allChannels);
-                            allChannels.registration(infile);
-                        }
-                    }
-
-                // Otherwise, enter the submenu if it exists
+                // Catches remaining selections, including the main-menu "Browse Files" entry.
                 } else {
                     config->_oled->_menu->enter_submenu();
                 }

@@ -445,7 +445,8 @@ namespace WebUI {
                             }
 
                             if (config->_oled) {
-                                config->_oled->popup_msg("New RSS updates!", 5000);
+                                config->_oled->popup_msg("New RSS updates!", 5000, true,
+                                                         OLED::PopupLevel::Status);
                             }
                         }
 
@@ -521,7 +522,8 @@ namespace WebUI {
         // Check for SD card, send message and return on fail
         if (!sd_card_is_present()) {
             if (config->_oled) {
-                config->_oled->popup_msg("Please insert SD card");
+                config->_oled->popup_msg("Please insert SD card", 2000, true,
+                                         OLED::PopupLevel::Status);
             }
             return;
         }

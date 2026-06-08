@@ -84,6 +84,16 @@ class AllChannels : public Channel {
 
     static std::mutex _mutex;
 
+    //  Option C: copy the channel list under _mutex and mark a broadcast in
+    // flight, then iterate the copy with the lock released so a slow/blocking
+    // per-channel write (or one that re-enters AllChannels, e.g. the OLED
+    // status parser registering a file) cannot hold _mutex and freeze the
+    // polling task / re-enter the non-recursive lock. releaseSnapshot() clears
+    // the in-flight mark; the kill-drain defers freeing a channel while any
+    // snapshot that might still reference it is being iterated.
+    std::vector<Channel*> snapshotChannels();
+    void                  releaseSnapshot();
+
 public:
     // Kill-queue depth must cover the worst-case number of channels that can
     // be queued for deletion between two poll cycles -- multiple WebSocket

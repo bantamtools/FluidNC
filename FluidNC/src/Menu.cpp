@@ -3,12 +3,18 @@
 #include "Machine/MachineConfig.h"
 #include "SettingsDefinitions.h"   // : completion_marking
 #include "WebUI/WifiConfig.h"
+#include "SDFiles/MenuSortConfig.h"   // menuSortMode for the live re-sort
+#include "SDFiles/NextRunFile.h"
+#include "SDFiles/SDMenu.h"
+#include "Driver/sdmmc.h"             // sd_card_is_present
 #include <cstring>  // strrchr
+#include <mutex>    // std::lock_guard — arena lock for the live re-sort
 #include <Esp.h>
 #include <WiFi.h>
 
 // Constructor
-Menu::Menu() {
+Menu::Menu()
+    : _sd_table(sdfiles::kInitialArenaBytes, sdfiles::kInitialMaxEntries) {
 
     // Allocate memory for the menus
     _main_menu = new struct ListType;
@@ -45,9 +51,6 @@ Menu::Menu() {
 
     // Set main menu as current
     _current_menu = _main_menu;
-
-    // Initialize saved directory pointer
-    _saved_directory_menu = nullptr;
 
     // Initialize menu titles
     strcpy(_main_menu->title, "Main Menu");
@@ -191,6 +194,12 @@ void Menu::print_current_menu() {
 }
 
 const char* Menu::get_current_menu_title() {
+    // While browsing into a subfolder, show that folder's name as the header.
+    if (_sd_browse_active && _sd_browser.currentDir() != sdfiles::kRootParent) {
+        std::lock_guard<std::recursive_mutex> lk(_sd_table.mutex());
+        _sd_table.copyName(_sd_browser.currentDir(), _sd_title_buf, sizeof(_sd_title_buf));
+        return _sd_title_buf;
+    }
     if (_current_menu && _current_menu->title[0] != '\0') {
         return _current_menu->title;
     }
@@ -243,14 +252,43 @@ void Menu::enter_submenu(void) {
             config->_oled->showJogHeaderFast(false);  // Show "Jog mode" header
         }
 
-        // Special case for files list, select first file instead of "Back"
-        if (is_files_menu()) {
-            if(_files_menu->head->next == NULL){ // Check if entry after back is null or not. If null, present message, else, enter file menu.
-                log_info("No files detected on SD");
-                config->_oled->popup_msg("No files present.\nCheck SD", 0);
-                config->_oled->_menu->exit_submenu();
-            } else {
-                update_selection(4, 1); // move forward by one
+        // SD views render/navigate from the arena (SDBrowser), not the legacy List.
+        if (_current_menu == _files_menu || _current_menu == _firmware_menu ||
+            _current_menu == _config_menu) {
+            sdfiles::FileClass cls = (_current_menu == _firmware_menu) ? sdfiles::FileClass::Firmware
+                                   : (_current_menu == _config_menu)   ? sdfiles::FileClass::Config
+                                                                       : sdfiles::FileClass::Gcode;
+            _sd_browser.open(cls);
+            _sd_browse_active = true;
+            // Empty class list (only the Back row remains): show a message and back
+            // out. Distinguish no card from a card with no files of this type.
+            size_t row_count;
+            {
+                std::lock_guard<std::recursive_mutex> lk(_sd_table.mutex());
+                row_count = _sd_browser.rowCount(_sd_table);
+            }
+            if (row_count == 1) {  // only the Back row
+                const char* empty_msg;
+                if (!sd_card_is_present()) {
+                    empty_msg = "No microSD Card";
+                } else if (_current_menu == _firmware_menu) {
+                    empty_msg = "No firmware files\non microSD Card";
+                } else if (_current_menu == _config_menu) {
+                    empty_msg = "No config files\non microSD Card";
+                } else {
+                    empty_msg = "No G-code files\non microSD Card";
+                }
+                log_info("No files of the selected type on SD");
+                config->_oled->popup_msg(empty_msg, 0);
+                _sd_browse_active = false;
+                exit_submenu();
+                return;
+            }
+            // Non-empty G-code view selects the first entry past the Back row; the
+            // firmware/config views keep the Back row selected.
+            if (_current_menu == _files_menu) {
+                std::lock_guard<std::recursive_mutex> lk(_sd_table.mutex());
+                _sd_browser.moveSelection(_sd_table, 1, 4);  // select first entry past Back
             }
         }
 
@@ -285,6 +323,18 @@ void Menu::return_to_run_menu() {
     }
 }
 void Menu::go_to_postrun_menu() {
+    // Postrun is not an SD-browse screen; clear the browse flag so its buttons are
+    // handled by the postrun arms, not the SD-browser dispatch.
+    _sd_browse_active = false;
+    // Sort the arena to the Next File Ordering once here so the per-render
+    // compute_postrun_state() can query without re-sorting. Lock scoped tightly to the
+    // mutation, mirroring set_next_file_ordering_index; released before
+    // rebuild_postrun_menu(), which re-locks via compute_postrun_state().
+    {
+        std::lock_guard<std::recursive_mutex> lk(_sd_table.mutex());
+        _sd_table.rebuildIndex(sdfiles::menuSortMode());
+    }
+    rebuild_postrun_menu();
     _current_menu = _postrun_menu;
     // OLED already refreshes when it calls this
     if(config->_oled){
@@ -292,11 +342,33 @@ void Menu::go_to_postrun_menu() {
     }
 }
 
-void Menu::go_to_files_menu() {
-    _current_menu = _files_menu;
+void Menu::rebuild_postrun_menu() {
+    PostrunState st = compute_postrun_state();
 
-    if(config->_oled){
-        config->_oled->refresh_display();
+    remove_entries(_postrun_menu);
+    add_entry(_postrun_menu, NULL, NULL, BACK_LABEL);
+    if (st.show_run_next) {
+        add_entry(_postrun_menu, NULL, NULL, "Run Next (HOLD to skip)");
+    }
+    add_entry(_postrun_menu, NULL, NULL, "Run Again");
+
+    // add_entry selects the first entry (Back). Move the default highlight:
+    //   success + a next file -> Run Next; any cancel -> Run Again; done (no next,
+    //   success) -> leave Back highlighted.
+    const char* want = nullptr;
+    if (!_last_file_succeeded) {
+        want = "Run Again";
+    } else if (st.show_run_next) {
+        want = "Run Next (HOLD to skip)";
+    }  // else: leave Back selected (done screen)
+
+    if (want != nullptr) {
+        ListNodeType* e = _postrun_menu->head;
+        while (e) {
+            e->selected = (e->display_name && strcmp(e->display_name, want) == 0);
+            e = e->next;
+        }
+        _postrun_menu->active_head = _postrun_menu->head;  // all entries fit the window
     }
 }
 
@@ -320,64 +392,6 @@ bool Menu::is_descendant_of(ListType* menu, ListType* ancestor) {
 
 bool Menu::is_in_files_hierarchy() {
     return (_current_menu == _files_menu || is_descendant_of(_current_menu, _files_menu));
-}
-
-void Menu::save_current_directory() {
-    // Only save if we're in files menu or subdirectory
-    if (is_in_files_hierarchy()) {
-        _saved_directory_menu = _current_menu;
-
-        // Build path for logging by traversing parent chain
-        std::string path = "";
-        ListType* menu = _current_menu;
-        while (menu && menu != _files_menu) {
-            if (path.empty()) {
-                path = menu->title;
-            } else {
-                path = std::string(menu->title) + "/" + path;
-            }
-            menu = menu->parent;
-        }
-
-        log_info("Saved directory: /" << (path.empty() ? "(root)" : path.c_str()));
-    }
-}
-
-void Menu::go_to_saved_directory() {
-    // Validate saved directory is still valid
-    if (_saved_directory_menu &&
-        _saved_directory_menu->head &&  // Has entries
-        is_descendant_of(_saved_directory_menu, _files_menu)) {
-        _current_menu = _saved_directory_menu;
-
-        // Reset selection to top of directory (not a specific file)
-        if (_current_menu->head) {
-            // Clear all selections
-            ListNodeType* entry = _current_menu->head;
-            while (entry) {
-                entry->selected = false;
-                entry = entry->next;
-            }
-            // Select first entry (usually BACK_LABEL)
-            _current_menu->head->selected = true;
-            _current_menu->active_head = _current_menu->head;
-        }
-
-        log_info("Restored to saved directory");
-    } else {
-        // Fallback to root files menu if available
-        if (_files_menu) {
-            _current_menu = _files_menu;
-            log_info("Restored to files root (saved directory invalid)");
-        } else {
-            log_error("Cannot restore directory - files menu not available");
-        }
-        _saved_directory_menu = nullptr;  // Clear invalid pointer
-    }
-
-    if(config->_oled){
-        config->_oled->refresh_display();
-    }
 }
 
 // Helper function to return the active tail
@@ -515,9 +529,9 @@ bool Menu::add_sd_file(char *path, bool isBin, bool isCfg) {
 //    log_info("Adding menu entry for filepath: " << path);
     // Add the file to the correct submenu.
     //
-    // : reserve CompletionMark::kPrefixLen bytes of slack at the end of
-    // the path allocation so a later mark/unmark can shift the basename in
-    // place without reallocating. See Menu::rename_sd_file_entry.
+    // Reserve CompletionMark::kPrefixLen bytes of slack at the end of
+    // the path allocation so a later mark/unmark can shift the basename
+    // in place without reallocating.
     if (!add_entry(file_menu, NULL, path, filename, /*updated=*/false,
                    /*extra_path_capacity=*/CompletionMark::kPrefixLen)) {
         log_warn("Failed to add file to menu: " << path);
@@ -542,8 +556,6 @@ void Menu::prep_for_sd_update(void) {
 #else
     log_info("SD file list load START - Heap: " << heap_kb_start << " kB free");
 #endif
-
-    _saved_directory_menu = nullptr;  // Clear saved directory as menu structure will be rebuilt
 
     // If currently in any file-browsing menu tree, reset to safe location before destroying dynamic menus
     if (is_in_files_hierarchy() && _current_menu != _files_menu) {
@@ -599,61 +611,17 @@ void Menu::finish_sd_update(void) {
 #endif
 }
 
-// : walk a list (recursively into submenus) looking for an entry
-// whose path matches old_path. Returns the matching node or nullptr.
-static ListNodeType* find_file_entry_recursive(ListType* list, const char* old_path) {
-    if (list == nullptr) return nullptr;
-    for (ListNodeType* node = list->head; node != nullptr; node = node->next) {
-        if (node->path != nullptr && strcmp(node->path, old_path) == 0) {
-            return node;
-        }
-        if (node->child != nullptr) {
-            ListNodeType* hit = find_file_entry_recursive(node->child, old_path);
-            if (hit != nullptr) return hit;
-        }
+void Menu::resume_sd_browse() {
+    _current_menu = _files_menu;
+    _sd_browse_active = true;
+    if (config->_oled) {
+        config->_oled->refresh_display();
     }
-    return nullptr;
 }
 
-bool Menu::rename_sd_file_entry(const char *old_path, const char *new_path) {
-    if (old_path == nullptr || new_path == nullptr) return false;
-    if (_files_menu == nullptr) return false;
-
-    ListNodeType* node = find_file_entry_recursive(_files_menu, old_path);
-    if (node == nullptr) {
-        // Entry not in the cached menu — could happen if the file was
-        // added via a path that bypassed the SD scan, or if the menu
-        // was rebuilt between the rename and this call. Caller logs.
-        return false;
-    }
-
-    // Buffer-size invariant: each scanned file entry was allocated with
-    // kPrefixLen extra bytes of slack (see add_sd_file). That guarantees
-    // the buffer can hold either direction of a single mark/unmark
-    // operation — mark grows by kPrefixLen, strip shrinks. For any other
-    // rename shape (e.g., a future caller passing a much longer name),
-    // refuse rather than overflow.
-    size_t new_len = strlen(new_path);
-    size_t old_len = strlen(node->path);
-    if (new_len > old_len + CompletionMark::kPrefixLen) {
-        log_warn("rename_sd_file_entry: new path too long for reserved buffer "
-                 "(new=" << new_len << ", old=" << old_len << ", slack="
-                 << CompletionMark::kPrefixLen << "), refusing in-place update for " << old_path);
-        return false;
-    }
-
-    // Copy new_path into the existing buffer; recompute display_name to
-    // point past the last '/' in the new content.
-    memcpy(node->path, new_path, new_len + 1);
-    char* slash = strrchr(node->path, '/');
-    node->display_name = slash ? (slash + 1) : node->path;
-
-    return true;
-}
-
-// Like find_file_entry_recursive but also returns the parent list
-// pointer so the node can be spliced out. out_parent is set to the
-// ListType whose `head` chain currently contains the matched node.
+// Walks list recursively looking for an entry matching path,
+// returning both the node and the ListType that owns it (out_parent).
+// Returns nullptr when not found.
 static ListNodeType* find_file_entry_with_parent(ListType* list,
                                                  const char* path,
                                                  ListType*& out_parent) {
@@ -838,6 +806,55 @@ void Menu::set_completed_file_from_recent() {
     _completed_file_name = _recent_file_name;
 }
 
+Menu::PostrunState Menu::compute_postrun_state() {
+    PostrunState st{false, false, std::string(), std::string()};
+
+    // The whole feature rides on the completion marks; with marking off there is no
+    // queue to advance.
+    if (!CompletionMark::completion_marking_enabled()) {
+        return st;
+    }
+
+    std::string j = _completed_file_path;  // copy
+    if (j.empty()) {
+        return st;
+    }
+    // Normalize to the table's base-relative form: drop a leading "/sd" if present.
+    const char* rel = j.c_str();
+    if (std::strncmp(rel, "/sd", 3) == 0 && (rel[3] == '/' || rel[3] == '\0')) {
+        rel += 3;
+    }
+
+    // Hold the arena lock across the whole multi-step read — id-resolution through the
+    // value copy-out into st — per SDFileTable::mutex()'s contract, so the poller core
+    // never observes a half-rebuilt index mid-read. Recursive mutex; released on return
+    // after st (which owns its strings) is copied out. The index is kept in Next File
+    // Ordering by go_to_postrun_menu() on entry, so we query without re-sorting here.
+    std::lock_guard<std::recursive_mutex> lk(_sd_table.mutex());
+    sdfiles::EntryId jId = SDMenu::resolvePath(_sd_table, rel);
+    if (jId == sdfiles::kInvalidEntry) {
+        return st;  // cannot locate the just-run file (e.g. card swapped)
+    }
+    sdfiles::EntryId dir = _sd_table.parent(jId);
+
+    st.folder_complete = sdfiles::folderComplete(_sd_table, dir);
+
+    sdfiles::EntryId n = sdfiles::nextRunFile(_sd_table, dir, jId);
+    if (n != sdfiles::kInvalidEntry) {
+        // Only advertise Run Next if we can also produce a launchable path. If fullPath
+        // fails (path too long or too deep), treat it as "no next file".
+        char pathbuf[LIST_NAME_MAX_PATH];
+        if (_sd_table.fullPath(n, pathbuf, sizeof(pathbuf), /*includeCompletionMark=*/false)) {
+            char nm[sdfiles::kMaxNameLen + 1];
+            _sd_table.copyName(n, nm, sizeof(nm));
+            st.show_run_next = true;
+            st.next_name = nm;
+            st.next_path = pathbuf;
+        }
+    }
+    return st;
+}
+
 // Builds the menu system
 void Menu::build(void) {
     // Main Menu
@@ -962,7 +979,7 @@ void Menu::build(void) {
     add_entry(_version_menu, NULL, NULL, board_name_str);
     add_entry(_version_menu, NULL, NULL, wifi_mode_str);
 
-    // Post-run menu
+    // Post-run menu (Run Next entry is added dynamically; see rebuild_postrun_menu)
     add_entry(_postrun_menu, NULL, NULL, BACK_LABEL);
     add_entry(_postrun_menu, NULL, NULL, "Run Again"); // special handling to run just-finished file
 }
@@ -1105,6 +1122,14 @@ void Menu::set_next_file_ordering_index(int index) {
         node->display_name = strdup(new_label);
     }
 
+    // Re-sort the SD file index in place so a FOLLOW-mode menu reflects the new
+    // ordering the next time the file list is shown. A fixed-sort build re-sorts
+    // to the same order (harmless). This is an in-memory permutation, no disk I/O.
+    if (sd_card_is_present()) {
+        std::lock_guard<std::recursive_mutex> lk(_sd_table.mutex());
+        _sd_table.rebuildIndex(sdfiles::menuSortMode());
+    }
+
     // 3. Repaint the menu only. Selection stays where the user
     //    tapped; no encoder-jump-to-top. refresh_display(true) drops
     //    any pending encoder rotation at entry (see ), so press-
@@ -1175,8 +1200,6 @@ void Menu::rebuild_wifi_status() {
 
 // Rebuilds the menu system (e.g., after machine type is determined)
 void Menu::rebuild(void) {
-    _saved_directory_menu = nullptr;  // Clear saved directory as menu structure will be rebuilt
-
     // If currently in any menu tree with dynamic directories, reset to main menu before destroying them
     if (is_in_files_hierarchy() ||
         is_firmware_menu() || is_descendant_of(_current_menu, _firmware_menu) ||

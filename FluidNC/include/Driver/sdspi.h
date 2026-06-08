@@ -16,6 +16,9 @@ void sd_deinit_slot();
 std::error_code sd_mount(int max_files = 1);
 
 bool sd_card_is_present();
+// No-op for the SPI path; declared here so CardDetectPin.cpp compiles
+// against either driver without conditional compilation at the call site.
+void sd_set_card_present(bool present);
 void sd_populate_files_menu();
 
 // Incremental SD menu cache mutations. See FluidNC/src/SDMenuEvents.h

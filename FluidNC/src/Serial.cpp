@@ -217,6 +217,22 @@ void AllChannels::init() {
 #endif
 }
 
+//  Option C: number of broadcast snapshot iterations currently in flight.
+// While nonzero, the kill-drain in pollLine() defers freeing a channel, because
+// a snapshot taken before the channel was deregistered may still dereference it.
+static std::atomic<int> _broadcastDepth { 0 };
+
+std::vector<Channel*> AllChannels::snapshotChannels() {
+    _mutex.lock();
+    std::vector<Channel*> snapshot(_channelq);
+    _broadcastDepth.fetch_add(1, std::memory_order_acq_rel);
+    _mutex.unlock();
+    return snapshot;
+}
+void AllChannels::releaseSnapshot() {
+    _broadcastDepth.fetch_sub(1, std::memory_order_acq_rel);
+}
+
 void AllChannels::kill(Channel* channel) {
     // Idempotent: if the channel has already been queued once, do not
     // queue it again.  Preventing duplicate entries is what keeps the
@@ -253,70 +269,93 @@ void AllChannels::listChannels(Channel& out) {
     _mutex.unlock();
 }
 
+// All of the fan-out methods below iterate a SNAPSHOT of the channel list with
+// _mutex released ( Option C). The previous code held _mutex across every
+// per-channel call, so a single channel whose write/notify blocked -- a
+// saturated socket, or a write that re-enters AllChannels (the OLED status
+// parser registering a file after auto-home) -- stalled the polling task and,
+// on the same task, deadlocked on the non-recursive _mutex. With the lock held
+// only for the O(n) pointer copy, a slow channel can no longer freeze the rest.
 void AllChannels::flushRx() {
-    _mutex.lock();
-    for (auto channel : _channelq) {
+    auto snapshot = snapshotChannels();
+    for (auto channel : snapshot) {
         if (channel) {
             channel->flushRx();
         }
     }
-    _mutex.unlock();
+    releaseSnapshot();
 }
 
 size_t AllChannels::write(uint8_t data) {
-    _mutex.lock();
-    for (auto channel : _channelq) {
+    auto snapshot = snapshotChannels();
+    for (auto channel : snapshot) {
         if (channel) {
             channel->write(data);
         }
     }
-    _mutex.unlock();
+    releaseSnapshot();
     return 1;
 }
 void AllChannels::notifyWco(void) {
-    _mutex.lock();
-    for (auto channel : _channelq) {
+    auto snapshot = snapshotChannels();
+    for (auto channel : snapshot) {
         if (channel) {
             channel->notifyWco();
         }
     }
-    _mutex.unlock();
+    releaseSnapshot();
 }
 void AllChannels::notifyNgc(CoordIndex coord) {
-    _mutex.lock();
-    for (auto channel : _channelq) {
+    auto snapshot = snapshotChannels();
+    for (auto channel : snapshot) {
         if (channel) {
             channel->notifyNgc(coord);
         }
     }
-    _mutex.unlock();
+    releaseSnapshot();
 }
 
 void AllChannels::stopJob() {
-    _mutex.lock();
-    for (auto channel : _channelq) {
+    auto snapshot = snapshotChannels();
+    for (auto channel : snapshot) {
         if (channel) {
             channel->stopJob();
         }
     }
-    _mutex.unlock();
+    releaseSnapshot();
 }
 
 size_t AllChannels::write(const uint8_t* buffer, size_t length) {
-    _mutex.lock();
-    for (auto channel : _channelq) {
+    auto snapshot = snapshotChannels();
+    for (auto channel : snapshot) {
         if (channel) {
             channel->write(buffer, length);
         }
     }
-    _mutex.unlock();
+    releaseSnapshot();
     return length;
 }
 Channel* AllChannels::pollLine(char* line) {
-    Channel* deadChannel;
+    Channel*              deadChannel;
+    std::vector<Channel*> deferred;
     while (xQueueReceive(_killQueue, &deadChannel, 0)) {
+        // Deregister first so no NEW broadcast snapshot can include it. Then
+        // free it only once no holder still references the raw pointer:
+        //   - no broadcast snapshot is in flight (_broadcastDepth), and
+        //   - no queued output message still points at it (pendingOut).
+        // A snapshot or a queued message captured before this deregistration
+        // may still dereference the channel, so otherwise defer to a later
+        // poll. Collect deferrals and re-queue after the loop so we do not
+        // re-dequeue them immediately.
         deregistration(deadChannel);
-        delete deadChannel;
+        if (_broadcastDepth.load(std::memory_order_acquire) == 0 && deadChannel->pendingOut() == 0) {
+            delete deadChannel;
+        } else {
+            deferred.push_back(deadChannel);
+        }
+    }
+    for (auto ch : deferred) {
+        xQueueSend(_killQueue, &ch, 0);
     }
 
     // To avoid starving other channels when one has a lot

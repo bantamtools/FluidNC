@@ -1,5 +1,7 @@
 #include "Homing.h"
 
+#include "Driver/fluidnc_gpio.h"  // poll_gpios
+
 #include "../MotionControl.h"  // mc_reset
 #include "../System.h"         // sys.*
 #include "../Stepper.h"        // st_wake
@@ -76,8 +78,29 @@ namespace Machine {
     void Homing::cycleStop() {
         log_debug("CycleStop " << phaseName(_phase));
         if (approach()) {
-            // Cycle stop while approaching means that we did not hit
-            // a limit switch in the programmed distance
+            // The cycleStopEvent (posted from Stepper::pulse_func when the
+            // segment buffer drains) can race ahead of the limit dispatch
+            // path (poll_gpios → LimitPin::update → limitEvent).
+            // Two-tier defense:
+            //   1. If the limit mask is already set on one of our motors,
+            //      the switch tripped and was already observed — treat as
+            //      successful limit detection.
+            //   2. Otherwise the switch may have tripped between the last
+            //      poll and now; force a synchronous poll_gpios() and re-check.
+            //      This catches the case where SlowApproach motion completes
+            //      at the very moment of switch contact, particularly on
+            //      short pulloff distances where the timing window is tight.
+            // Only if both checks fail do we treat it as a genuine "ran past
+            // max_travel × seek_scaler without hitting a switch" failure.
+            if (limited() & _phaseMotors) {
+                limitReached();
+                return;
+            }
+            poll_gpios();
+            if (limited() & _phaseMotors) {
+                limitReached();
+                return;
+            }
             fail(ExecAlarm::HomingFailApproach);
             report_realtime_status(allChannels);
             return;

@@ -18,6 +18,10 @@ void sd_deinit_slot();
 std::error_code sd_mount(int max_files = 1);
 
 bool sd_card_is_present();
+// Records physical card presence as signaled by the card-detect pin.
+// Call with present=true on card insertion, false on removal.
+// Not called on boards with no card-detect pin; those boards always attempt the mount.
+void sd_set_card_present(bool present);
 void sd_populate_files_menu();
 
 // Incremental SD menu cache mutations. See FluidNC/src/SDMenuEvents.h

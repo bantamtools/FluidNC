@@ -247,6 +247,10 @@ bool sd_card_is_present() {
     return res;
 }
 
+// No-op for the SPI path: sdspi manages card presence via the cd_pin
+// argument to sd_init_slot() and does not use a software presence flag.
+void sd_set_card_present(bool present) {}
+
 void sd_populate_files_menu() {
 
     std::error_code ec;
