@@ -65,7 +65,8 @@ SDFileTable::SDFileTable(SDFileTable&& o) noexcept
       _maxEntries(o._maxEntries),
       _entryCount(o._entryCount),
       _indexCount(o._indexCount),
-      _sortMode(o._sortMode) {}
+      _sortMode(o._sortMode),
+      _scanComplete(o._scanComplete) {}
 
 SDFileTable& SDFileTable::operator=(SDFileTable&& o) noexcept {
     if (this != &o) {
@@ -76,17 +77,19 @@ SDFileTable& SDFileTable::operator=(SDFileTable&& o) noexcept {
         _arenaUsed   = o._arenaUsed;
         _maxEntries  = o._maxEntries;
         _entryCount  = o._entryCount;
-        _indexCount  = o._indexCount;
-        _sortMode    = o._sortMode;
+        _indexCount   = o._indexCount;
+        _sortMode     = o._sortMode;
+        _scanComplete = o._scanComplete;
         // _mutex is left as-is; this table keeps its own.
     }
     return *this;
 }
 
 void SDFileTable::reset() {
-    _arenaUsed  = 0;
-    _entryCount = 0;
-    _indexCount = 0;
+    _arenaUsed    = 0;
+    _entryCount   = 0;
+    _indexCount   = 0;
+    _scanComplete = true;
 }
 
 bool SDFileTable::full() const {

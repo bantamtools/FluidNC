@@ -90,6 +90,7 @@ namespace WebUI {
         static void handleFeedholdReload();
         static void LocalFSFileupload();
         static void handleFileList();
+        static void handle_sdmenu();
         static void handleUpdate();
         static void WebUpdateUpload();
 

@@ -132,6 +132,20 @@ public:
 
     size_t liveCount() const;  // the "N" in "showing N"
 
+    // Current sort mode (the mode passed to the most recent rebuildIndex()).
+    SortMode sortMode() const { return _sortMode; }
+
+    // Scan completeness: false once a scan was truncated by the arena cap or the
+    // file-count ceiling. Defaults true (an empty/never-scanned table truncated
+    // nothing). Distinct from the per-entry isCompleted() completion API.
+    bool scanComplete() const { return _scanComplete; }
+    void setScanComplete(bool complete) { _scanComplete = complete; }
+
+    // Sorted-index access (valid after rebuildIndex). indexAt(i) is the i-th
+    // EntryId in sorted order; used to walk all live entries in one pass.
+    size_t  indexCount() const { return _indexCount; }
+    EntryId indexAt(size_t i) const { return _index[i]; }
+
     // Reclaims arena bytes occupied by tombstoned entries; preserves live EntryIds.
     void compact();
 
@@ -169,6 +183,7 @@ private:
     uint16_t _entryCount;  // next EntryId to assign
     uint16_t _indexCount;
     SortMode _sortMode;
+    bool     _scanComplete = true;
 
     // Guards all cross-task arena access; see mutex() above. Mutable so the render
     // path can lock through a const SDFileTable&.

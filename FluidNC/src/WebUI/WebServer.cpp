@@ -6,6 +6,9 @@
 #include "../Serial.h"    // is_realtime_command()
 #include "../Settings.h"  // settings_execute_line()
 #include "../SDMenuEvents.h"  // sd_files_added/_removed/_renamed
+#include "../SDFiles/SDCacheListing.h"   // serializeMenuCache(), serializeEmptyMenuCache()
+#include <mutex>                         // std::lock_guard, std::recursive_mutex
+#include <string>                        // std::string
 
 #ifdef ENABLE_WIFI
 
@@ -143,6 +146,8 @@ namespace WebUI {
 
         //LocalFS
         _webserver->on("/files", HTTP_ANY, handleFileList, LocalFSFileupload);
+
+        _webserver->on("/sdmenu", HTTP_ANY, handle_sdmenu);
 
         //web update
         _webserver->on("/updatefw", HTTP_ANY, handleUpdate, WebUpdateUpload);
@@ -1065,6 +1070,53 @@ namespace WebUI {
 
     void Web_Server::handle_direct_SDFileList() { handleFileOps(sdName); }
     void Web_Server::handleFileList() { handleFileOps(localfsName); }
+
+    void Web_Server::handle_sdmenu() {
+        // SD file listing is for admin and user only, mirroring handleFileOps.
+        if (is_authenticated() == AuthenticationLevel::LEVEL_GUEST) {
+            sendAuthFailed();
+            return;
+        }
+
+        _webserver->sendHeader("Cache-Control", "no-cache");
+        _webserver->setContentLength(CONTENT_LENGTH_UNKNOWN);  // -> chunked
+        _webserver->send(200, "text/plain", "");
+
+        // Stream the listing in bounded chunks. The serializer allocates nothing;
+        // this sink reuses a single buffer, flushed at a ~512-byte threshold. The
+        // arena lock is held across the walk (and thus across sendContent) so the
+        // table cannot mutate mid-listing; the listing is small.
+        struct ChunkSink : public sdfiles::ListingSink {
+            enum : size_t { FLUSH = 512 };  // local classes can't have static data members
+            WebServer*  ws;
+            std::string chunk;
+            explicit ChunkSink(WebServer* w) : ws(w) { chunk.reserve(FLUSH + 320); }
+            void line(const char* text) override {
+                chunk += text;
+                chunk += '\n';
+                if (chunk.size() >= FLUSH) {
+                    ws->sendContent(chunk.c_str(), chunk.size());
+                    chunk.clear();
+                }
+            }
+            void flush() {
+                if (!chunk.empty()) {
+                    ws->sendContent(chunk.c_str(), chunk.size());
+                    chunk.clear();
+                }
+            }
+        } sink(_webserver);
+
+        if (config && config->_oled && config->_oled->_menu) {
+            auto& table = config->_oled->_menu->sd_table();
+            std::lock_guard<std::recursive_mutex> lk(table.mutex());
+            sdfiles::serializeMenuCache(table, sink);
+        } else {
+            sdfiles::serializeEmptyMenuCache(sink);
+        }
+        sink.flush();
+        _webserver->sendContent("");  // close the chunked response
+    }
 
     // File upload
     void Web_Server::uploadStart(const char* filename, size_t filesize, const char* fs) {

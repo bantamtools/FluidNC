@@ -21,6 +21,9 @@
 #include "../InputFile.h"  // InputFile
 #include "../CompletionMark.h"  // : strip-on-start helper
 #include "../SDMenuEvents.h"    // sd_files_added/_removed/_renamed
+#include "../SDFiles/SDCacheListing.h"   // serializeMenuCache()
+#include <mutex>                         // std::lock_guard, std::recursive_mutex
+#include <string>                        // std::string
 
 #include "Commands.h"  // COMMANDS::restart_MCU();
 #include "WifiConfig.h"
@@ -521,6 +524,26 @@ namespace WebUI {
         return listFilesystem(sdName, parameter, auth_level, out);
     }
 
+    static Error listMenuCache(char* parameter, AuthenticationLevel auth_level, Channel& out) {
+        // Stream each line straight to the channel. The 3-arg log_to form copies
+        // the line (no async use-after-free); lines start with S/F/D, never '['.
+        struct ChannelSink : public sdfiles::ListingSink {
+            Channel& _out;
+            explicit ChannelSink(Channel& o) : _out(o) {}
+            void line(const char* text) override { log_to(_out, "", text); }
+        } sink(out);
+
+        if (config && config->_oled && config->_oled->_menu) {
+            auto& table = config->_oled->_menu->sd_table();
+            std::lock_guard<std::recursive_mutex> lk(table.mutex());
+            sdfiles::serializeMenuCache(table, sink);
+        } else {
+            // No arena on this build/hardware: well-formed empty listing.
+            sdfiles::serializeEmptyMenuCache(sink);
+        }
+        return Error::Ok;
+    }
+
     static Error listLocalFiles(char* parameter, AuthenticationLevel auth_level, Channel& out) {  // No ESP command
         return listFilesystem(localfsName, parameter, auth_level, out);
     }
@@ -847,6 +870,7 @@ namespace WebUI {
         new WebCommand("file_or_directory_path", WEBCMD, WU, "ESP215", "SD/Delete", deleteSDObject);
         new WebCommand("path", WEBCMD, WU, NULL, "SD/Rename", renameSDObject);
         new WebCommand(NULL, WEBCMD, WU, "ESP210", "SD/List", listSDFiles);
+        new WebCommand(NULL, WEBCMD, WU, NULL, "SD/ListMenu", listMenuCache);
         new WebCommand(NULL, WEBCMD, WU, "ESP200", "SD/Status", showSDStatus);
 
         new WebCommand("ON|OFF", WEBCMD, WA, "ESP115", "Radio/State", setRadioState);

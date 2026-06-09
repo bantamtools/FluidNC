@@ -495,6 +495,8 @@ void sd_populate_files_menu() {
         config->_oled->clear_popup(OLED::PopupLevel::Status);
     }
 
+    config->_oled->_menu->sd_table().setScanComplete(!limit_reached && !scan_error);
+
     // Log final memory usage after all files loaded
     config->_oled->_menu->finish_sd_update();
 
