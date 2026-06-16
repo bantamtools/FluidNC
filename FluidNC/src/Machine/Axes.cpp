@@ -333,7 +333,7 @@ namespace Machine {
         log_info("Media: disableSoftLimits axis=" << axis);
     }
 
-    void Axes::restoreSoftLimitDefaults() {
+    void Axes::restoreJobDefaults() {
         bool any_changed = false;
         for (int axis = 0; axis < _numberAxis; axis++) {
             auto       a      = _axis[axis];
@@ -342,20 +342,25 @@ namespace Machine {
             // Skip if every field of target already matches.
             // NaN-safe: NaN != NaN by IEEE 754, so for each bound treat
             // (both NaN) as equal in addition to plain `==`.
-            if (target.enabled == a->_softLimits &&
-                ((std::isnan(target.min) && std::isnan(a->_softMin)) ||
-                 target.min == a->_softMin) &&
-                ((std::isnan(target.max) && std::isnan(a->_softMax)) ||
-                 target.max == a->_softMax)) {
-                continue;
+            if (!(target.enabled == a->_softLimits &&
+                  ((std::isnan(target.min) && std::isnan(a->_softMin)) ||
+                   target.min == a->_softMin) &&
+                  ((std::isnan(target.max) && std::isnan(a->_softMax)) ||
+                   target.max == a->_softMax))) {
+                a->_softMin    = target.min;
+                a->_softMax    = target.max;
+                a->_softLimits = target.enabled;
+                any_changed    = true;
             }
-            a->_softMin    = target.min;
-            a->_softMax    = target.max;
-            a->_softLimits = target.enabled;
-            any_changed    = true;
+
+            // Wipe any (Accel) g-code comment override back to the config value.
+            if (a->_acceleration != a->_accelerationConfig) {
+                a->_acceleration = a->_accelerationConfig;
+                any_changed      = true;
+            }
         }
         if (any_changed) {
-            log_info("Soft-limit defaults restored");
+            log_info("Job defaults restored");
         }
     }
 

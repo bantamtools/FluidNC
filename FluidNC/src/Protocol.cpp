@@ -188,10 +188,12 @@ static inline bool is_ack_line(const char* s) {
 // full, so a single blocked/slow channel write back-pressured and wedged every
 // task that logged or acked -- including the protocol task . Now no
 // caller ever blocks indefinitely:
-//   - The output task is the SOLE drainer; it must never wait on (or re-enter
-//     via) its own queue. A message it generates while delivering another (e.g.
-//     a per-channel write that fans into a broadcast log) is dropped instead of
-//     self-deadlocking on space only it can free.
+//   - The output task is the SOLE drainer; it must never wait on its own
+//     queue, because the space it would wait for can only be freed by itself.
+//     A message it generates while delivering another (e.g. a log emitted
+//     from a channel's parse path) is enqueued with zero wait and delivered
+//     on a later iteration of its top-level loop; it is dropped only when
+//     the queue is already full.
 //   - Acks get a short bounded wait, then drop; informational lines drop
 //     immediately when the queue is full.
 static void enqueue_message(LogMessage& msg, bool droppable) {
@@ -202,17 +204,10 @@ static void enqueue_message(LogMessage& msg, bool droppable) {
     if (msg.channel) {
         msg.channel->pendingOutInc();
     }
-    if (outputTask && xTaskGetCurrentTaskHandle() == outputTask) {
-        if (msg.channel) {
-            msg.channel->pendingOutDec();
-        }
-        if (msg.isString) {
-            delete static_cast<std::string*>(msg.line);
-        }
-        ++messages_dropped;
-        return;
-    }
     TickType_t wait = droppable ? 0 : pdMS_TO_TICKS(250);
+    if (outputTask && xTaskGetCurrentTaskHandle() == outputTask) {
+        wait = 0;  // never block the sole drainer, even for an ack
+    }
     if (xQueueSend(message_queue, &msg, wait)) {
         return;
     }
@@ -1149,9 +1144,10 @@ static void protocol_do_late_reset() {
     // turn off all User I/O immediately
     config->_userOutputs->all_off();
 
-    // Restore per-axis soft-limit defaults on abort/alarm/soft-reset so an in-job
-    // Media* override does not leak into the next attempt. See .
-    config->_axes->restoreSoftLimitDefaults();
+    // Restore per-axis config defaults on abort/alarm/soft-reset so an in-job
+    // g-code comment override (Media* soft limits, (Accel) acceleration) does
+    // not leak into the next attempt.
+    config->_axes->restoreJobDefaults();
 
     // do we need to stop a running file job?
     allChannels.stopJob();

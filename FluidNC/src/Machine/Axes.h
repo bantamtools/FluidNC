@@ -97,10 +97,11 @@ namespace Machine {
         void setSoftLimitMax(int axis, float value);
         void disableSoftLimits(int axis);
 
-        // Re-run boot-time derivation for every axis. Called at M30 and at
-        // mc_reset's late-reset hook to wipe any in-job Media* overrides and
-        // restore each axis to the config-defined state. See .
-        void restoreSoftLimitDefaults();
+        // Reset every axis to its config-defined state, wiping any in-job
+        // g-code comment overrides (Media* soft limits and (Accel) acceleration).
+        // Called at M2/M30 and at mc_reset's late-reset hook so overrides do not
+        // leak into the next job.
+        void restoreJobDefaults();
 
         ~Axes();
     };

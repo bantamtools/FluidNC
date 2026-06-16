@@ -19,8 +19,9 @@
 
 #include "Machine/MachineConfig.h"
 
-#include <string.h>  // memset
-#include <math.h>    // sqrt etc.
+#include <string.h>   // memset
+#include <math.h>     // sqrt etc.
+#include <algorithm>  // std::max
 
 // Allow iteration over CoordIndex values
 CoordIndex& operator++(CoordIndex& i) {
@@ -305,21 +306,29 @@ static void gcode_comment_msg(char* comment) {
 
                             bool applied = false;
 
-                            if (axis1 >= 0 && axis1 < config->_axes->_numberAxis) {
-                                float max_accel = config->_axes->_axis[axis1]->_rapid_acceleration;
-                                if (accel <= max_accel) {
-                                    config->_axes->_axis[axis1]->_acceleration = accel;
-                                    applied = true;
+                            // Cap a comment-requested accel at the HIGHER of rapid_acceleration
+                            // and the config-authority G1 acceleration, so a file's (Accel) comment
+                            // can request a G1 accel above rapid_accel (rapid may be configured
+                            // lower than the G1 cutting accel). A file may only LOWER accel toward
+                            // this ceiling; a request above the ceiling is rejected, not clamped.
+                            // The ceiling reads _accelerationConfig (the immutable config value),
+                            // not the live _acceleration, so it does not shrink as comments lower
+                            // accel within a job. Overrides are reset at job boundaries by
+                            // Axes::restoreJobDefaults().
+                            auto apply_accel = [&](int axis) {
+                                if (axis < 0 || axis >= config->_axes->_numberAxis) {
+                                    return;
                                 }
-                            }
+                                auto* ax        = config->_axes->_axis[axis];
+                                float max_accel = std::max(ax->_rapid_acceleration, ax->_accelerationConfig);
+                                if (accel <= max_accel) {
+                                    ax->_acceleration = accel;
+                                    applied           = true;
+                                }
+                            };
 
-                            if (axis2 >= 0 && axis2 < config->_axes->_numberAxis) {
-                                float max_accel = config->_axes->_axis[axis2]->_rapid_acceleration;
-                                if (accel <= max_accel) {
-                                    config->_axes->_axis[axis2]->_acceleration = accel;
-                                    applied = true;
-                                }
-                            }
+                            apply_accel(axis1);
+                            apply_accel(axis2);
 
                             if (applied) {
                                 log_info(comment);
@@ -2213,10 +2222,10 @@ Error gc_execute_line(char* line) {
         case ProgramFlow::CompletedM30:
             protocol_buffer_synchronize();  // Sync and finish all remaining buffered motions before moving on.
 
-            // Restore per-axis soft-limit defaults so any in-job Media* overrides
-            // do not leak into the next job. Fires on both M2 and M30 (shared
-            // case body). See .
-            config->_axes->restoreSoftLimitDefaults();
+            // Restore per-axis config defaults so any in-job g-code comment
+            // overrides (Media* soft limits, (Accel) acceleration) do not leak
+            // into the next job. Fires on both M2 and M30 (shared case body).
+            config->_axes->restoreJobDefaults();
 
             // Upon program complete, only a subset of g-codes reset to certain defaults, according to
             // LinuxCNC's program end descriptions and testing. Only modal groups [G-code 1,2,3,5,7,12]

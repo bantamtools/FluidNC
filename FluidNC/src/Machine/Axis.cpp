@@ -46,6 +46,11 @@ namespace Machine {
         // runtime; _softLimitsConfig is not.
         _softLimitsConfig = _softLimits;
         deriveSoftLimitDefaults();
+
+        // Capture the config-authority acceleration so a job-boundary restore
+        // can wipe any (Accel) g-code comment override. Re-runs on $ settings
+        // writes, so an intentional runtime change becomes the new baseline.
+        _accelerationConfig = _acceleration;
     }
 
     SoftLimitState Axis::computeSoftLimitDefaults() const {

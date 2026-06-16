@@ -495,14 +495,31 @@ namespace WebUI {
             log_to(out, "Error: ", ec.message());
             return Error::FsFailedMount;
         }
-        for (auto const& dir_entry : iter) {
-            if (dir_entry.is_directory()) {
+        //  Skip hidden / OS-metadata entries and do NOT recurse into
+        // hidden directories. Mounting the SD on a Mac pollutes the card with
+        // .Spotlight-V100 (hundreds of index files, some >500 KB), .fseventsd,
+        // .Trashes and ._* AppleDouble files. Recursing them turned $sd/list
+        // into a multi-second, hundreds-of-line operation that floods the
+        // 10-deep output queue and starves status/ack responses — the host
+        // then sees the controller go mute (USB or WiFi), with the WDT disabled
+        // so it never self-recovers. None of these are user g-code. We iterate
+        // `iter` directly (NOT a range-for, whose hidden iterator copy has its
+        // own _M_pending so disable_recursion_pending() would be a no-op).
+        const auto endIter = stdfs::recursive_directory_iterator {};
+        while (iter != endIter) {
+            const auto&       dir_entry = *iter;
+            const std::string fn        = dir_entry.path().filename().string();
+            const bool        hidden    = !fn.empty() && fn[0] == '.';
+            if (hidden) {
+                iter.disable_recursion_pending();  // don't descend into it
+            } else if (dir_entry.is_directory()) {
                 log_to(out, "[DIR:", std::string(iter.depth(), ' ').c_str() << dir_entry.path().filename());
             } else {
                 log_to(out,
                        "[FILE: ",
                        std::string(iter.depth(), ' ').c_str() << dir_entry.path().filename() << "|SIZE:" << dir_entry.file_size());
             }
+            ++iter;  // matches the original range-for's throwing-increment semantics
         }
         auto space = stdfs::space(fpath, ec);
         if (ec) {

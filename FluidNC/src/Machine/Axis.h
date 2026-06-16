@@ -45,6 +45,11 @@ namespace Machine {
         float _maxRate      = 1000.0f;
         float _acceleration = 25.0f;
         float _rapid_acceleration = _acceleration;
+        // Config-authority copy of _acceleration, captured in afterParse().
+        // MUST NOT be modified at runtime. _acceleration is the live value,
+        // which (Accel) g-code comments may override mid-job;
+        // Axes::restoreJobDefaults() resets it to this copy at job boundaries.
+        float _accelerationConfig = _acceleration;
         float _maxTravel    = 1000.0f;
         bool  _softLimits   = false;
         // Soft-limit runtime state. _softMin / _softMax hold the raw bounds
@@ -62,7 +67,7 @@ namespace Machine {
         void group(Configuration::HandlerBase& handler) override;
         void afterParse() override;
         // Pure: compute what boot derivation would produce for this axis,
-        // without mutating any fields. Used by Axes::restoreSoftLimitDefaults
+        // without mutating any fields. Used by Axes::restoreJobDefaults
         // to detect whether a write-through is needed.
         SoftLimitState computeSoftLimitDefaults() const;
 
