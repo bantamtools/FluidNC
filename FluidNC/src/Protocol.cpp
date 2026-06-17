@@ -277,6 +277,35 @@ void send_line(Channel& channel, const std::string& line) {
     }
 }
 
+//  Idle-gated, state-change-only status heartbeat (backstop). Runs ONLY
+// from output_loop (core 0) when the message queue is empty, so it can never
+// delay motion or other messages. It self-heals a silently-dropped Part-1 edge:
+// Part-1 transition emits do NOT touch g_last_emitted_token — ONLY this backstop
+// updates it — so after a dropped Part-1 edge the cached token still differs and
+// the next idle pass re-emits. report_realtime_status is void and drops are
+// silent (enqueue wait=0), which is exactly why Part-1 cannot own this cache.
+// NOTE: this heals only the CURRENT state, never a transient sub-250ms flap
+// (A->B->A): Part-1 emits each edge directly, and a flap that returns to the
+// cached token needs no re-emit — so an unhealed intermediate edge is expected,
+// not a missed-edge bug.
+static const char* g_last_emitted_token     = nullptr;
+static uint32_t    g_last_state_heartbeat_ms = 0;
+static constexpr uint32_t STATE_HEARTBEAT_MS = 250;  // mirrors host idle $RI=250
+
+static void maybe_emit_state_heartbeat() {
+    const char* tok = state_name();  // stable string literal per state+substate
+    if (g_last_emitted_token != nullptr && strcmp(tok, g_last_emitted_token) == 0) {
+        return;  // token unchanged since our last emit — nothing to self-heal
+    }
+    uint32_t now = millis();
+    if (now - g_last_state_heartbeat_ms < STATE_HEARTBEAT_MS) {
+        return;  // rate-limit to at most one backstop emit per interval
+    }
+    report_realtime_status(allChannels);  // best-effort, droppable (enqueue wait=0)
+    g_last_emitted_token      = tok;
+    g_last_state_heartbeat_ms = now;
+}
+
 void output_loop(void* unused) {
 #ifdef DEBUG_MEMORY_WATERMARKS
     uint32_t start_time = millis();
@@ -285,6 +314,10 @@ void output_loop(void* unused) {
         LogMessage message;
         if (xQueueReceive(message_queue, &message, 0)) {
             deliver_message(message);
+        } else {
+            //  Queue empty == drainer idle: safe, motion-free moment to
+            // opportunistically self-heal a missed state edge.
+            maybe_emit_state_heartbeat();
         }
         vTaskDelay(0);
 #ifdef DEBUG_MEMORY_WATERMARKS
@@ -675,6 +708,11 @@ static void protocol_do_alarm() {
         spindle->stop();
     }
     sys.state = State::Alarm;  // Set system alarm state
+    //  Push the Alarm edge on core 1 before the hard/soft-limit blocking
+    // loop at :685 (whose comment says it deliberately keeps servicing "reset and
+    // status reports"). Best-effort/droppable; the blocking loop's repeated
+    // protocol_handle_events() keeps the channel serviced if momentarily full.
+    report_realtime_status(allChannels);
 #ifdef ENABLE_WIFI
     WiFi.setAutoReconnect(true);
     if (WiFi.status() != WL_CONNECTED) {
@@ -828,6 +866,9 @@ static void protocol_do_feedhold(void *arg) {
     if (sys.state != State::Hold) {
         sys.state = State::Hold;
     }
+    //  Push the Hold edge immediately (Decel/"Hold:1") for prompt pause
+    // feedback; the existing :1076 emit later sends "Hold:0" at full stop.
+    report_realtime_status(allChannels);
 }
 
 static void protocol_do_safety_door() {
@@ -954,6 +995,9 @@ static void protocol_do_initiate_cycle() {
         }
 #endif
     }
+    //  Push the resulting state edge (Run/Jog from wake_up above, or Idle).
+    // Best-effort/droppable; does NOT touch g_last_emitted_token (backstop owns it).
+    report_realtime_status(allChannels);
 }
 static void protocol_initiate_homing_cycle() {
     // log_debug("protocol_initiate_homing_cycle " << state_name());
@@ -1113,6 +1157,7 @@ if (sys.step_control.executeHold) {
                     WiFi.reconnect();
                 }
 #endif
+                report_realtime_status(allChannels);  //  push job-complete -> Idle edge
             }
             break;
         case State::Homing:
@@ -2185,6 +2230,8 @@ xQueueHandle event_queue;
 void protocol_init() {
     event_queue   = xQueueCreate(10, sizeof(EventItem));
     message_queue = xQueueCreate(10, sizeof(LogMessage));
+    g_last_emitted_token      = nullptr;  //  no stale token across reset
+    g_last_state_heartbeat_ms = 0;
 }
 
 void IRAM_ATTR protocol_send_event_from_ISR(Event* evt, void* arg) {
