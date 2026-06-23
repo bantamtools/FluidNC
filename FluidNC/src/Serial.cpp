@@ -222,6 +222,11 @@ void AllChannels::init() {
 // a snapshot taken before the channel was deregistered may still dereference it.
 static std::atomic<int> _broadcastDepth { 0 };
 
+// ( SF-3) The core-1 main loop's currently-dispatching channel (defined in
+// Protocol.cpp). The kill-drain below must NOT free it while core-1 still holds
+// and dereferences it, or core-1 crashes (LoadProhibited at ->ack()).
+extern std::atomic<Channel*> activeChannel;
+
 std::vector<Channel*> AllChannels::snapshotChannels() {
     _mutex.lock();
     std::vector<Channel*> snapshot(_channelq);
@@ -348,7 +353,8 @@ Channel* AllChannels::pollLine(char* line) {
         // poll. Collect deferrals and re-queue after the loop so we do not
         // re-dequeue them immediately.
         deregistration(deadChannel);
-        if (_broadcastDepth.load(std::memory_order_acquire) == 0 && deadChannel->pendingOut() == 0) {
+        if (_broadcastDepth.load(std::memory_order_acquire) == 0 && deadChannel->pendingOut() == 0 &&
+            deadChannel != activeChannel.load()) {  // ( SF-3) not the channel core-1 is dispatching
             delete deadChannel;
         } else {
             deferred.push_back(deadChannel);

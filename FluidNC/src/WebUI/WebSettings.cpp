@@ -34,6 +34,8 @@
 #include <filesystem>
 #include <sstream>
 #include <iomanip>
+#include <esp_system.h>     //  esp_reset_reason — surface reboot cause
+#include <esp_heap_caps.h>  //  heap_caps_get_largest_free_block
 
 namespace WebUI {
 
@@ -258,6 +260,25 @@ namespace WebUI {
         log_to(out, "Free memory: ", formatBytes(ESP.getFreeHeap()));
         log_to(out, "SDK: ", ESP.getSdkVersion());
         log_to(out, "Flash Size: ", formatBytes(ESP.getFlashChipSize()));
+        //  Surface the heap floor + reboot cause so they survive a
+        // reboot and are queryable over any channel ([ESP420]). The boot
+        // esp_reset_reason log is emitted before telnet is up, and the heap
+        // watermark resets on a reboot; this reads them from the live boot session.
+        log_to(out, "Min free memory: ", formatBytes(ESP.getMinFreeHeap()));
+        log_to(out, "Largest free block: ",
+               formatBytes(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)));
+        const char* rr;
+        switch (esp_reset_reason()) {
+            case ESP_RST_POWERON:  rr = "POWERON"; break;
+            case ESP_RST_SW:       rr = "SW (esp_restart)"; break;
+            case ESP_RST_PANIC:    rr = "PANIC (exception/abort)"; break;
+            case ESP_RST_INT_WDT:  rr = "INT_WDT"; break;
+            case ESP_RST_TASK_WDT: rr = "TASK_WDT"; break;
+            case ESP_RST_WDT:      rr = "WDT"; break;
+            case ESP_RST_BROWNOUT: rr = "BROWNOUT"; break;
+            default:               rr = "OTHER"; break;
+        }
+        log_to(out, "Reset reason: ", rr);
 
         // Round baudRate to nearest 100 because ESP32 can say e.g. 115201
         //        log_to(out, "Baud rate: ", ((Uart0.baud / 100) * 100));

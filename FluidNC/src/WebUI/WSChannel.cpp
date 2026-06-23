@@ -2,6 +2,7 @@
 // Use of this source code is governed by a GPLv3 license that can be found in the LICENSE file.
 
 #include "WSChannel.h"
+#include <esp_heap_caps.h>  //  heap attribution at the WS-drop instant
 
 #ifdef ENABLE_WIFI
 #    include "WebServer.h"
@@ -69,6 +70,15 @@ namespace WebUI {
             return size;
         }
         if (!_server->sendBIN(_clientNum, out, outlen)) {
+#ifdef DEBUG_HEAP_INSTRUMENTATION
+            // (/ attribution, debug-gated) capture heap state at the drop
+            // instant — distinguishes WS-malloc pressure (tiny largest-block) from
+            // lwIP TX-pbuf exhaustion (canSend>0 + ample largest-block, send fails).
+            log_info("WS-DROP sendBIN cn=" << (int)_clientNum
+                     << " canSend=" << _server->canSend(_clientNum)
+                     << " freeInternal=" << heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)
+                     << " largestInternal=" << heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
+#endif
             _dead = true;
             log_debug("WebSocket is unresponsive; closing");
         }
@@ -98,7 +108,37 @@ namespace WebUI {
         if (_dead) {
             return false;
         }
+        // (/ SF-6 + SF-1) Gate on canSend like write() already does
+        // (WSChannel.cpp:59). HW-confirmed root cause of : at the low-heap
+        // floor under upload+plot load, lwIP TX-pbuf exhaustion makes the socket
+        // transiently NOT writable (canSend==0, largest-free-block ~2.3K). The
+        // old code skipped the guard and let arduinoWebSockets' 5 s blocking
+        // write fail, then KILLED the channel (internal tracker). Now: a not-writable
+        // socket SKIPS this droppable frame (status/PING) and is NOT killed, and
+        // we never enter the 5 s blocking write on the core-0 poller. Only a
+        // genuinely disconnected socket (canSend<0) reaps the channel. The host
+        // re-polls and the heartbeat re-emits on the next state edge once heap
+        // recovers — so a heap dip no longer drops the link.
+        int stat = _server->canSend(_clientNum);
+        if (stat < 0) {
+            _dead = true;
+            log_debug("WebSocket is dead; closing");
+            WSChannels::removeChannel(this);
+            return false;
+        }
+        if (stat == 0) {
+            return false;  // transient back-pressure — skip, do NOT kill
+        }
         if (!_server->sendTXT(_clientNum, s.c_str())) {
+#ifdef DEBUG_HEAP_INSTRUMENTATION
+            // canSend said writable but the write still failed -> genuinely dead.
+            // (/ attribution, debug-gated) capture heap state at this
+            // (now-rare) drop.
+            log_info("WS-DROP sendTXT cn=" << (int)_clientNum
+                     << " canSend=" << _server->canSend(_clientNum)
+                     << " freeInternal=" << heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)
+                     << " largestInternal=" << heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
+#endif
             _dead = true;
             log_debug("WebSocket is unresponsive; closing");
             WSChannels::removeChannel(this);

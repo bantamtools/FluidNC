@@ -75,8 +75,15 @@ namespace WebUI {
             log_debug("Telnet client disconnected");
             TelnetClient* client = _disconnected.front();
             _disconnected.pop();
-            allChannels.deregistration(client);
-            delete client;
+            // ( /  SF-2) Route teardown through the kill mechanism
+            // instead of deregistration + a raw delete. The raw delete bypassed
+            // the deferred-free guards (_broadcastDepth / pendingOut), so a
+            // telnet disconnect coinciding with an in-flight broadcast snapshot
+            // or a queued output message still referencing this client freed
+            // memory still in use -- a UAF / heap corruption that can crash
+            // (reboot) under connect/disconnect churn. kill() deregisters and
+            // frees it only once no holder still references the pointer.
+            allChannels.kill(client);
         }
 
         //check if there are any new clients

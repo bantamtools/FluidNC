@@ -34,6 +34,8 @@
 #    include <cstring>   // strcmp, strlen
 #    include <cctype>    // isalpha, isdigit, tolower
 #    include <freertos/task.h>  // uxTaskGetStackHighWaterMark
+#    include <esp_heap_caps.h>  //  largest-free-block + PSRAM total
+#    include <esp_system.h>     //  esp_reset_reason — capture reboot cause
 
 extern void make_user_commands();
 
@@ -46,10 +48,48 @@ static void log_startup_resources(const char* label) {
     float stack_kb       = (stack_words * 4) / 1024.0f;
     float stack_total_kb = (LOOP_STACK_WORDS * 4) / 1024.0f;
     uint32_t stack_pct   = ((LOOP_STACK_WORDS - stack_words) * 100) / LOOP_STACK_WORDS;
+#ifdef DEBUG_HEAP_INSTRUMENTATION
+    // (/ instrumentation, debug-gated) largest contiguous internal block
+    // (the metric the WS-coalescing/tcp_write path needs) + PSRAM total (0 == no
+    // usable PSRAM die). Off in public builds; the same numbers are queryable on
+    // demand via [ESP420] / $System/Stats.
+    uint32_t largest_kb  = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT) / 1024;
+    uint32_t psram_kb    = heap_caps_get_total_size(MALLOC_CAP_SPIRAM) / 1024;
+    log_info(label << " - Stack: " << stack_kb << " kB free / "
+             << stack_total_kb << " kB total (" << stack_pct
+             << "% used) | Heap: " << heap_kb << " kB free"
+             << " | largest-internal: " << largest_kb << " kB"
+             << " | PSRAM: " << psram_kb << " kB");
+#else
     log_info(label << " - Stack: " << stack_kb << " kB free / "
              << stack_total_kb << " kB total (" << stack_pct
              << "% used) | Heap: " << heap_kb << " kB free");
+#endif
 }
+
+#ifdef DEBUG_HEAP_INSTRUMENTATION
+//  Log the reset reason once at boot so an unexpected reboot is never
+// silent: distinguishes a crash (ESP_RST_PANIC — UAF/abort), a hang
+// (ESP_RST_TASK_WDT / ESP_RST_INT_WDT) and a power event from a normal start.
+// Used to root-cause the  stress reboot (SF-2/3/4 candidates). Debug-gated;
+// the reset reason is also surfaced on demand via [ESP420] in all builds.
+static void log_reset_reason() {
+    const char* r;
+    switch (esp_reset_reason()) {
+        case ESP_RST_POWERON:   r = "POWERON"; break;
+        case ESP_RST_SW:        r = "SW (esp_restart)"; break;
+        case ESP_RST_PANIC:     r = "PANIC (exception/abort)"; break;
+        case ESP_RST_INT_WDT:   r = "INT_WDT"; break;
+        case ESP_RST_TASK_WDT:  r = "TASK_WDT"; break;
+        case ESP_RST_WDT:       r = "other WDT"; break;
+        case ESP_RST_BROWNOUT:  r = "BROWNOUT"; break;
+        case ESP_RST_DEEPSLEEP: r = "DEEPSLEEP"; break;
+        case ESP_RST_EXT:       r = "EXT"; break;
+        default:                r = "UNKNOWN"; break;
+    }
+    log_info("Reset reason: " << r);
+}
+#endif
 
 // Derive a valid hostname from the config machine name.
 // Lowercase, replace spaces with hyphens, drop invalid chars.
@@ -285,6 +325,9 @@ void setup() {
     // Derive hostname from config name if config changed
     derive_hostname_from_config();
 
+#ifdef DEBUG_HEAP_INSTRUMENTATION
+    log_reset_reason();
+#endif
     log_startup_resources("Pre-radio");
 
     // Try Bluetooth first so its memory can be released if it is disabled

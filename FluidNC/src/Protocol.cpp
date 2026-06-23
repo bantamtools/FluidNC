@@ -16,6 +16,8 @@
 
 #include "Flashing.h"
 #include "Logging.h"
+#include <esp_heap_caps.h>  //  largest-free-block in the low-memory trace
+#include <atomic>           // ( SF-3) activeChannel cross-core UAF guard
 #include "Machine/MachineConfig.h"
 #include "Machine/Homing.h"
 #include "Report.h"         // report_feedback_message
@@ -101,8 +103,8 @@ static SpindleStop spindle_stop_ovr;
 // defined later in this file. protocol_reset() clears them so a line that
 // was grabbed by the polling task but not yet dispatched does not survive
 // the reset boundary.
-extern Channel* activeChannel;
-extern char     activeLine[];
+extern std::atomic<Channel*> activeChannel;
+extern char                  activeLine[];
 
 void protocol_reset() {
     probeState             = ProbeState::Off;
@@ -119,7 +121,7 @@ void protocol_reset() {
     // G1/G2/G3 line that relies on the prior modal feed rate. The pointer
     // may also reference a channel that is in the kill queue and about to
     // be deleted; clearing here prevents a downstream dereference.
-    activeChannel = nullptr;
+    activeChannel.store(nullptr);
     activeLine[0] = '\0';
 
     // Do not clear rtAlarm because it might have been set during configuration
@@ -329,7 +331,11 @@ void output_loop(void* unused) {
     }
 }
 
-Channel* activeChannel = nullptr;  // Channel associated with the input line
+// ( SF-3) Atomic: shared across the core-0 polling task (sets it) and the
+// core-1 main loop (uses then clears it). The kill-drain in Serial.cpp pollLine()
+// must NOT free a channel while it is the active one, else core-1's deref of a
+// freed channel crashes (LoadProhibited at protocol_main_loop / ->ack()).
+std::atomic<Channel*> activeChannel { nullptr };  // Channel associated with the input line
 
 TaskHandle_t pollingTask = nullptr;
 
@@ -365,7 +371,7 @@ void polling_loop(void* unused) {
             config->_oled->processDisplayRefresh();
         }
 
-        if (activeChannel) {
+        if (activeChannel.load()) {
             // Poll for realtime characters when waiting for the primary loop
             // (in another thread) to pick up the line.
             pollChannels();
@@ -374,7 +380,7 @@ void polling_loop(void* unused) {
 
         // Polling without an argument both checks for realtime characters and
         // returns a line-oriented command if one is ready.
-        activeChannel = pollChannels(activeLine);
+        activeChannel.store(pollChannels(activeLine));
 #ifdef DEBUG_MEMORY_WATERMARKS
         if (millis() - start_time >= DEBUG_MEMORY_WM_TIME_MS) {
             log_warn("polling_loop watermark -> " << uxTaskGetStackHighWaterMark(NULL));
@@ -566,7 +572,12 @@ void protocol_main_loop() {
 #ifdef CORE0_WDT
         do_heartbeat();
 #endif
-        if (activeChannel) {
+        // ( SF-3) Snapshot the atomic once. The kill-drain (Serial.cpp
+        // pollLine) defers freeing a channel while it is the active one, so this
+        // pointer stays valid through the dispatch below; clearing it at the end
+        // (store nullptr) releases it so the drain can free it on a later pass.
+        Channel* ch = activeChannel.load();
+        if (ch) {
             // The input polling task has collected a line of input
 #ifdef DEBUG_REPORT_ECHO_RAW_LINE_RECEIVED
             report_echo_line_received(activeLine, allChannels);
@@ -577,18 +588,18 @@ void protocol_main_loop() {
             if (config->_oled &&
                 activeLine[0] != '$' && activeLine[0] != '?' &&
                 activeLine[0] != '[' && activeLine[0] != '\0' &&
-                strcmp(activeChannel->name(), "file") != 0) {
+                strcmp(ch->name(), "file") != 0) {
                 config->_oled->busyPing();
             }
 
-            Error status_code = execute_line(activeLine, *activeChannel, WebUI::AuthenticationLevel::LEVEL_GUEST);
+            Error status_code = execute_line(activeLine, *ch, WebUI::AuthenticationLevel::LEVEL_GUEST);
 
             // Tell the channel that the line has been processed.
-            activeChannel->ack(status_code);
+            ch->ack(status_code);
 
             // Tell the input polling task that the line has been processed,
             // so it can give us another one when available
-            activeChannel = nullptr;
+            activeChannel.store(nullptr);
         }
 
         // Auto-cycle start any queued moves.
@@ -628,7 +639,12 @@ void protocol_main_loop() {
         if (newHeapSize < heapLowWater) {
             heapLowWater = newHeapSize;
             if (heapLowWater < heapWarnThreshold) {
+#ifdef DEBUG_HEAP_INSTRUMENTATION
+                log_warn("Low memory: " << heapLowWater << " bytes, largest-internal: "
+                         << heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT) << " bytes");
+#else
                 log_warn("Low memory: " << heapLowWater << " bytes");
+#endif
             }
         }
 

@@ -286,53 +286,79 @@ static void gcode_comment_msg(char* comment) {
                     const char* colon = strchr(text, ':');
                     if (colon) {
                         float accel;
-                        if (parse_comment_float(colon + 1, &accel) && accel >= 10) {
-                            int axis1 = -1;
-                            int axis2 = -1;
+                        //  Surface parse / minimum-value rejections instead of
+                        // dropping them silently. Mirrors apply_park_height's log_warn
+                        // convention so a file author can see the value was ignored + why.
+                        if (!parse_comment_float(colon + 1, &accel)) {
+                            log_warn("Accel: unparseable value:" << (colon + 1));
+                            return;
+                        }
+                        if (accel < 10) {
+                            log_warn("Accel: " << accel << " below minimum 10, ignored");
+                            return;
+                        }
 
-                            switch (axis_char) {
-                                case 'X': axis1 = X_AXIS; break;
-                                case 'Y': axis1 = Y_AXIS; break;
-                                case 'Z': axis1 = Z_AXIS; break;
-                                case 'A': axis1 = A_AXIS; break;
-                                case 'B': axis1 = B_AXIS; break;
-                                case 'C': axis1 = C_AXIS; break;
-                                case ':':
-                                    axis1 = DEFAULT_ACCEL_AXIS_1;
-                                    axis2 = DEFAULT_ACCEL_AXIS_2;
-                                    break;
-                                default: return;
+                        int axis1 = -1;
+                        int axis2 = -1;
+
+                        switch (axis_char) {
+                            case 'X': axis1 = X_AXIS; break;
+                            case 'Y': axis1 = Y_AXIS; break;
+                            case 'Z': axis1 = Z_AXIS; break;
+                            case 'A': axis1 = A_AXIS; break;
+                            case 'B': axis1 = B_AXIS; break;
+                            case 'C': axis1 = C_AXIS; break;
+                            case ':':
+                                axis1 = DEFAULT_ACCEL_AXIS_1;
+                                axis2 = DEFAULT_ACCEL_AXIS_2;
+                                break;
+                            default: return;
+                        }
+
+                        // Cap a comment-requested accel at the HIGHER of rapid_acceleration
+                        // and the config-authority G1 acceleration, so a file's (Accel) comment
+                        // can request a G1 accel above rapid_accel (rapid may be configured
+                        // lower than the G1 cutting accel). A file may only LOWER accel toward
+                        // this ceiling; a request above the ceiling is rejected, not clamped.
+                        // The ceiling reads _accelerationConfig (the immutable config value),
+                        // not the live _acceleration, so it does not shrink as comments lower
+                        // accel within a job. Overrides are reset at job boundaries by
+                        // Axes::restoreJobDefaults().
+                        //
+                        //  The bare two-axis form "(Accel:)" is ALL-OR-NOTHING: a single
+                        // comment must never leave X and Y with mismatched acceleration. So we
+                        // check EVERY target axis's ceiling first and only write if the value
+                        // fits ALL of them; otherwise nothing is changed.  Each axis that
+                        // rejects is logged with the requested value, the axis, and its ceiling.
+                        const int targets[2] = { axis1, axis2 };
+
+                        bool fits_all = true;
+                        for (int axis : targets) {
+                            if (axis < 0 || axis >= config->_axes->_numberAxis) {
+                                continue;
                             }
-
-                            bool applied = false;
-
-                            // Cap a comment-requested accel at the HIGHER of rapid_acceleration
-                            // and the config-authority G1 acceleration, so a file's (Accel) comment
-                            // can request a G1 accel above rapid_accel (rapid may be configured
-                            // lower than the G1 cutting accel). A file may only LOWER accel toward
-                            // this ceiling; a request above the ceiling is rejected, not clamped.
-                            // The ceiling reads _accelerationConfig (the immutable config value),
-                            // not the live _acceleration, so it does not shrink as comments lower
-                            // accel within a job. Overrides are reset at job boundaries by
-                            // Axes::restoreJobDefaults().
-                            auto apply_accel = [&](int axis) {
-                                if (axis < 0 || axis >= config->_axes->_numberAxis) {
-                                    return;
-                                }
-                                auto* ax        = config->_axes->_axis[axis];
-                                float max_accel = std::max(ax->_rapid_acceleration, ax->_accelerationConfig);
-                                if (accel <= max_accel) {
-                                    ax->_acceleration = accel;
-                                    applied           = true;
-                                }
-                            };
-
-                            apply_accel(axis1);
-                            apply_accel(axis2);
-
-                            if (applied) {
-                                log_info(comment);
+                            auto* ax      = config->_axes->_axis[axis];
+                            float ceiling = std::max(ax->_rapid_acceleration, ax->_accelerationConfig);
+                            if (accel > ceiling) {
+                                log_warn("Accel: " << accel << " on axis " << config->_axes->axisName(axis)
+                                                   << " exceeds ceiling " << ceiling << ", ignored");
+                                fits_all = false;
                             }
+                        }
+                        if (!fits_all) {
+                            return;  // all-or-nothing: leave every target axis unchanged
+                        }
+
+                        bool applied = false;
+                        for (int axis : targets) {
+                            if (axis < 0 || axis >= config->_axes->_numberAxis) {
+                                continue;
+                            }
+                            config->_axes->_axis[axis]->_acceleration = accel;
+                            applied                                   = true;
+                        }
+                        if (applied) {
+                            log_info(comment);
                         }
                     }
                 }
