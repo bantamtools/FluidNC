@@ -83,31 +83,41 @@ std::string compute_unmarked_path(const char* path) {
 
 namespace {
 
-// Performs the rename on the SD via std::filesystem. If `dest` already
-// exists, uses the temp-rename dance to avoid the data-destructive
-// failure mode of delete-first.
+// True if `path` (relative to the SD mount) exists on disk. Swallows
+// mount/IO errors as "absent" so resolution degrades to a normal
+// not-found rather than throwing.
+bool sd_path_exists(const char* path) {
+    try {
+        FluidPath p { path, "sd" };
+        return std::filesystem::exists(p);
+    } catch (const std::exception&) {
+        return false;
+    } catch (const Error) {
+        return false;
+    }
+}
+
+// Inverted two-step clobber. Remove any existing destination (the
+// dead-weight loser) first, then rename the source (the winner) into
+// place. The winner never moves until the loser is gone, so an
+// interruption leaves the full file under one name or the other — never a
+// stranded temp. No temp file is created. When the destination does not
+// exist this is a single rename, atomic to the medium's limit.
 //
-// Steps when dest exists:
-//   rename(src, src + ".completionmark.tmp")
-//   remove(dest)
-//   rename(src + ".completionmark.tmp", dest)
-//
-// At every step, the source's data exists somewhere on disk under a
-// known name — recoverable on transient SD I/O failure.
-Error rename_with_clobber(const char* src, const char* dest) {
+// `destRemoved` reports whether the destination was deleted from disk. On a
+// failure after the remove, the caller uses it to drop the now-absent dest
+// entry from the menu so the menu still matches disk.
+Error rename_with_clobber(const char* src, const char* dest, bool& destRemoved) {
+    destRemoved = false;
     try {
         FluidPath srcPath { src, "sd" };
         FluidPath dstPath { dest, "sd" };
         if (std::filesystem::exists(dstPath)) {
             log_info("CompletionMark: clobbering existing " << dest);
-            std::string tmp = std::string(src) + ".completionmark.tmp";
-            FluidPath  tmpPath { tmp.c_str(), "sd" };
-            std::filesystem::rename(srcPath, tmpPath);
             std::filesystem::remove(dstPath);
-            std::filesystem::rename(tmpPath, dstPath);
-        } else {
-            std::filesystem::rename(srcPath, dstPath);
+            destRemoved = true;
         }
+        std::filesystem::rename(srcPath, dstPath);
         return Error::Ok;
     } catch (const std::exception& e) {
         log_warn("CompletionMark: rename " << src << " -> " << dest
@@ -167,6 +177,29 @@ static void sync_menu_after_transition(const char* source_path,
     }
 }
 
+// When a clobber removed the destination on disk but the rename then failed,
+// the dest file is gone yet the menu still lists it. Drop the stale entry so
+// the menu matches disk. Mirrors sync_menu_after_transition's locking and
+// refresh.
+static void remove_menu_entry(const char* dest_path) {
+    if (config == nullptr || config->_oled == nullptr || config->_oled->_menu == nullptr) {
+        return;
+    }
+    const char* dest_rel = strip_sd_prefix(dest_path);
+    bool removed;
+    {
+        std::lock_guard<std::recursive_mutex> lk(config->_oled->_menu->sd_table().mutex());
+        removed = sdfiles::SDScan::removeEntryByPath(
+            config->_oled->_menu->sd_table(), dest_rel);
+        if (removed) {
+            config->_oled->_menu->sd_table().rebuildIndex(sdfiles::menuSortMode());
+        }
+    }
+    if (removed) {
+        config->_oled->refresh_display(true);
+    }
+}
+
 Error mark_completed(const char* path) {
     if (path == nullptr || *path == '\0') {
         return Error::InvalidValue;
@@ -176,9 +209,14 @@ Error mark_completed(const char* path) {
         // No-op (already marked or invalid input).
         return Error::Ok;
     }
-    Error e = rename_with_clobber(path, marked.c_str());
+    bool  destRemoved = false;
+    Error e           = rename_with_clobber(path, marked.c_str(), destRemoved);
     if (e == Error::Ok) {
         sync_menu_after_transition(path, marked.c_str());
+    } else if (destRemoved) {
+        // Destination deleted but the rename did not complete; drop the
+        // now-absent dest entry so the menu matches disk.
+        remove_menu_entry(marked.c_str());
     }
     return e;
 }
@@ -198,21 +236,69 @@ Error unmark_completed(const char* path) {
         // Already unmarked.
         return Error::Ok;
     }
-    Error e = rename_with_clobber(path, unmarked.c_str());
+    bool  destRemoved = false;
+    Error e           = rename_with_clobber(path, unmarked.c_str(), destRemoved);
     if (e == Error::Ok) {
         sync_menu_after_transition(path, unmarked.c_str());
+    } else if (destRemoved) {
+        remove_menu_entry(unmarked.c_str());
     }
     return e;
 }
 
+// Resolves a requested SD run path to the on-disk path to open, performing
+// unmark-at-start if the selected physical file is marked.
+//
+// Resolution is intentionally asymmetric:
+//   - A bare request (name) resolves loosely: if `name` is absent on disk,
+//     fall back to the marked counterpart `✓name`. Bare names are the
+//     natural identity a host or operator types, so re-running a file works
+//     regardless of its current mark state.
+//   - A decorated request (✓name) is strict: it never falls back to the
+//     unmarked name. The only producer of decorated requests is the menu,
+//     which already knows the exact on-disk name.
+// In every case, a selected ✓-marked file undergoes unmark-at-start
+// (✓name -> name, open name) before opening — resolution never opens a
+// ✓-marked file in place. Unmark-at-start exists to keep the mark a
+// trustworthy completion indicator: flipping the file to its unmarked name
+// before any output means a crash mid-plot leaves it truthfully unmarked.
+//
+// Returns nullptr when a required unmark-at-start fails on a file that
+// exists: the caller MUST abort the run rather than open. Returning a clear
+// failure (instead of the marked path) is deliberate — collapsing it back
+// to returning the marked path would silently reintroduce the
+// false-completion-mark hazard. Not-found cases instead return a path whose
+// open fails normally with error:66.
 const char* resolve_with_strip(const char* path, std::string& storage) {
     if (path == nullptr || *path == '\0') return path;
     if (!completion_marking_enabled()) return path;
-    const char*  slash = std::strrchr(path, '/');
-    const size_t off   = slash ? static_cast<size_t>((slash - path) + 1) : 0;
-    if (!has_completion_prefix(path + off)) return path;
-    if (unmark_completed(path) != Error::Ok) return path;
-    storage = compute_unmarked_path(path);
+
+    const size_t off          = basename_offset(path);
+    const bool   requestMarked = has_completion_prefix(path + off);
+
+    if (requestMarked) {
+        // Decorated request: strict. Target the marked name exactly.
+        if (!sd_path_exists(path)) {
+            // Marked file absent — nothing to unmark. Let the caller's open
+            // fail normally (error:66); not an abort.
+            return path;
+        }
+        if (unmark_completed(path) != Error::Ok) return nullptr;
+        storage = compute_unmarked_path(path);
+        return storage.empty() ? path : storage.c_str();
+    }
+
+    // Bare request: prefer the unmarked name; fall back to the marked
+    // counterpart only when the unmarked name is absent.
+    if (sd_path_exists(path)) {
+        return path;  // unmarked file present — open as-is, mark on completion
+    }
+    std::string marked = compute_marked_path(path);
+    if (marked.empty() || !sd_path_exists(marked.c_str())) {
+        return path;  // neither name exists — open fails normally (error:66)
+    }
+    if (unmark_completed(marked.c_str()) != Error::Ok) return nullptr;
+    storage = compute_unmarked_path(marked.c_str());
     return storage.empty() ? path : storage.c_str();
 }
 

@@ -1519,6 +1519,13 @@ static void launch_sd_file(const char* path) {
     }
     std::string stripped_storage;
     const char* path_to_open = CompletionMark::resolve_with_strip(path, stripped_storage);
+    if (path_to_open == nullptr) {
+        // Unmark-at-start failed on an existing file; abort rather than plot
+        // under a ✓ name.
+        log_error("CompletionMark: cannot prepare file to run: " << path);
+        config->_oled->popup_msg("Cannot prepare\nfile to run", 3000);
+        return;
+    }
     log_info("launch_sd_file: " << path_to_open);
     try {
         InputFile* infile = new InputFile(
@@ -1724,7 +1731,12 @@ static void protocol_do_enter() {
                                 std::string stripped_storage;
                                 const char* path_to_open =
                                     CompletionMark::resolve_with_strip(pathbuf, stripped_storage);
-                                if (!config->_axes->_homed && config->_kinematics->canHome(0) &&
+                                if (path_to_open == nullptr) {
+                                    // Unmark-at-start failed; abort before stashing,
+                                    // homing, or opening — do not plot under a ✓ name.
+                                    log_error("CompletionMark: cannot prepare file to run: " << pathbuf);
+                                    config->_oled->popup_msg("Cannot prepare\nfile to run", 3000);
+                                } else if (!config->_axes->_homed && config->_kinematics->canHome(0) &&
                                         !(config->getMachineType() == Machine::MachineType::EggBot)) {
                                     log_info("Unhomed. About to home before running file: " << path_to_open);
                                     config->_oled->set_file_awaiting_homing(path_to_open);
@@ -2004,9 +2016,16 @@ static void protocol_do_enter() {
                         std::string stripped_storage;
                         const char* path_to_open = CompletionMark::resolve_with_strip(
                             source_path.c_str(), stripped_storage);
-                        config->_oled->_menu->set_completed_file_from_recent(); // store run file path
-                        InputFile *infile = new InputFile("sd", path_to_open, WebUI::AuthenticationLevel::LEVEL_ADMIN, allChannels);
-                        allChannels.registration(infile);
+                        if (path_to_open == nullptr) {
+                            // Unmark-at-start failed; abort rather than plot under a
+                            // ✓ name.
+                            log_error("CompletionMark: cannot prepare file to run: " << source_path);
+                            config->_oled->popup_msg("Cannot prepare\nfile to run", 3000);
+                        } else {
+                            config->_oled->_menu->set_completed_file_from_recent(); // store run file path
+                            InputFile *infile = new InputFile("sd", path_to_open, WebUI::AuthenticationLevel::LEVEL_ADMIN, allChannels);
+                            allChannels.registration(infile);
+                        }
                     }
 
                 } else if (strcmp(config->_oled->_menu->get_selected()->display_name, "Run Again") == 0) {

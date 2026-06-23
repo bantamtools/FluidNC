@@ -418,6 +418,13 @@ namespace WebUI {
         if (strcmp(fs, "sd") == 0) {
             path_to_open = CompletionMark::resolve_with_strip(
                 parameter, stripped_storage);
+            // nullptr means a required unmark-at-start failed on an existing
+            // file. Abort rather than plot under a ✓ name, which could leave a
+            // false completion mark after a crash.
+            if (path_to_open == nullptr) {
+                log_to(out, "Cannot prepare file to run");
+                return Error::FsFailedRenameFile;
+            }
         }
 
         // Auto-home before running if unhomed. Restricted to fs=="sd"

@@ -42,9 +42,10 @@ bool has_completion_prefix(const char* basename);
 std::string compute_marked_path(const char* path);
 std::string compute_unmarked_path(const char* path);
 
-// On-disk rename. Best-effort: returns the rename layer's Error code on
-// failure. Caller logs and proceeds. Uses the temp-rename dance when
-// the destination exists.
+// On-disk rename. Returns the rename layer's Error code on failure.
+// Clobbers an existing destination by removing it first, then renaming the
+// source into place — no temp file. The source never moves until the
+// destination is gone, so an interruption never strands it.
 //
 // Error::Ok                 rename committed (or already in target state)
 // Error::InvalidValue       path is null/empty, or strip would leave
@@ -57,33 +58,33 @@ Error unmark_completed(const char* path);
 // Returns true when the feature is enabled.
 bool completion_marking_enabled();
 
-// Action-layer convenience used by the menu / WebUI handlers. If the
-// toggle is enabled and `path`'s basename has the completion prefix,
-// strip it on disk and return the stripped path. Otherwise return
-// `path` unchanged. `storage` is an out-parameter that keeps the
-// stripped std::string alive for the caller's lifetime; the returned
-// const char* points either into `storage` or into `path`.
+// Action-layer resolution used by the menu / WebUI run handlers. Turns a
+// requested SD run path into the on-disk path to open, performing
+// unmark-at-start when the selected file is ✓-marked. `storage` is an
+// out-parameter that keeps any rewritten path alive for the caller; the
+// returned pointer points either into `storage` or into `path`.
+//
+// Resolution is asymmetric: a bare request falls back to the ✓ copy when
+// the bare name is absent; a decorated (✓) request is strict. A selected
+// ✓-marked file is always unmarked before opening — never opened in place.
+//
+// RETURN CONTRACT:
+//   - non-null: the path to open. Not-found cases return a path whose open
+//     fails normally with error:66.
+//   - nullptr: a required unmark-at-start failed on a file that exists. The
+//     caller MUST abort the run (do not open) — opening under the ✓ name
+//     could leave a false completion mark after a crash.
 //
 // LIFETIME CONTRACT — the returned pointer is valid only while *both*
-// of these are alive:
-//   - `storage` (the std::string passed in by the caller), AND
-//   - whatever `path` points into.
-// In the no-strip case the returned pointer aliases `path`, so if
-// `path` was `tempString().c_str()` the result dangles. Callers who
-// have a getter that returns `std::string` by value (e.g. Menu.h's
-// get_recent_file_path / get_completed_file_path) MUST copy into a
-// local std::string first and pass its c_str() — do not chain
-// `.c_str()` directly on a temporary.
+// `storage` and whatever `path` points into are alive. In the pass-through
+// cases the result aliases `path`, so a caller passing `tempString().c_str()`
+// must first copy into a local std::string (e.g. Menu.h's
+// get_recent_file_path / get_completed_file_path return by value).
 //
-// Best-effort: any rename failure leaves `path` unchanged, so the job
-// still runs.
-//
-// Hook this at the moment the user takes the action that asserts
-// "I'm running this file" — before any auto-home detour, before
-// `new InputFile(...)`. Auto-home paths must call this before stashing
-// the path via set_file_awaiting_homing(), so the eventual InputFile
-// (constructed in OLED.cpp after homing completes) sees the
-// already-stripped name.
+// Hook this at the moment the user asserts "I'm running this file" — before
+// any auto-home detour and before new InputFile(...). Auto-home paths must
+// call it before stashing via set_file_awaiting_homing(), and must check for
+// the nullptr abort before stashing or homing.
 const char* resolve_with_strip(const char* path, std::string& storage);
 
 }  // namespace CompletionMark
