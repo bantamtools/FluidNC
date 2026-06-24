@@ -29,10 +29,10 @@ function navbar(){
 
 function trash_icon(){
     var content ="<svg width='24' height='24' viewBox='0 0 128 128'>";
-    content +="<rect x='52' y='12' rx='6' ry='6' width='25' height='7' style='fill:red;' />";
+    content +="<rect x='52' y='12' rx='6' ry='6' width='25' height='7' style='fill:#FF8800;' />";
     content +="<rect x='52' y='16' width='25' height='2' style='fill:white;' />";
-    content +="<rect x='30' y='18' rx='6' ry='6' width='67' height='100' style='fill:red;' />";
-    content +="<rect x='20' y='18' rx='10' ry='10' width='87' height='14' style='fill:red;' />";
+    content +="<rect x='30' y='18' rx='6' ry='6' width='67' height='100' style='fill:#FF8800;' />";
+    content +="<rect x='20' y='18' rx='10' ry='10' width='87' height='14' style='fill:#FF8800;' />";
     content +="<rect x='20' y='29' width='87' height='3' style='fill:white;' />";
     content +="<rect x='40' y='43' rx='7' ry='7' width='7' height='63' style='fill:white;' />";
     content +="<rect x='60' y='43' rx='7' ry='7' width='7' height='63' style='fill:white;' />";
@@ -41,7 +41,7 @@ function trash_icon(){
 }
 
 function back_icon(){
-  var content ="<svg width='24' height='24' viewBox='0 0 24 24'><path d='M7,3 L2,8 L7,13 L7,10 L17,10 L18,11 L18,15 L17,16 L10,16 L9,17 L9,19 L10,20 L20,20 L22,18 L22,8 L20,6 L7,6 z' stroke='black' fill='white' /></svg>";
+  var content ="<svg width='24' height='24' viewBox='0 0 24 24'><path d='M7,3 L2,8 L7,13 L7,10 L17,10 L18,11 L18,15 L17,16 L10,16 L9,17 L9,19 L10,20 L20,20 L22,18 L22,8 L20,6 L7,6 z' stroke='#DADEE2' fill='none' /></svg>";
   return content;
 }
 
@@ -86,7 +86,7 @@ for (var i1=0;i1 <jsonresponse.files.length;i1++){
 if (String(jsonresponse.files[i1].size) != "-1")
     {
     content +="<TR>";
-    content +="<td><svg height='24' width='24' viewBox='0 0 24 24' >    <path d='M1,2 L1,21 L2,22 L16,22 L17,21 L17,6 L12,6 L12,1  L2,1 z' stroke='black' fill='white' /><line x1='12' y1='1' x2='17' y2='6' stroke='black' stroke-width='1'/>";
+    content +="<td><svg height='24' width='24' viewBox='0 0 24 24' >    <path d='M1,2 L1,21 L2,22 L16,22 L17,21 L17,6 L12,6 L12,1  L2,1 z' stroke='#DADEE2' fill='none' /><line x1='12' y1='1' x2='17' y2='6' stroke='#DADEE2' stroke-width='1'/>";
     content +="</svg></td>";
     content +="<TD class='btnimg' style=\"padding:0px;\"><a href=\""+jsonresponse.path+jsonresponse.files[i1].name+"\" target=_blank><div class=\"blacklink\">";
     content +=jsonresponse.files[i1].name;
@@ -113,7 +113,7 @@ if (String(jsonresponse.files[i1].size) != "-1")
 for (var i2=0;i2 <jsonresponse.files.length;i2++){
 if (String(jsonresponse.files[i2].size) == "-1")
     {
-    content+="<TR><td><svg height='24' width='24' viewBox='0 0 24 24' ><path d='M19,11 L19,8 L18,7 L8,7 L8,5 L7,4 L2,4 L1,5 L1,22 L19,22 L20,21 L23,11 L5,11 L2,21 L1,22' stroke='black' fill='white' /></svg></td>";
+    content+="<TR><td><svg height='24' width='24' viewBox='0 0 24 24' ><path d='M19,11 L19,8 L18,7 L8,7 L8,5 L7,4 L2,4 L1,5 L1,22 L19,22 L20,21 L23,11 L5,11 L2,21 L1,22' stroke='#DADEE2' fill='none' /></svg></td>";
     content +="<TD  class='btnimg blacklink' style='padding:10px 15px;' onclick=\"select_dir('" + jsonresponse.files[i2].name+"');\">";
     content +=jsonresponse.files[i2].name;
     content +="</TD><TD></TD><TD></TD>";
@@ -237,6 +237,7 @@ function HideAll(msg){
     document.getElementById('MSG').innerHTML = msg;
     document.getElementById('FILESYSTEM').style.display = "none";
     document.getElementById('FWUPDATE').style.display = "none";
+    document.getElementById('WIFI').style.display = "none";
 }
 
 function FWError(){
@@ -247,6 +248,8 @@ function FWOk(){
     document.getElementById('MSG').innerHTML = "Connected";
     document.getElementById('FILESYSTEM').style.display = "block";
     document.getElementById('FWUPDATE').style.display = "block";
+    document.getElementById('WIFI').style.display = "block";
+    LoadWifiInfo();
 }
 
 function InitUI(){
@@ -499,4 +502,78 @@ function SLR (){
     };
 xmlhttp.open("GET", url, true);
 xmlhttp.send();
+}
+
+function toggleSection(id){
+    var body = document.getElementById(id + '-body');
+    var caret = document.getElementById(id + '-caret');
+    if (body.classList.contains('collapsed')) {
+        body.classList.remove('collapsed');
+        if (caret) caret.classList.add('open');
+    } else {
+        body.classList.add('collapsed');
+        if (caret) caret.classList.remove('open');
+    }
+}
+
+function escapeHtml(s){
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function espCommand(text, onok, onerr){
+    var x = new XMLHttpRequest();
+    x.onreadystatechange = function(){
+        if (x.readyState == 4) {
+            if (x.status == 200) { if (onok) onok(x.responseText); }
+            else if (x.status == 401) { RL(); }
+            else { if (onerr) onerr(x.status, x.responseText); }
+        }
+    };
+    x.open("GET", "/command?commandText=" + encodeURIComponent(text), true);
+    x.send();
+}
+
+function LoadWifiInfo(){
+    espCommand("[ESP400]", function(resp){
+        var ssid = "";
+        try {
+            var arr = JSON.parse(resp).EEPROM || [];
+            for (var i = 0; i < arr.length; i++) {
+                if (arr[i].P == "Sta/SSID") { ssid = arr[i].V || ""; break; }
+            }
+        } catch (e) { /* leave blank on parse failure */ }
+        var cur = document.getElementById('wifi-current');
+        var inp = document.getElementById('wifi-ssid');
+        if (ssid) {
+            cur.innerHTML = "Currently configured: <b>" + escapeHtml(ssid) + "</b>";
+            if (!inp.value) { inp.value = ssid; }
+        } else {
+            cur.textContent = "No network configured yet.";
+        }
+    });
+}
+
+function ToggleWifiPw(cb){
+    document.getElementById('wifi-pass').type = cb.checked ? "text" : "password";
+}
+
+function wifiErr(msg, t){
+    msg.className = "wifi-status err";
+    msg.textContent = "Error: " + (t ? t : "command failed");
+}
+
+function SaveWifi(){
+    var ssid = document.getElementById('wifi-ssid').value.trim();
+    var pwd  = document.getElementById('wifi-pass').value;
+    var msg  = document.getElementById('wifi-msg');
+    if (!ssid) { msg.className = "wifi-status err"; msg.textContent = "Network name (SSID) cannot be empty."; return; }
+    if (!confirm("Save WiFi settings and restart now?\n\nThe device will reboot and try to join \"" + ssid + "\". This page will disconnect and the plotter may appear at a new IP address on that network.")) { return; }
+    msg.className = "wifi-status"; msg.textContent = "Saving network name...";
+    espCommand("[ESP100]" + ssid, function(){
+        msg.textContent = "Saving password...";
+        espCommand("[ESP101]" + pwd, function(){
+            msg.textContent = "Saved. Restarting -- reconnect to the new network, then find the device at its new IP.";
+            espCommand("[ESP444]RESTART", null, null); // fire-and-forget; connection drops on reboot
+        }, function(st, t){ wifiErr(msg, t); });
+    }, function(st, t){ wifiErr(msg, t); });
 }

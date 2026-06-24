@@ -25,5 +25,8 @@
   },
   "repository": "https://github.com/luc-github/ESP3D",
   "author": "Luc LEBOSSE",
-  "license": "(ISC OR GPL-3.0)"
+  "license": "(ISC OR GPL-3.0)",
+  "dependencies": {
+    "each-props": "^3.0.0"
+  }
 }

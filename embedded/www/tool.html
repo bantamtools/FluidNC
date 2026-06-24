@@ -1,12 +1,14 @@
 <html>
     <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
         <!-- smoosh -->
         <link href="css/style.css" rel="stylesheet">
         <!-- endsmoosh -->
-        <title>ESP3D tool page</title>
+        <title>Bantam Tools</title>
     </head>
-    <body> 
-        <div class="panel">
+    <body>
+        <div class="panel header">
         <table width="100%">
             <tr>
                 <td>
@@ -47,9 +49,41 @@
         <div class="panel">
             <center><h2 id="MSG"></h2></center>
         </div>
-        <div class="panel hide_it" id="FILESYSTEM">
-            <div class="panel-heading">Flash Filesystem</div>
+        <div class="panel hide_it" id="WIFI">
+            <div class="panel-heading">WiFi Configuration</div>
             <div class="panel-body">
+                <div class="info" id="wifi-current">&nbsp;</div>
+                <br>
+                <div class="form-row">
+                    <label class="form-label" for="wifi-ssid">Network name (SSID)</label>
+                    <input class="form-control" type="text" id="wifi-ssid" autocomplete="off" autocapitalize="off" spellcheck="false" />
+                </div>
+                <div class="form-row">
+                    <label class="form-label" for="wifi-pass">Password</label>
+                    <input class="form-control" type="password" id="wifi-pass" autocomplete="off" />
+                    <label class="showpw"><input type="checkbox" onclick="ToggleWifiPw(this);" /> Show</label>
+                </div>
+                <input class="btn btn-primary" type="button" value="Save &amp; Restart" onclick="SaveWifi();" />
+                <div class="hint">Saving reboots the device so it joins the new network. This page will disconnect and the plotter may appear at a new IP address on that network. If the new network can't be reached, it falls back to its own access point.</div>
+                <div class="wifi-status" id="wifi-msg"></div>
+            </div>
+        </div>
+        <div class="panel hide_it" id="FWUPDATE">
+            <div class="panel-heading">Firmware Update</div>
+            <div class="panel-body">
+                <table>
+                    <tr>
+                        <td><input type="file" id="fw-select" name="myfiles[]" /></td>
+                        <td><input class="btn btn-primary" type="button" id="ubut" onclick="Uploadfile();" value="Update"/></td>
+                        <td><progress style="visibility:hidden;" name='prgfw' id='prgfw' max='100'></progress></td>
+                        <td><span id='msg' style='visibility:hidden;'>Restarting, please wait....</span><span id='counter'></span></td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+        <div class="panel hide_it" id="FILESYSTEM">
+            <div class="panel-heading collapsible" onclick="toggleSection('FILESYSTEM')"><span class="caret" id="FILESYSTEM-caret"></span>Flash Filesystem</div>
+            <div class="panel-body collapsed" id="FILESYSTEM-body">
                 <input type="file" id="file-select" name="myfiles[]" multiple />
                 <input class="btn btn-primary" type="button" id="upload-button" onclick="Sendfile();" value="Upload"/>&nbsp;&nbsp;<progress style="visibility:hidden;" name='prg' id='prg' max='100'></progress>
                 <br><br>
@@ -61,8 +95,8 @@
                                     <input class="btn btn-primary" type="button" onclick="SendCommand('list','all');" value="Refresh"/>
                                 </td>
                                 <td width="0%">
-                                    <div onclick="Createdir()" class="btnimg"><svg width="40" height="40" viewBox="0 0 40 40"><rect x="5" y="10" width="30" height="20" rx="2" ry="2" fill="#31b0d5" />
-                                            <rect x="20" y="5" width="15" height="15" rx="2" ry="2" fill="#31b0d5" /><text x="15" y="25" font-size="18"  font-weight="800"  fill="white">+</text></svg>
+                                    <div onclick="Createdir()" class="btnimg"><svg width="40" height="40" viewBox="0 0 40 40"><rect x="5" y="10" width="30" height="20" rx="2" ry="2" fill="#009FDF" />
+                                            <rect x="20" y="5" width="15" height="15" rx="2" ry="2" fill="#009FDF" /><text x="15" y="25" font-size="18"  font-weight="800"  fill="white">+</text></svg>
                                     </div>
                                 </td>
                                 <td width="100%">
@@ -70,7 +104,7 @@
                                 </td>
                             </tr>
                         </table>
-                        <table class="table table-striped" style="border:1px;solid #dddddd;margin-bottom:20px;" >
+                        <table class="table table-striped" style="margin-bottom:20px;" >
                             <thead>
                                 <tr>
                                     <th width='0%'>Type</th>
@@ -86,19 +120,6 @@
                     </div>
                     <div class="panel-footer " id="status"></div>
                 </div>
-            </div>
-        </div>
-        <div class="panel hide_it" id="FWUPDATE">
-            <div class="panel-heading">Firmware Update</div>
-            <div class="panel-body">
-                <table>
-                    <tr>
-                        <td><input type="file" id="fw-select" name="myfiles[]" /></td>
-                        <td><input class="btn btn-primary" type="button" id="ubut" onclick="Uploadfile();" value="Update"/></td>
-                        <td><progress style="visibility:hidden;" name='prgfw' id='prgfw' max='100'></progress></td>
-                        <td><span id='msg' style='visibility:hidden;'>Restarting, please wait....</span><span id='counter'></span></td>
-                    </tr>
-                </table>
             </div>
         </div>
                 <div id="loginpage"class="modal">

@@ -30,6 +30,7 @@
 #include "../Protocol.h"  //  protocol_set_pending_file
 
 #include "src/HashFS.h"
+#include "src/SHA256Hex.h"  // ESP222 SD/Checksum: streaming SHA-256 of an uploaded file
 
 #include <cstring>
 #include <filesystem>
@@ -399,6 +400,114 @@ namespace WebUI {
     }
     static Error showLocalFile(char* parameter, AuthenticationLevel auth_level, Channel& out) {  // ESP701
         return showFile("", parameter, auth_level, out);
+    }
+
+    // ESP222 — stream-hash an SD file with SHA-256 so the host can verify an
+    // uploaded G-code file. Emits exactly one parseable line:
+    //   "[CHECKSUM:/sd/<file>|SHA256:<64 UPPERCASE hex>]"  on success, or
+    //   "[CHECKSUM:ERR:<REASON>]"                          on error.
+    // The success line's ']' is appended by LogStream (3-arg log_to streams the
+    // body in); the ERR lines include ']' explicitly because the bare 2-arg
+    // log_to does NOT auto-append it (verified on-device). The host's USB
+    // terminator regex requires the ']', so an unterminated ERR line would
+    // otherwise time out instead of failing fast.
+    // Idle-gated by the WebCommand framework: the default cmdChecker
+    // (notIdleOrAlarm, see Settings.h) rejects a non-Idle/Alarm controller with
+    // error:120 (AnotherInterfaceBusy) BEFORE this handler runs, so a hash never
+    // races a plot reading the SD VFS (max_files=1). The host fails that busy
+    // reply CLOSED (it's an "error:" line and the connected firmware satisfies
+    // the host's version gate). This handler therefore only runs when Idle/Alarm.
+    // Cooperatively yields every ~32 KB so a long hash does not starve status/
+    // realtime servicing (there is no armed task watchdog on this build).
+    //
+    // Protocol note: every outcome OF THIS HANDLER (success OR error) emits a
+    // [CHECKSUM:...] line and returns Error::Ok, so the wire is "[CHECKSUM:...]\nok"
+    // and the host parses success and ERR through one path. An ERR line carries no
+    // "|SHA256:" so the host fails the verify CLOSED. (Old firmware that lacks
+    // this command returns "error:N", which the host fails OPEN via its
+    // firmware-version gate.)
+    static Error checksumSDFile(char* parameter, AuthenticationLevel auth_level, Channel& out) {  // ESP222
+        if (!parameter || *parameter == '\0') {
+            log_to(out, "[CHECKSUM:ERR:MISSING_PATH]");
+            return Error::Ok;
+        }
+        std::string path(parameter);
+        if (path[0] != '/') {
+            path = "/" + path;
+        }
+
+        Sha256Ctx ctx;
+        sha256_init(ctx);
+        try {
+            FileStream in { path.c_str(), "r", "sd" };
+            uint8_t    buf[512];
+            size_t     len;
+            uint32_t   chunks = 0;
+            while ((len = in.read(buf, sizeof(buf))) > 0) {
+                sha256_update(ctx, buf, len);
+                if ((++chunks & 0x3F) == 0) {
+                    protocol_execute_realtime();  // keep status / ? / abort alive
+                    if (sys.abort) {
+                        log_to(out, "[CHECKSUM:ERR:ABORTED]");
+                        return Error::Ok;
+                    }
+                    delay_ms(0);  // yield so the output task can drain
+                }
+            }
+            // A short read before EOF (SD glitch / bad sector) leaves
+            // position < size; fread cannot distinguish that from EOF, so verify
+            // completeness explicitly rather than emit a hash of a truncated file
+            // as success (which would otherwise read as a normal content mismatch).
+            if (in.position() != in.size()) {
+                log_to(out, "[CHECKSUM:ERR:READ]");
+                return Error::Ok;
+            }
+        } catch (const std::filesystem::filesystem_error&) {
+            log_to(out, "[CHECKSUM:ERR:NO_SD]");
+            return Error::Ok;
+        } catch (const Error&) {
+            log_to(out, "[CHECKSUM:ERR:NO_FILE]");
+            return Error::Ok;
+        }
+
+        uint8_t digest[32];
+        sha256_final(ctx, digest);
+        std::string hex = sha256ToHexUpper(digest);
+        // 3-arg log_to copies to a temp string (path/hex can outlive the call).
+        log_to(out, "[CHECKSUM:", path.c_str() << "|SHA256:" << hex.c_str());
+        return Error::Ok;
+    }
+
+    // ESP223 — report a stored SD file's byte size so the host can verify an
+    // upload completed (catches truncation cheaply, on any firmware that has
+    // this command). Same one-line, uniform-Error::Ok protocol as ESP222:
+    //   "[SIZE:/sd/<file>|BYTES:<n>]"             on success, or
+    //   "[SIZE:ERR:{MISSING_PATH|NO_SD|NO_FILE}]" on error.
+    // FileStream::size() is cached at open (no read). The success line's ']' is
+    // appended by the 3-arg log_to; the ERR lines include ']' explicitly (the
+    // 2-arg log_to does not auto-append). Idle-gated by the framework cmdChecker,
+    // like ESP222.
+    static Error sizeSDFile(char* parameter, AuthenticationLevel auth_level, Channel& out) {  // ESP223
+        if (!parameter || *parameter == '\0') {
+            log_to(out, "[SIZE:ERR:MISSING_PATH]");
+            return Error::Ok;
+        }
+        std::string path(parameter);
+        if (path[0] != '/') {
+            path = "/" + path;
+        }
+        try {
+            FileStream in { path.c_str(), "r", "sd" };
+            std::string bytes = std::to_string(in.size());  // LogStream << wants a string, not an int
+            log_to(out, "[SIZE:", path.c_str() << "|BYTES:" << bytes.c_str());
+        } catch (const std::filesystem::filesystem_error&) {
+            log_to(out, "[SIZE:ERR:NO_SD]");
+            return Error::Ok;
+        } catch (const Error&) {
+            log_to(out, "[SIZE:ERR:NO_FILE]");
+            return Error::Ok;
+        }
+        return Error::Ok;
     }
 
     static Error runFile(const char* fs, char* parameter,
@@ -913,6 +1022,8 @@ namespace WebUI {
         new WebCommand(NULL, WEBCMD, WU, NULL, "LocalFS/Hashes", showLocalFSHashes);
 
         new WebCommand("path", WEBCMD, WU, "ESP221", "SD/Show", showSDFile);
+        new WebCommand("path", WEBCMD, WU, "ESP222", "SD/Checksum", checksumSDFile);
+        new WebCommand("path", WEBCMD, WU, "ESP223", "SD/Size", sizeSDFile);
         new WebCommand("path", WEBCMD, WU, "ESP220", "SD/Run", runSDFile);
         new WebCommand("file_or_directory_path", WEBCMD, WU, "ESP215", "SD/Delete", deleteSDObject);
         new WebCommand("path", WEBCMD, WU, NULL, "SD/Rename", renameSDObject);

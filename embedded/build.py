@@ -28,9 +28,8 @@ def bin2header(data, var_name='var'):
     out.append('unsigned int {var_name}_SIZE = {data_len};'.format(var_name=var_name, data_len=len(data)))
     return '\n'.join(out) + '\n'
 
-subprocess.run(["npm", "install"])
-subprocess.run(["npm", "audit", "fix"])
-subprocess.run(["gulp", "package"])
+subprocess.run(["npm", "install"], check=True)
+subprocess.run(["npx", "gulp", "package"], check=True)
 
 with open('tool.html.gz', 'rb') as f:
     data = f.read()
