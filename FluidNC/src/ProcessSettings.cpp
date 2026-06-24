@@ -854,7 +854,11 @@ void make_user_commands() {
     new UserCommand("HC", "Home/C", home_c, notIdleOrAlarm);
 
     new UserCommand("SLP", "System/Sleep", go_to_sleep, notIdleOrAlarm);
-    new UserCommand("I", "Build/Info", get_report_build_info, notIdleOrAlarm);
+    //  $I (Build/Info) is read-only and is how hosts (e.g. Bantam Studio)
+    // identify the device. It must answer during a job — not error:8 — or the
+    // host cannot connect to a plotting machine. Matches the other read-only
+    // info commands ($GD/$CI/$CD/$T/$A/$E), which use anyState.
+    new UserCommand("I", "Build/Info", get_report_build_info, anyState);
     new UserCommand("N", "GCode/StartupLines", report_startup_lines, notIdleOrAlarm);
     new UserCommand("RST", "Settings/Restore", restore_settings, notIdleOrAlarm, WA);
 
