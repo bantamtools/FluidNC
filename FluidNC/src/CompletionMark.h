@@ -83,8 +83,8 @@ bool completion_marking_enabled();
 //
 // Hook this at the moment the user asserts "I'm running this file" — before
 // any auto-home detour and before new InputFile(...). Auto-home paths must
-// call it before stashing via set_file_awaiting_homing(), and must check for
-// the nullptr abort before stashing or homing.
+// call it before stashing via `protocol_set_pending_file()` / `PendingFileRun`,
+// and must check for the nullptr abort before stashing or homing.
 const char* resolve_with_strip(const char* path, std::string& storage);
 
 }  // namespace CompletionMark

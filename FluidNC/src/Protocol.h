@@ -7,6 +7,7 @@
 
 #include "Types.h"
 
+#include <string>
 #include <freertos/FreeRTOS.h>
 #include <freertos/queue.h>
 #include "Config.h"
@@ -83,6 +84,14 @@ enum class ExecAlarm : uint8_t {
     ControlPin            = 11,
     HomingAmbiguousSwitch = 12,
 };
+
+//  Deterministic open of an SD file that was queued to run after an
+// auto-home. Set by the file-run handlers; consumed by Homing::done; the
+// failure/clear hooks discard a pending path so a later $H can't run it.
+void protocol_set_pending_file(const std::string& path);
+void protocol_clear_pending_file();
+void protocol_run_pending_file_after_homing();   // call from Homing::done after _homed
+void protocol_on_homing_failed();                 // call from Homing::fail
 
 extern volatile ExecAlarm rtAlarm;  // Global realtime executor variable for setting various alarms.
 

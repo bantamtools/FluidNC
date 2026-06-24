@@ -27,6 +27,7 @@
 
 #include "Commands.h"  // COMMANDS::restart_MCU();
 #include "WifiConfig.h"
+#include "../Protocol.h"  //  protocol_set_pending_file
 
 #include "src/HashFS.h"
 
@@ -428,9 +429,10 @@ namespace WebUI {
         }
 
         // Auto-home before running if unhomed. Restricted to fs=="sd"
-        // because the post-homing observer in OLED::parse_status_report
+        // because the deterministic post-homing open
+        // (protocol_run_pending_file_after_homing -> open_and_register_sd_file)
         // hardcodes the SD filesystem when reopening the stashed path —
-        // a LocalFS path stashed via the same field would reopen against
+        // a LocalFS path stashed via PendingFileRun would reopen against
         // SD, finding the wrong file. LocalFS callers take the
         // immediate-open path.
         const bool homed   = config->_axes->_homed;
@@ -439,7 +441,7 @@ namespace WebUI {
             config->getMachineType() == Machine::MachineType::EggBot;
         if (strcmp(fs, "sd") == 0 && !homed && canHome && !eggbot) {
             log_info("Auto-home before remote file run: " << path_to_open);
-            config->_oled->set_file_awaiting_homing(path_to_open);
+            protocol_set_pending_file(path_to_open);
             config->_oled->popup_msg("Homing before file run...", 0);
             Machine::Homing::run_cycles(Machine::Homing::AllCycles);
             return Error::Ok;

@@ -94,8 +94,6 @@ private: // AIDAN
     std::string _saved_m0_comment;     // M0 pause comment storage
     bool _m0_comment_logged = false;   // Track if current M0 message was logged
 
-    std::string _file_awaiting_homing;
-
     int _radio_delay = 1000;//2000;
 
     uint8_t _i2c_num = 0;
@@ -262,9 +260,6 @@ public:
 
 	bool is_file_job_running() { return _file_job_running; };
 	void set_file_job_running(bool running);
-
-	void set_file_awaiting_homing(const char *path) { _file_awaiting_homing = path; }
-
 
 	// public version so we can call straight from GCode.cpp without using logging/channels
     void parse_gcode_comment_report(std::string report);

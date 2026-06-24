@@ -362,6 +362,11 @@ namespace Machine {
         // Does setting low latency make a difference?
         // config->_stepping->beginLowLatency();
         config->_axes->_homed = true;
+
+        //  If this homing was triggered by a file-run, open the stashed
+        // file deterministically here (protocol task), instead of relying on
+        // the OLED's droppable status-edge observer.
+        protocol_run_pending_file_after_homing();
     }
 
     void Homing::nextCycle() {
@@ -394,6 +399,7 @@ namespace Machine {
         rtAlarm = alarm;
         config->_axes->set_homing_mode(_cycleAxes, false);  // tell motors homing is done...failed
         config->_axes->set_disable(config->_stepping->_idleMsecs != 255);
+        protocol_on_homing_failed();  //  discard any pending file-run + notify
     }
 
     bool Homing::needsPulloff2(MotorMask motors) {

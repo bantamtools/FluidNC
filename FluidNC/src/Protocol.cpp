@@ -8,6 +8,7 @@
 */
 
 #include "Protocol.h"
+#include "PendingFileRun.h"
 #include "CompletionMark.h"  // : strip-on-start helper
 #include "Config.h"
 #include "Error.h"
@@ -123,9 +124,64 @@ void protocol_reset() {
     // be deleted; clearing here prevents a downstream dereference.
     activeChannel.store(nullptr);
     activeLine[0] = '\0';
+    protocol_clear_pending_file();  //  a reset cancels any queued post-homing file-run
 
     // Do not clear rtAlarm because it might have been set during configuration
     // rtAlarm = ExecAlarm::None;
+}
+
+//  ---- deterministic post-homing file open ---------------------------
+void protocol_set_pending_file(const std::string& path) { PendingFileRun::set(path); }
+void protocol_clear_pending_file() { PendingFileRun::clear(); }
+
+// Open + register an SD file. Mirrors the inline opens (slash-normalize,
+// set_completed_file, try/catch) so the post-homing path is parity-equal to
+// the immediate-open path. Returns true on success.
+static bool open_and_register_sd_file(const std::string& raw_path) {
+    if (raw_path.empty()) {
+        return false;
+    }
+    std::string path = (raw_path[0] == '/') ? raw_path : ("/" + raw_path);
+    if (config->_oled && config->_oled->_menu) {
+        config->_oled->_menu->set_completed_file(path.c_str());
+    }
+    try {
+        InputFile* infile = new InputFile(
+            "sd", path.c_str(), WebUI::AuthenticationLevel::LEVEL_ADMIN, allChannels);
+        allChannels.registration(infile);
+        return true;
+    } catch (const std::filesystem::filesystem_error& e) {
+        log_error("Cannot open SD file after homing: " << e.what());
+        return false;
+    } catch (Error) {
+        log_error("Cannot open SD file after homing: " << path);
+        return false;
+    }
+}
+
+void protocol_run_pending_file_after_homing() {
+    if (!PendingFileRun::has()) {
+        return;  // homing was a bare $H / unrelated — nothing to run
+    }
+    std::string path = PendingFileRun::take();   // consume (clears)
+    if (config->_oled) {
+        config->_oled->clear_popup();            // dismiss "Homing before file run…"
+    }
+    log_info("Running file after homing: " << path);
+    if (!open_and_register_sd_file(path) && config->_oled) {
+        config->_oled->popup_msg("Could not open\nfile after homing", 3000);
+    }
+}
+
+void protocol_on_homing_failed() {
+    if (!PendingFileRun::has()) {
+        return;
+    }
+    PendingFileRun::clear();
+    if (config->_oled) {
+        config->_oled->clear_popup();
+        config->_oled->popup_msg("Homing before file\nrun unsuccessful", 3000);
+    }
 }
 
 static int32_t idleEndTime = 0;
@@ -1739,7 +1795,7 @@ static void protocol_do_enter() {
                                 } else if (!config->_axes->_homed && config->_kinematics->canHome(0) &&
                                         !(config->getMachineType() == Machine::MachineType::EggBot)) {
                                     log_info("Unhomed. About to home before running file: " << path_to_open);
-                                    config->_oled->set_file_awaiting_homing(path_to_open);
+                                    PendingFileRun::set(path_to_open);
                                     config->_oled->popup_msg("Homing before file run...", 0);
                                     Machine::Homing::run_cycles(Machine::Homing::AllCycles);
                                 } else {
