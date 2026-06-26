@@ -34,7 +34,7 @@ const char* strip_sd_prefix(const char* full_path);
 // .yaml configs to _config_menu. None means "not menu-eligible."
 enum class FileClass : unsigned char {
     None = 0,
-    Gcode,    // .gcode / .nc / .txt — _files_menu
+    Gcode,    // .gcode / .nc — _files_menu
     Bin,      // .bin             — _firmware_menu
     Cfg,      // .yaml            — _config_menu
 };

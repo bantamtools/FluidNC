@@ -25,7 +25,7 @@
         }                                                                                                                                  \
     } while (0)
 
-static const String allowed_file_ext[SD_NUM_ALLOWED_EXT] = {".gcode", ".nc", ".txt"};
+static const String allowed_file_ext[SD_NUM_ALLOWED_EXT] = {".gcode", ".nc"};
 static bool sd_is_mounted = false;
 
 static esp_err_t mount_to_vfs_fat(int max_files, sdmmc_card_t* card, uint8_t pdrv, const char* base_path) {

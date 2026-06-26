@@ -41,7 +41,7 @@ const char* strip_sd_prefix(const char* full_path) {
 // global -- if a .bin is ever uploaded to a board running the sdspi
 // backend, the helper still routes the menu entry correctly via
 // _firmware_menu, which Menu owns regardless of backend.
-static const char* const kGcodeExt[] = { ".gcode", ".nc", ".txt" };
+static const char* const kGcodeExt[] = { ".gcode", ".nc" };
 static const char* const kBinExt[]   = { ".bin" };
 static const char* const kCfgExt[]   = { ".yaml" };
 

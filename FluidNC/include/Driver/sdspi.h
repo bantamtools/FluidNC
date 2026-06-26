@@ -7,7 +7,7 @@
 #ifndef USE_SDMMC
 
 // Definitions
-#define SD_NUM_ALLOWED_EXT  3   // Number of allowed file extensions
+#define SD_NUM_ALLOWED_EXT  2   // Number of allowed file extensions
 
 bool sd_init_slot(uint32_t freq_hz, int cs_pin, int cd_pin = -1, int wp_pin = -1);
 void sd_unmount();

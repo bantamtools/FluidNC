@@ -7,7 +7,7 @@
 #ifdef USE_SDMMC
 
 // Definitions
-#define SD_NUM_ALLOWED_EXT  3   // Number of allowed file extensions
+#define SD_NUM_ALLOWED_EXT  2   // Number of allowed file extensions
 #define SD_NUM_BIN_EXT 1        // Number of allowed file extensions for binaries (.bin)
 #define SD_NUM_CFG_EXT 1        // Number of allowed file extensions for config files (.yaml)
 

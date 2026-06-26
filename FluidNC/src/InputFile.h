@@ -30,6 +30,11 @@ private:
     uint32_t _line_num;  // the most recent line number read
     bool     _readyNext = true;
     bool     _hadError = false;  // Track if file processing encountered an error
+    bool     _ended_midline = false;  // last content line ended at EOF, not on '\n'
+
+    // Adapts InputFile::read() to assemble_line's nextByte(ctx) contract.
+    // A static member can reach read() regardless of its access level.
+    static int readByteThunk(void* ctx);
 
 public:
     static std::string _progress;

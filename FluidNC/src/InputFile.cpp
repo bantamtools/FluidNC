@@ -2,6 +2,7 @@
 // Use of this source code is governed by a GPLv3 license that can be found in the LICENSE file.
 
 #include "InputFile.h"
+#include "LineAssembly.h"
 
 #include "CompletionMark.h"  // : mark-on-success
 #include "Report.h"
@@ -32,24 +33,14 @@ InputFile::InputFile(const char* defaultFs, const char* path, WebUI::Authenticat
   Returns Error::EOF on end of file.
   Returns other Error code on error, after displaying a message.
 */
+int InputFile::readByteThunk(void* ctx) {
+    return static_cast<InputFile*>(ctx)->read();
+}
+
 Error InputFile::readLine(char* line, int maxlen) {
     ++_line_num;
     int len = 0;
-    int c;
-    while ((c = read()) >= 0) {
-        if (len >= maxlen) {
-            return Error::LineLengthExceeded;
-        }
-        if (c == '\r') {
-            continue;
-        }
-        if (c == '\n') {
-            break;
-        }
-        line[len++] = c;
-    }
-    line[len] = '\0';
-    return len || c >= 0 ? Error::Ok : Error::Eof;
+    return term_to_error(assemble_line(line, maxlen, len, readByteThunk, this), _ended_midline);
 }
 
 // return a percentage complete 50.5 = 50.5%
@@ -63,12 +54,29 @@ float InputFile::percent_complete() {
 
 void InputFile::ack(Error status) {
     if (status != Error::Ok) {
-        log_error(static_cast<int>(status) << " (" << errorString(status) << ") in " << path() << " at line " << getLineNumber());
+        if (_ended_midline) {
+            // The file ended mid-line. Surface only the truncation; the parse error
+            // from interpreting the partial line is incidental and not reported.
+            // Fail the job even for an unsupported-command status.
+            log_error("Unexpected file end");
+            log_info("Last line incomplete; file ended at line " << getLineNumber());
+            _hadError = true;
+            _notifyf("File job error", "Unexpected file end in %s at line: %d", path().c_str(),
+                     getLineNumber());
+            if (config->_oled) {
+                config->_oled->_menu->set_last_file_succeeded(false);
+            }
+            allChannels.kill(this);
+            return;
+        }
+        log_error(static_cast<int>(status) << " (" << errorString(status) << ") in " << path()
+                  << " at line " << getLineNumber());
         if (status != Error::GcodeUnsupportedCommand) {
             // Do not stop on unsupported commands because most senders do not
             // Stop the file job on other errors
             _hadError = true;
-            _notifyf("File job error", "Error:%d in %s at line: %d", status, path().c_str(), getLineNumber());
+            _notifyf("File job error", "Error:%d in %s at line: %d", status, path().c_str(),
+                     getLineNumber());
             config->_oled->_menu->set_last_file_succeeded(false);
             allChannels.kill(this);
             return;
@@ -93,6 +101,22 @@ Channel* InputFile::pollLine(char* line) {
         }
             return &allChannels;
         case Error::Eof: {
+            if (gc_saw_program_end == false && _ended_midline) {
+                // The file parsed clean but ended mid-line with no end-of-program
+                // marker (M2/M30): a truncated file. Treat as failure, not success,
+                // so a truncated plot is not completion-marked as done.
+                _hadError  = true;
+                _progress  = "";
+                log_error("Unexpected file end");
+                log_info("Last line incomplete; no end-of-program marker (M2/M30) in " << path());
+                _notifyf("File job error", "Unexpected file end in %s", path().c_str());
+                if (config->_oled) {
+                    config->_oled->_menu->set_completed_file(path().c_str());
+                    config->_oled->_menu->set_last_file_succeeded(false);
+                }
+                allChannels.kill(this);
+                return nullptr;
+            }
             _progress = "";
             _notifyf("File job done", "%s file job succeeded", path().c_str());
             log_msg(path() << " file job succeeded");

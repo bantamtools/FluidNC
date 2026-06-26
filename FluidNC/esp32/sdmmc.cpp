@@ -26,10 +26,10 @@
 
 #ifdef USE_SDMMC
 
-// static const String allowed_file_ext[SD_NUM_ALLOWED_EXT] = {".gcode", ".nc", ".txt"};
+// static const String allowed_file_ext[SD_NUM_ALLOWED_EXT] = {".gcode", ".nc"};
 // static const String allowed_binary_ext[SD_NUM_BIN_EXT] = {".bin"};
 
-static const std::unordered_set<std::string>allowed_file_ext({".gcode", ".nc", ".txt"});
+static const std::unordered_set<std::string>allowed_file_ext({".gcode", ".nc"});
 static const std::unordered_set<std::string>allowed_binary_ext({".bin"});
 static const std::unordered_set<std::string>allowed_config_ext({".yaml"});
 
@@ -509,7 +509,7 @@ void sd_populate_files_menu() {
 // 10s+ user-interrupting full-rescan cost of sd_populate_files_menu().
 //
 // Covers all three menu classes the populate function handles:
-// gcode (.gcode/.nc/.txt) -> _files_menu, binary (.bin) ->
+// gcode (.gcode/.nc) -> _files_menu, binary (.bin) ->
 // _firmware_menu, config (.yaml) -> _config_menu. Anything outside
 // those classes is filtered (no menu entry to add or remove).
 
