@@ -30,6 +30,9 @@ namespace WebUI {
 #    include <ArduinoOTA.h>
 #    include "WebSettings.h"
 
+// ( r4) global instrumentation flag (defined in Protocol.cpp)
+extern volatile uint8_t g_wifi_svc;
+
 namespace WebUI {
     WiFiServices wifi_services;
 
@@ -128,10 +131,16 @@ namespace WebUI {
                 WiFi.enableSTA(false);
             }
         }
+        // ( r4) mark which service the poller is in, to pin where wifi_config.handle parks.
+        ::g_wifi_svc = 1;
         ArduinoOTA.handle();
+        ::g_wifi_svc = 2;
         webServer.handle();
+        ::g_wifi_svc = 3;
         telnetServer.handle();
+        ::g_wifi_svc = 4;
         rssReader.handle();
+        ::g_wifi_svc = 0;
     }
 }
 #endif

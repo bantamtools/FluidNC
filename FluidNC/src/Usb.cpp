@@ -8,6 +8,7 @@
  */
 
 #include "Usb.h"
+#include "Protocol.h"  //  g_usb_tx_drops / g_usb_last_tx_ms
 
 Usb::Usb() : _usb_num(0) {}
 
@@ -31,11 +32,26 @@ int Usb::read() {
 }
 
 size_t Usb::write(uint8_t c) {
-    return Serial.write(c);
+    size_t n = Serial.write(c);
+    //  a short return == HWCDC tx_timeout (host stopped reading / ring full).
+    // Sustained drops + a large "USB last tx age" at the moment of mute point at a
+    // USB-Serial-JTAG peripheral drop rather than a software task stall.
+    if (n < 1) {
+        ++g_usb_tx_drops;
+    } else {
+        g_usb_last_tx_ms = millis();
+    }
+    return n;
 }
 
 size_t Usb::write(const uint8_t* buffer, size_t length) {
-    return Serial.write(buffer, length);
+    size_t n = Serial.write(buffer, length);
+    if (n < length) {
+        ++g_usb_tx_drops;
+    } else {
+        g_usb_last_tx_ms = millis();
+    }
+    return n;
 }
 
 size_t Usb::timedReadBytes(char* buffer, size_t len, TickType_t timeout) {

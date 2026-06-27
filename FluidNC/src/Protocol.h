@@ -65,6 +65,27 @@ extern volatile bool runLimitLoop;
 extern volatile bool rcServoZCal;
 extern float rcServoZOriginalPos;
 
+//  Full-mute diagnostics (defined in Protocol.cpp). Query-only liveness +
+// TX-stall attribution surfaced via [ESP420]; the USB ones are written by the USB
+// TX path (Usb.cpp). Frozen out_hb/poll_hb or a large usb age at the moment of
+// silence discriminates a software stall from a USB-Serial-JTAG peripheral drop.
+extern volatile uint32_t g_output_hb;
+extern volatile uint32_t g_poll_hb;
+extern volatile uint32_t g_wifi_hb;  // ( Stage 2) wifi_task liveness (starvation check)
+extern volatile uint32_t g_last_deliver_ms;
+extern volatile uint32_t g_max_write_ms;
+extern volatile uint32_t g_write_stalls;
+extern char              g_stuck_channel[24];
+extern volatile uint32_t g_usb_tx_drops;
+extern volatile uint32_t g_usb_last_tx_ms;
+extern volatile uint8_t  g_poll_phase;        //  which polling_loop call is active
+extern char              g_poll_chan[24];     // ( r3) channel whose pollLine the poller is in
+extern volatile uint32_t g_bcast_slow_ms;     //  worst per-leaf broadcast write
+extern char              g_bcast_slow_leaf[24];
+extern volatile uint32_t g_bcast_slow_count;
+extern volatile uint8_t  g_wifi_svc;          // ( r4) WiFi service the wifi_task is in: 1=OTA 2=web 3=telnet 4=rss 0=none
+extern volatile uint8_t  g_out_netwrite;      // ( r4) wifi_task parked in a network leaf send (drainTx): 1=ws 2=telnet 0=none
+
 // RC servo calibration functions
 void clearRcServoCalibration();
 
@@ -129,6 +150,13 @@ extern NoArgEvent enterEvent;
 extern xQueueHandle event_queue;
 
 extern bool pollingPaused;
+
+// ( Stage 2) The core-0 poller task handle. Externed so settings handlers that
+// rebuild the OLED menu (which the poller renders) can vTaskSuspend it during the
+// rebuild — the wifi-off setting now runs on the wifi_task (HTTP) or core-1 ($ESP),
+// both racing the poller's menu render. Also: the wifi_task handle (lifecycle owner).
+extern TaskHandle_t pollingTask;
+extern TaskHandle_t wifiTask;
 
 struct EventItem {
     Event* event;

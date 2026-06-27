@@ -15,6 +15,7 @@
 #include <freertos/FreeRTOS.h>  // TickType_T
 #include <freertos/queue.h>
 #include <mutex>
+#include <atomic>  // ( Stage 1) g_net_tx_dirty / g_net_tx_dropped externs below
 
 // Memory debug
 //#define DEBUG_MEM_USAGE
@@ -122,6 +123,32 @@ public:
     Channel* pollLine(char* line) override;
 
     void stopJob() override;
+
+    // ( Phase-2 Stage 1) Drain every network channel's TX ring (the actual
+    // socket sends). Called from output_loop, gated by g_net_tx_dirty. Returns
+    // true if the caller should re-arm the dirty flag (progress was made AND
+    // records remain) so a healthy channel keeps draining without a busy-spin
+    // when a socket is merely back-pressured.
+    bool drainTxRings();
+
+    // ( Phase-2 Stage 1) Block until no broadcast/TX-drain snapshot is in
+    // flight (_broadcastDepth == 0). A network channel's write()/drainTx()
+    // dereferences its WebSocketsServer* under such a snapshot; this barrier lets
+    // Web_Server::end() wait out an in-flight deref before deleting that server
+    // (the snapshot defers freeing the CHANNEL, not the externally-owned server).
+    // Pair with markDead() on every channel first, so post-barrier drains bail
+    // before touching the server.
+    void waitForDrainQuiescent();
 };
 
 extern AllChannels allChannels;
+
+// ( Phase-2 Stage 1) Set by a successful TX-ring push (output producer);
+// exchanged to false by output_loop before a drain pass. A dirty ring => at
+// least one more drain pass. Keeps idle output_loop iterations to a single
+// atomic load (no per-iteration snapshot).
+extern std::atomic<bool>     g_net_tx_dirty;
+// Monotonic count of network output records dropped because a TX ring was full
+// or the record exceeded MAX_RECORD. Surfaced in [HB]; the Stage-1 byte-identical
+// gate requires this to stay 0 over a healthy capture window.
+extern std::atomic<uint32_t> g_net_tx_dropped;

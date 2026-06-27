@@ -32,6 +32,14 @@ WebUI::WiFiConfig wifi_config  __attribute__((init_priority(109))) ;
 #    include <esp_timer.h>
 #    include "../OLED.h"
 #    include "../SSD1306_I2C.h"
+#    include <freertos/FreeRTOS.h>
+#    include <freertos/task.h>
+
+// ( Stage 2) The wifi_task (defined at global scope in Protocol.cpp) is the sole
+// owner of the WiFi-service lifecycle. nullptr until start_polling() creates it (boot
+// begin() runs earlier, on core-1). Declared at global scope so the in-namespace
+// requestEnd() resolves the real ::wifiTask, not a phantom WebUI::wifiTask.
+extern TaskHandle_t wifiTask;
 
 namespace WebUI {
     enum_opt_t wifiModeOptions = {
@@ -524,15 +532,30 @@ namespace WebUI {
      */
 
     volatile bool WiFiConfig::_sta_got_ip = false;
+    std::atomic<bool> WiFiConfig::_sta_tx_suspect{ false };  // 
 
     void WiFiConfig::WiFiEvent(arduino_event_id_t event, arduino_event_info_t info) {
         switch (event) {
             case ARDUINO_EVENT_WIFI_STA_GOT_IP:
                 _sta_got_ip = true;
+                //  link is back: re-allow network-channel writes.
+                _sta_tx_suspect.store(false, std::memory_order_relaxed);
+                // ( review B3) Re-pin WiFi power-save OFF on EVERY (re)connect. The
+                // boot-time raw esp_wifi_set_ps(WIFI_PS_NONE) does not update the Arduino
+                // core's _sleepEnabled, so the core re-applies modem-sleep on a reconnect
+                // (bench-observed "Sleep mode: Modem" after a drop) -> added RX latency
+                // that worsens exactly the congestion responsiveness  cares about.
+                // WiFi.setSleep(false) sets ps=NONE AND the core bookkeeping.
+                WiFi.setSleep(false);
                 log_info("WiFi STA connected - IP is " << IP_string(WiFi.localIP()));
                 break;
             case ARDUINO_EVENT_WIFI_STA_DISCONNECTED: {
                 _sta_got_ip = false;
+                //  STA dropped: the WS/telnet sockets are now half-open (no
+                // FIN/RST). Suppress their writes so the core-0 broadcast can't park
+                // ~1.3-10s in lwIP send() per leaf and wedge the comms tasks. Just a
+                // flag store — no channel free / container mutation off this task.
+                _sta_tx_suspect.store(true, std::memory_order_relaxed);
                 auto reason = (wifi_err_reason_t)info.wifi_sta_disconnected.reason;
                 log_info("WiFi STA disconnected (reason: " << WiFi.disconnectReasonName(reason) << ")");
                 break;
@@ -917,8 +940,12 @@ namespace WebUI {
         // Sync it now to prevent handle() from triggering a spurious reconnect.
         if (WiFi.status() == WL_CONNECTED) {
             _sta_got_ip = true;
+            _sta_tx_suspect.store(false, std::memory_order_relaxed);  //  link up
         }
-        esp_wifi_set_ps(WIFI_PS_NONE);
+        // ( review B3) WiFi.setSleep(false) instead of raw esp_wifi_set_ps so the
+        // Arduino core's _sleepEnabled stays OFF and ps=NONE survives reconnects (the
+        // GOT_IP handler also re-pins it). Modem sleep adds RX latency under congestion.
+        WiFi.setSleep(false);
 
         // WiFi is up — enable auto-reconnect for idle-state recovery.
         // This will be disabled during plots  to protect motion control.
@@ -956,6 +983,31 @@ namespace WebUI {
         log_info("WiFi reset done");
     }
     bool WiFiConfig::isOn() { return !(WiFi.getMode() == WIFI_MODE_NULL); }
+
+    // ( Stage 2) Deferred-teardown latch. See WifiConfig.h for the contract.
+    std::atomic<bool> WiFiConfig::_endRequested { false };
+
+    void WiFiConfig::requestEnd() {
+        if (::wifiTask == nullptr) {
+            // Boot / no wifi_task yet -> no concurrency, tear down directly on the
+            // calling task (core-1 setup).
+            end();
+            return;
+        }
+        // Fire-and-forget for ALL cross-task callers (HTTP /command on the wifi_task,
+        // OLED menu + $ESP on core-1). The wifi_task runs end() at lifecycleService().
+        // NEVER block here: core-1 (motion) must not stall on a parked WiFi socket op,
+        // and the wifi_task must not delete the server it is running inside.
+        _endRequested.store(true, std::memory_order_release);
+    }
+
+    void WiFiConfig::lifecycleService() {
+        // Runs ONLY on the wifi_task, at its loop top BEFORE handle() — a safe point
+        // (we are not inside webServer.handle()/handleClient) to delete the servers.
+        if (_endRequested.exchange(false, std::memory_order_acq_rel)) {
+            end();  // = StopWiFi(): wifi_services.end() + radio down
+        }
+    }
 
     /**
      * Handle not critical actions that must be done in sync environment

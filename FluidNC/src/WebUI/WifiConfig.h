@@ -10,6 +10,8 @@
 #include "../Error.h"        // Error
 #include "Authentication.h"  // AuthenticationLevel
 
+#include <atomic>
+
 #ifndef ENABLE_WIFI
 namespace WebUI {
     class WiFiConfig {
@@ -27,6 +29,10 @@ namespace WebUI {
         static bool isOn() { return false; }
         static bool sta_got_ip() { return false; }
         static void showWifiStats(Channel& out) {}
+        // ( review A2) keep the non-WIFI stub in parity with the real class so
+        // Protocol.cpp / WebSettings.cpp (which call these at depth 0) still compile.
+        static void requestEnd() {}
+        static void lifecycleService() {}
     };
     extern WiFiConfig wifi_config;
 }
@@ -104,7 +110,25 @@ namespace WebUI {
         static void    handle();
         static void    reset_settings();
         static bool    isOn();
+
+        // ( Stage 2) WiFi-service lifecycle is owned by the wifi_task (it is the
+        // sole task that runs wifi_services.handle()/end()). Cross-task callers must
+        // NOT delete the servers out from under a wifi_task that may be mid-handle().
+        // requestEnd() is FIRE-AND-FORGET: boot/no-task runs end() directly; otherwise
+        // it latches a request the wifi_task executes at lifecycleService() (its loop
+        // top, before handle()). Never blocks the caller -> core-1 (motion) is never
+        // stalled by a parked WiFi socket op. Runtime WiFi-ON always reboots, so begin()
+        // /StartSTA() only ever run at boot (pre-task) or self (wifi_task) -> no
+        // cross-task begin() primitive is needed.
+        static void    requestEnd();
+        static void    lifecycleService();  // wifi_task loop top: execute any latched end()
+
         static bool    sta_got_ip() { return _sta_got_ip; }
+        //  True between an STA disconnect and the next GOT_IP. While set, the
+        // network channel writers (WS/telnet) skip their writes, so a broadcast
+        // can't park ~1.3-10s in lwIP send() on a half-open socket (no FIN/RST yet).
+        // Lock-free: one writer (WiFi-event task) stores, the core-0 comms tasks load.
+        static bool staTxSuspect() { return _sta_tx_suspect.load(std::memory_order_relaxed); }
 
         static Error listAPs(char* parameter, AuthenticationLevel auth_level, Channel& out);
         static void  showWifiStats(Channel& out);
@@ -116,6 +140,8 @@ namespace WebUI {
         static void WiFiEvent(arduino_event_id_t event, arduino_event_info_t info);
         static bool _events_registered;
         static volatile bool _sta_got_ip;
+        static std::atomic<bool> _sta_tx_suspect;  //  STA disconnected -> suppress net-channel writes
+        static std::atomic<bool> _endRequested;    // ( Stage 2) deferred WiFi-off latch
 
         static std::string _hostname;
     };

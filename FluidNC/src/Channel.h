@@ -56,7 +56,10 @@ protected:
     // Set by AllChannels::kill() when the channel is first queued for
     // deletion.  Guards against enqueueing the same pointer twice, which
     // would cause a double-free when the kill queue is drained.
-    bool _killed = false;
+    //  Atomic: kill() can be called concurrently from the output task,
+    // the polling task, and core-1 (InputFile); a non-atomic check-then-set
+    // would let two callers both win and enqueue the pointer twice -> double free.
+    std::atomic<bool> _killed { false };
 
     // Number of queued output messages (LogMessage) that still hold a raw
     // pointer to this channel and have not yet been delivered. The output
@@ -67,14 +70,24 @@ protected:
     // from the producer, output, and polling tasks, hence atomic.
     std::atomic<int32_t> _pendingOut { 0 };
 
+    // ( Stage 2 / M4) Guard _queue against cross-task access. After the WS server
+    // moves to the wifi_task, WSChannel::push (wifi_task) races the poller's pollLine
+    // front/pop/size on the same std::queue -> a concurrent push can realloc the deque
+    // under the poller and corrupt the heap. WSChannel overrides these with a per-channel
+    // portMUX; non-network channels (USB/telnet/OLED) keep the no-op (zero overhead, their
+    // _queue is poller-only). Each critical section wraps ONLY a _queue structural op —
+    // never a socket op or an AllChannels call (lock order: AllChannels::_mutex -> this).
+    virtual void lockInput() {}
+    virtual void unlockInput() {}
+
 public:
     // Accessor used by AllChannels::kill() to make enqueue idempotent.
+    //  Atomic compare-exchange: exactly ONE caller wins the false->true
+    // transition and returns true (and thus enqueues the kill once); concurrent
+    // callers get false. Replaces the racy check-then-set.
     bool setKilled() {
-        if (_killed) {
-            return false;
-        }
-        _killed = true;
-        return true;
+        bool expected = false;
+        return _killed.compare_exchange_strong(expected, true, std::memory_order_acq_rel);
     }
 
     // Output-queue reference accounting. Increment when a LogMessage that
@@ -92,6 +105,15 @@ public:
     virtual Channel* pollLine(char* line);
     virtual void     ack(Error status);
     const char*      name() { return _name; }
+
+    // ( Phase-2 Stage 1) Drain this channel's TX ring, doing the actual
+    // (possibly blocking) socket send. Network channels (WSChannel/TelnetClient)
+    // override; all others are a no-op. `buf`/`cap` is a shared, single-consumer
+    // scratch buffer the drain copies each record into before sending (so no
+    // lock is held across the send). Sets committedAny=true if at least one
+    // record was sent this pass; returns true if records remain (bound hit or
+    // back-pressure). See AllChannels::drainTxRings().
+    virtual bool drainTx(uint8_t* buf, size_t cap, bool& committedAny) { return false; }
 
     // rx_buffer_available() is the number of bytes that can be sent without overflowing
     // a reception buffer, even if the system is busy.  Channels that can handle external

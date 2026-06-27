@@ -50,6 +50,7 @@
 #include "Machine/MachineConfig.h"
 #include "WebUI/InputBuffer.h"
 #include "WebUI/Commands.h"
+#include "WebUI/TxRing.h"  // ( Stage 2b) WebUI::TX_DRAIN_BUF for the shared drain buffer
 #include "WebUI/WifiConfig.h"
 #include "WebUI/WifiServices.h"
 #include "MotionControl.h"
@@ -222,6 +223,11 @@ void AllChannels::init() {
 // a snapshot taken before the channel was deregistered may still dereference it.
 static std::atomic<int> _broadcastDepth { 0 };
 
+// ( Phase-2 Stage 1) See Serial.h. A successful network TX-ring push sets
+// g_net_tx_dirty; output_loop exchanges it to false before each drain pass.
+std::atomic<bool>     g_net_tx_dirty { false };
+std::atomic<uint32_t> g_net_tx_dropped { 0 };
+
 // ( SF-3) The core-1 main loop's currently-dispatching channel (defined in
 // Protocol.cpp). The kill-drain below must NOT free it while core-1 still holds
 // and dereferences it, or core-1 crashes (LoadProhibited at ->ack()).
@@ -236,6 +242,19 @@ std::vector<Channel*> AllChannels::snapshotChannels() {
 }
 void AllChannels::releaseSnapshot() {
     _broadcastDepth.fetch_sub(1, std::memory_order_acq_rel);
+}
+
+void AllChannels::waitForDrainQuiescent() {
+    // ( Stage 1) Wait out any in-flight broadcast/TX-drain snapshot before a
+    // caller frees a resource those snapshots dereference (the WebSocketsServer
+    // behind WSChannel::_server). _broadcastDepth defers freeing the CHANNEL, but
+    // not the server, so a concurrent delete races a mid-send drainTx(). Callers
+    // markDead() every affected channel first; once depth hits 0 here, no in-flight
+    // deref remains and any new drain bails on its _dead check. Teardown path only
+    // (not a hot path); bounded by the drain's per-pass socket waits, so it yields.
+    while (_broadcastDepth.load(std::memory_order_acquire) != 0) {
+        vTaskDelay(1);
+    }
 }
 
 void AllChannels::kill(Channel* channel) {
@@ -334,11 +353,53 @@ size_t AllChannels::write(const uint8_t* buffer, size_t length) {
     auto snapshot = snapshotChannels();
     for (auto channel : snapshot) {
         if (channel) {
+            //  Per-LEAF broadcast timing. deliver_message can only see the
+            // aggregate "all" name; this names the specific leaf (uart/oled/...)
+            // whose write parks the drainer. ( Phase-2 Stage 1) The network
+            // leaves now just append to their TX ring here (microseconds); the
+            // actual blocking socket send + its g_out_netwrite [HB] attribution
+            // moved to drainTx(). USB/OLED still write synchronously, so this
+            // timing still localizes a slow non-network leaf.
+            uint32_t t0 = millis();
             channel->write(buffer, length);
+            uint32_t dt = millis() - t0;
+            if (dt >= 20) {
+                if (dt > g_bcast_slow_ms) {
+                    g_bcast_slow_ms = dt;
+                }
+                strncpy(g_bcast_slow_leaf, channel->name(), sizeof(g_bcast_slow_leaf) - 1);
+                g_bcast_slow_leaf[sizeof(g_bcast_slow_leaf) - 1] = '\0';
+                ++g_bcast_slow_count;
+            }
         }
     }
     releaseSnapshot();
     return length;
+}
+
+// ( Phase-2 Stage 1) Drain every network channel's TX ring -> socket send.
+// Called from output_loop (the wifi_task after Stage 2), gated by g_net_tx_dirty.
+// Enumerate via the broadcast snapshot so _broadcastDepth>0 defers freeing any
+// channel for the drain's duration (B3 lifetime: the kill-drain in pollLine()
+// will not delete a channel still referenced by an in-flight snapshot). The
+// single shared scratch buffer is safe because the consumer is one task.
+bool AllChannels::drainTxRings() {
+    // ( Stage 2b, review D2) Size from the shared TxRing constant; each TxRing<CAP>
+    // static_asserts CAP <= TX_DRAIN_BUF, so peek() can always fit any stored record.
+    static uint8_t s_drainBuf[WebUI::TX_DRAIN_BUF];  // static .bss, not heap
+    auto           snapshot     = snapshotChannels();
+    bool           moreLeft     = false;
+    bool           committedAny = false;
+    for (auto channel : snapshot) {
+        if (channel && channel->drainTx(s_drainBuf, sizeof s_drainBuf, committedAny)) {
+            moreLeft = true;
+        }
+    }
+    releaseSnapshot();
+    // Re-arm only when we made progress AND records remain: a healthy bound-hit
+    // keeps draining, but a purely back-pressured socket waits for the next push
+    // rather than busy-spinning the output loop.
+    return moreLeft && committedAny;
 }
 Channel* AllChannels::pollLine(char* line) {
     Channel*              deadChannel;
@@ -367,14 +428,26 @@ Channel* AllChannels::pollLine(char* line) {
     // To avoid starving other channels when one has a lot
     // of traffic, we poll the other channels before the last
     // one that returned a line.
+    g_poll_phase = 40;  // ( r3) blocked here == waiting on _mutex
     _mutex.lock();
 
     for (auto channel : _channelq) {
         // Skip the last channel in the loop
-        if (channel != _lastChannel && channel && channel->pollLine(line)) {
-            _lastChannel = channel;
-            _mutex.unlock();
-            return _lastChannel;
+        if (channel != _lastChannel && channel) {
+            g_poll_phase = 41;  // ( r3) inside a channel's pollLine (read/service path)
+#ifdef DEBUG_HEAP_INSTRUMENTATION
+            // ( review A3) g_poll_chan only feeds the debug [HB] pchan= field. Gate
+            // the strncpy out of the prod build (it ran per-channel/iteration on the
+            // poller hot path AND inside _mutex, shared with registration()/kill()).
+            strncpy(g_poll_chan, channel->name(), sizeof(g_poll_chan) - 1);
+            g_poll_chan[sizeof(g_poll_chan) - 1] = '\0';
+#endif
+            if (channel->pollLine(line)) {
+                _lastChannel = channel;
+                _mutex.unlock();
+                g_poll_phase = 49;
+                return _lastChannel;
+            }
         }
     }
 
@@ -384,9 +457,18 @@ Channel* AllChannels::pollLine(char* line) {
     _mutex.unlock();
 
     // If no other channel returned a line, try the last one
-    if (lastChannel && lastChannel->pollLine(line)) {
-        return lastChannel;
+    if (lastChannel) {
+        g_poll_phase = 42;  // ( r3) inside the last channel's pollLine
+#ifdef DEBUG_HEAP_INSTRUMENTATION
+        strncpy(g_poll_chan, lastChannel->name(), sizeof(g_poll_chan) - 1);
+        g_poll_chan[sizeof(g_poll_chan) - 1] = '\0';
+#endif
+        if (lastChannel->pollLine(line)) {
+            g_poll_phase = 49;
+            return lastChannel;
+        }
     }
+    g_poll_phase = 49;  // ( r3) pollLine done, nothing ready
     _lastChannel = nullptr;
     return nullptr;
 }
@@ -411,8 +493,10 @@ Channel* pollChannels(char* line) {
 
     Channel* retval = allChannels.pollLine(line);
 
-    WebUI::COMMANDS::handle();      // Handles ESP restart
-    WebUI::wifi_config.handle();    // wifi_services + periodic WiFi reconnect 
+    WebUI::COMMANDS::handle();      // Handles ESP restart (non-blocking latch)
+    // ( Stage 2) wifi_config.handle() (WS/HTTP/telnet/OTA/rss + reconnect) MOVED
+    // off the poller onto the dedicated wifi_task — its blocking socket ops can no
+    // longer freeze input/OLED. The poller now does ZERO blocking socket I/O.
 
     return retval;
 }

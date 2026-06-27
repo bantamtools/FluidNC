@@ -6,6 +6,7 @@
 #include "../Config.h"  // ENABLE_*
 #include "../Channel.h"
 #include <queue>
+#include <mutex>
 
 #ifdef ENABLE_WIFI
 
@@ -37,6 +38,10 @@ namespace WebUI {
         uint16_t port() { return _port; }
 
         std::queue<TelnetClient*> _disconnected;
+        // ( Stage-0/M2) guards _disconnected: producers are TelnetClient::read
+        // (poller) and TelnetClient::write/closeOnDisconnect (output task, wifi_task
+        // after the move); consumer is handle() (poller, soon wifi_task).
+        std::mutex _disconnectedMutex;
 
         ~TelnetServer();
 

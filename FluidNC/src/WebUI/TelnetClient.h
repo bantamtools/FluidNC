@@ -5,9 +5,11 @@
 
 #include "../Config.h"  // ENABLE_*
 #include "../Channel.h"
+#include <atomic>
 
 #ifdef ENABLE_WIFI
 #    include <WiFi.h>
+#    include "TxRing.h"
 
 namespace WebUI {
     class TelnetClient : public Channel {
@@ -23,7 +25,17 @@ namespace WebUI {
 
         static const int DISCONNECT_CHECK_COUNTS = 1000;
 
-        int _state = 0;
+        // ( Stage-0/M2) _state was dual-purpose (a read-side throttle counter AND
+        // the -1 disconnected flag); the counter's ++ could clobber the flag once the
+        // two sides ran on different tasks. Split: the counter is poller-only (read());
+        // the disconnected flag is atomic + CAS-gated so exactly one caller enqueues.
+        int              _disconnectCounter = 0;
+        std::atomic<bool> _disconnected { false };
+
+        // ( Phase-2 Stage 1) TX ring: write() appends the \r\n-expanded bytes
+        // as <=128 B records; the drain does the actual WiFiClient::write. 512 B
+        // holds several chunks; telnet is a byte stream so records need no framing.
+        TxRing<512> _tx;
 
     public:
         TelnetClient(WiFiClient* wifiClient);
@@ -37,7 +49,11 @@ namespace WebUI {
         void   flush() override {}
         void   flushRx() override;
 
+        bool drainTx(uint8_t* buf, size_t cap, bool& committedAny) override;
+
         void closeOnDisconnect();
+
+        uint32_t txDropped() const { return _tx.dropped(); }
 
         void handle() override;
 

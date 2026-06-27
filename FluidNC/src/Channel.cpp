@@ -10,9 +10,11 @@
 void Channel::flushRx() {
     _linelen   = 0;
     _lastWasCR = false;
+    lockInput();  // ( Stage 2 / M4) no-op except WSChannel (wifi_task push vs this drain)
     while (_queue.size()) {
         _queue.pop();
     }
+    unlockInput();
 }
 
 bool Channel::lineComplete(char* line, char ch) {
@@ -133,10 +135,18 @@ Channel* Channel::pollLine(char* line) {
     handle();
     while (1) {
         int ch;
+        // ( Stage 2 / M4) size()+front()+pop() must be ONE critical section vs a
+        // concurrent WSChannel::push on the wifi_task (deque realloc race). lockInput()
+        // is a no-op for non-WS channels. Released before realtime/lineComplete below.
+        bool got = false;
+        lockInput();
         if (line && _queue.size()) {
-            ch = _queue.front();
+            ch  = _queue.front();
             _queue.pop();
-        } else {
+            got = true;
+        }
+        unlockInput();
+        if (!got) {
             ch = read();
         }
 
@@ -157,8 +167,14 @@ Channel* Channel::pollLine(char* line) {
         }
         if (!line) {
             // If we are not able to handle a line we save the character
-            // until later
-            _queue.push(uint8_t(ch));
+            // until later. ( Stage 2 / M4) lock vs a concurrent wifi_task push.
+            // (review F1) never let a _queue.push() bad_alloc escape portENTER_CRITICAL
+            // (would leak the spinlock with core-0 IRQs off -> hard hang).
+            lockInput();
+            try {
+                _queue.push(uint8_t(ch));
+            } catch (...) {}
+            unlockInput();
             continue;
         }
         if (line && lineComplete(line, ch)) {

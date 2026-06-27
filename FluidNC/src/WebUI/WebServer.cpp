@@ -217,7 +217,16 @@ namespace WebUI {
             // WebSocketsServer.  Each WSChannel holds a raw pointer to
             // _socket_server; leaving them registered with allChannels
             // would leave pollChannels() with dangling pointers to use.
+            // removeAllChannels() markDead()s each channel (so any later
+            // write()/drainTx() bails before touching _server) and enqueues a
+            // deferred kill.
             WSChannels::removeAllChannels();
+            // ( Stage 1) But a broadcast/TX-drain snapshot that started BEFORE
+            // the markDead may still be mid-sendBIN on _socket_server. Wait it out
+            // before the delete, or that in-flight drainTx() dereferences freed
+            // memory (UAF) -- reachable when WiFi is reconfigured/rebooted from the
+            // WebUI while a plot is streaming WS output.
+            allChannels.waitForDrainQuiescent();
             delete _socket_server;
             _socket_server = NULL;
         }

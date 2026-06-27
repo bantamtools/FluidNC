@@ -1,6 +1,7 @@
 // Copyright (c) 2014 Luc Lebosse. All rights reserved.
 // Use of this source code is governed by a GPLv3 license that can be found in the LICENSE file.
 #include <ESPmDNS.h>
+#include <new>  // ( Stage 1) std::nothrow for client/channel allocation
 #include "../Machine/MachineConfig.h"
 #include "TelnetClient.h"
 #include "TelnetServer.h"
@@ -71,10 +72,20 @@ namespace WebUI {
             return;
         }
 
-        while (_disconnected.size()) {
+        while (true) {
+            // ( Stage-0/M2) pop under the lock, then release BEFORE kill() (which
+            // takes AllChannels::_mutex) — keeps the order _mutex -> leaf and never
+            // holds the leaf lock across heavier work.
+            TelnetClient* client = nullptr;
+            {
+                std::lock_guard<std::mutex> lock(_disconnectedMutex);
+                if (_disconnected.empty()) {
+                    break;
+                }
+                client = _disconnected.front();
+                _disconnected.pop();
+            }
             log_debug("Telnet client disconnected");
-            TelnetClient* client = _disconnected.front();
-            _disconnected.pop();
             // ( /  SF-2) Route teardown through the kill mechanism
             // instead of deregistration + a raw delete. The raw delete bypassed
             // the deferred-free guards (_broadcastDepth / pendingOut), so a
@@ -88,12 +99,23 @@ namespace WebUI {
 
         //check if there are any new clients
         if (_wifiServer->hasClient()) {
-            WiFiClient* tcpClient = new WiFiClient(_wifiServer->available());
+            WiFiClient* tcpClient = new (std::nothrow) WiFiClient(_wifiServer->available());
             if (!tcpClient) {
                 log_error("Creating telnet client failed");
+                return;
             }
             log_debug("Telnet from " << tcpClient->remoteIP());
-            TelnetClient* tnc = new TelnetClient(tcpClient);
+            // ( Stage 1, M-5) nothrow + null-check: TelnetClient now embeds a
+            // 512 B TX ring, so `new` needs a larger contiguous block that can fail
+            // at the  heap floor. Degrade gracefully (free the socket, skip)
+            // rather than let bad_alloc escape and abort/reboot. The pre-existing
+            // code also dereferenced a null tcpClient and never null-checked tnc.
+            TelnetClient* tnc = new (std::nothrow) TelnetClient(tcpClient);
+            if (!tnc) {
+                log_error("Creating telnet channel failed");
+                delete tcpClient;
+                return;
+            }
             allChannels.registration(tnc);
         }
     }

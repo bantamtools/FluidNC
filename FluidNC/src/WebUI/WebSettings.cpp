@@ -282,6 +282,23 @@ namespace WebUI {
         }
         log_to(out, "Reset reason: ", rr);
 
+        //  Full-mute diagnostics: liveness of the two core-0 comms tasks, which
+        // channel write stalled, and USB TX health. At the moment all transports go
+        // silent, frozen out_hb/poll_hb means a core-0 task wedged; advancing counters
+        // with a large "USB last tx age" means the CPU is alive but the USB-Serial-JTAG
+        // peripheral dropped (the brick that needs a peripheral re-init, not a stall fix).
+        log_to(out, "Comms out_hb: ", g_output_hb);
+        log_to(out, "Comms poll_hb: ", g_poll_hb);
+        log_to(out, "Last deliver age ms: ", (int32_t)(millis() - g_last_deliver_ms));
+        log_to(out, "Max channel write ms: ", g_max_write_ms);
+        log_to(out, "Write stalls: ", g_write_stalls);
+        log_to(out, "Last stall channel: ", g_stuck_channel);
+        log_to(out, "USB tx drops: ", g_usb_tx_drops);
+        log_to(out, "USB last tx age ms: ", (int32_t)(millis() - g_usb_last_tx_ms));
+        log_to(out, "Poll phase: ", g_poll_phase);          //  which polling_loop call is active when frozen
+        log_to(out, "Slow broadcast leaf: ", g_bcast_slow_leaf);
+        log_to(out, "Slow broadcast ms: ", g_bcast_slow_ms);
+
         // Round baudRate to nearest 100 because ESP32 can say e.g. 115201
         //        log_to(out, "Baud rate: ", ((Uart0.baud / 100) * 100));
 
@@ -922,7 +939,12 @@ namespace WebUI {
                 wifi_on_mode->setStringValue((char*)modeStr);
             }
         }
-        wifi_config.end();
+        // ( Stage 2) This handler runs on the wifi_task (HTTP /command) or core-1
+        // ($ESP/$Wifi/Mode=Off from USB/telnet) — never the poller. Fire-and-forget the
+        // teardown: the wifi_task deletes the servers at a safe point (NEVER block core-1
+        // on a parked WiFi socket op; NEVER let the wifi_task delete the server it is
+        // running inside handle()).
+        wifi_config.requestEnd();
         bt_config.end();
         if (config->_wifiMode == -1) {
             // User control: persist OFF to NVS so it survives reboots.
@@ -930,11 +952,22 @@ namespace WebUI {
             wifi_mode->setStringValue((char*)"Off");
         }
 
-        // Refresh the OLED settings menu so the toggle label and the
-        // status submenu reflect the new state. Menu-driven handlers
-        // already do this; mirror it here for serial/Web UI parity.
-        if (config && config->_oled && config->_oled->_menu) {
+        // Refresh the OLED settings menu so the toggle label reflects the new state.
+        // ( Stage 2 / B3 + Stage 2b / F3) rebuild_settings_menu() rewrites the
+        // doubly-linked menu list the poller renders, so it needs the poller suspended.
+        // This handler runs on the wifi_task (HTTP /command) OR core-1 ($Wifi from
+        // USB/telnet). On core-1 we suspend+rebuild+resume (the poller is a different
+        // task; serialized with the OLED handler since both are core-1). On the
+        // wifi_task we SKIP it: a cross-task vTaskSuspend(pollingTask) here would race
+        // the OLED handler's own suspend (vTaskSuspend is not nest-counted -> one
+        // resume frees the poller mid-rebuild = menu corruption). The label refreshes
+        // on the next OLED interaction; a Web-initiated change doesn't need the OLED
+        // updated synchronously. (WiFi-ON always reboots, which refreshes everything.)
+        if (config && config->_oled && config->_oled->_menu && pollingTask &&
+            xTaskGetCurrentTaskHandle() != wifiTask) {
+            vTaskSuspend(pollingTask);
             config->_oled->_menu->rebuild_settings_menu();
+            vTaskResume(pollingTask);
         }
 
         log_to(out, config->_wifiMode == -1 ? "WiFi off" : "WiFi off until restart");

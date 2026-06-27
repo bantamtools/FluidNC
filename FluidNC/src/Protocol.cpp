@@ -8,6 +8,7 @@
 */
 
 #include "Protocol.h"
+#include "Serial.h"  // ( Stage 1) allChannels.drainTxRings(), g_net_tx_dirty/g_net_tx_dropped
 #include "PendingFileRun.h"
 #include "CompletionMark.h"  // : strip-on-start helper
 #include "Config.h"
@@ -196,6 +197,12 @@ static void request_safety_door() {
 
 TaskHandle_t outputTask = nullptr;
 
+// ( Stage 2) The dedicated low-priority core-0 WiFi task: runs wifi_config.handle()
+// (WS/HTTP/telnet/OTA/rss) + the TX-ring drain, off the real-time tasks, so a blocking
+// socket op can never freeze input/OLED/USB/motion. nullptr until start_polling().
+// At GLOBAL scope (WifiConfig.cpp externs ::wifiTask for the teardown task-check).
+TaskHandle_t wifiTask = nullptr;
+
 xQueueHandle message_queue;
 
 struct LogMessage {
@@ -209,9 +216,40 @@ struct LogMessage {
 // stopped reading); the data is discarded rather than wedging the producer.
 static uint32_t messages_dropped = 0;
 
+//  Full-mute diagnostics. Query-only via [ESP420]; cheap (a few millis()
+// reads per delivered line). These let a field or bench observer tell whether the
+// core-0 comms tasks are still advancing, and WHICH channel write is slow, at the
+// moment all transports go silent — the discriminator between a software stall and
+// a USB-Serial-JTAG peripheral drop.
+volatile uint32_t g_output_hb        = 0;   // ++ per output_loop iteration (drainer liveness)
+volatile uint32_t g_poll_hb          = 0;   // ++ per polling_loop iteration (poller liveness)
+volatile uint32_t g_wifi_hb          = 0;   // ( Stage 2) ++ per wifi_task iteration — proves the
+                                            // wifi_task is NOT starved (the P-B priority check) and is
+                                            // the task allowed to block on a socket.
+volatile uint32_t g_last_deliver_ms  = 0;   // millis() when the last deliver_message returned
+volatile uint32_t g_max_write_ms     = 0;   // worst single channel write since boot
+volatile uint32_t g_write_stalls     = 0;   // channel writes that took >= FULLMUTE_STALL_MS
+char              g_stuck_channel[24] = "";  // name of the channel of the most recent slow write
+volatile uint32_t g_usb_tx_drops     = 0;   // USB writes that returned short (HWCDC tx timeout)
+volatile uint32_t g_usb_last_tx_ms   = 0;   // millis() of the last full-length USB write
+//  attribution probes added after the spec scrutiny: localize the polling
+// freeze to a specific call, and name the slow broadcast LEAF (the aggregate
+// "all" name cannot — AllChannels is itself Channel("all")).
+volatile uint8_t  g_poll_phase        = 0;  // which polling_loop call is active; frozen g_poll_hb => stuck here
+char              g_poll_chan[24]      = "";// ( r3) channel whose pollLine the poller is in (pphase 41/42)
+volatile uint32_t g_bcast_slow_ms     = 0;  // worst single per-leaf broadcast write
+char              g_bcast_slow_leaf[24] = "";// name of the slowest broadcast leaf (USB/WS/OLED/...)
+volatile uint32_t g_bcast_slow_count  = 0;  // per-leaf broadcast writes >= the leaf threshold
+volatile uint8_t  g_wifi_svc          = 0;  // ( r4) WiFi service the wifi_task is in (1=OTA 2=web 3=telnet 4=rss)
+volatile uint8_t  g_out_netwrite      = 0;  // ( r4) output_loop parked in a network leaf write (1=ws 2=telnet)
+static const uint32_t FULLMUTE_STALL_MS = 50;
+
 // Deliver one queued message to its channel, reclaiming a heap string payload.
 static void deliver_message(const LogMessage& msg) {
     if (msg.channel) {
+        //  time the actual channel write so a wedge can be attributed to a
+        // specific channel (USB vs WS vs OLED) rather than guessed.
+        uint32_t t0 = millis();
         if (msg.isString) {
             std::string* s = static_cast<std::string*>(msg.line);
             if (s) {
@@ -224,6 +262,16 @@ static void deliver_message(const LogMessage& msg) {
                 msg.channel->println(cp);
             }
         }
+        uint32_t dt = millis() - t0;
+        if (dt > g_max_write_ms) {
+            g_max_write_ms = dt;
+        }
+        if (dt >= FULLMUTE_STALL_MS) {
+            ++g_write_stalls;
+            strncpy(g_stuck_channel, msg.channel->name(), sizeof(g_stuck_channel) - 1);
+            g_stuck_channel[sizeof(g_stuck_channel) - 1] = '\0';
+        }
+        g_last_deliver_ms = millis();
         // Release the reference taken in enqueue_message AFTER the last use of
         // msg.channel above. While this is nonzero the kill-drain defers
         // freeing the channel, so a delivery in progress keeps the channel
@@ -279,7 +327,22 @@ static void enqueue_message(LogMessage& msg, bool droppable) {
 }
 
 void drain_messages() {
+    //  FIX 1 — drain-side bound, the analog of the / enqueue bound.
+    // The producer side can no longer block indefinitely; this drain wait could,
+    // and it runs on the CORE-1 main loop (ProcessSettings.cpp callers). If the
+    // sole core-0 drainer is wedged or a channel write is parking, this spin would
+    // never return and would freeze core 1 too (ack path goes silent) — exactly the
+    // cascade that turns a stalled channel into a full-device mute. Give the drainer
+    // a generous window to empty normally, then proceed regardless so core 1 can
+    // never be held hostage by the output path. Hitting the deadline is itself a
+    // strong signal the drainer is stuck.
+    const uint32_t deadline = millis() + 2000;
     while (uxQueueMessagesWaiting(message_queue)) {
+        if ((int32_t)(deadline - millis()) <= 0) {
+            log_warn("drain_messages: deadline hit, " << uxQueueMessagesWaiting(message_queue)
+                     << " msgs undrained (output drainer stalled?) stuck=" << g_stuck_channel);
+            break;
+        }
         vTaskDelay(1);  // Let the output task finish sending data
     }
 }
@@ -369,6 +432,7 @@ void output_loop(void* unused) {
     uint32_t start_time = millis();
 #endif
     while (true) {
+        ++g_output_hb;  //  drainer liveness: frozen here == output task wedged
         LogMessage message;
         if (xQueueReceive(message_queue, &message, 0)) {
             deliver_message(message);
@@ -377,10 +441,55 @@ void output_loop(void* unused) {
             // opportunistically self-heal a missed state edge.
             maybe_emit_state_heartbeat();
         }
+        // ( Stage 2) The network TX-ring drain MOVED to the wifi_task — output_loop
+        // does ZERO socket I/O now (deliver_message -> AllChannels::write -> WS/telnet
+        // write() is a non-blocking ring push). So output_loop can never `ost=B` on a
+        // socket. The wifi_task drains the rings (and may block there, harmlessly).
         vTaskDelay(0);
 #ifdef DEBUG_MEMORY_WATERMARKS
         if (millis() - start_time >= DEBUG_MEMORY_WM_TIME_MS) {
             log_warn("output_loop watermark -> " << uxTaskGetStackHighWaterMark(NULL));
+            start_time = millis();
+        }
+#endif
+    }
+}
+
+// ( Stage 2) THE DECOUPLE. The dedicated low-priority core-0 WiFi task runs every
+// blocking-capable network op off the real-time tasks:
+//   - wifi_config.handle()  = WS server loop()/RX, HTTP handleClient/file-serve,
+//     telnet accept/disconnect, OTA, rss, captive-portal DNS, periodic reconnect.
+//   - drainTxRings()        = the actual sendBIN / WiFiClient::write socket sends.
+// A ~10 s socket block HERE is harmless: the poller (input+OLED) and output_loop (USB
+// delivery) touch only in-memory queues, and at equal priority (P-B) a blocked wifi_task
+// yields -> poller/output/motion run full-speed. The wifi_task is the ONLY task allowed
+// to BLOCK on a socket. It also OWNS the WiFi-service lifecycle (lifecycleService()).
+// Core-0 Task-WDT is disabled, so this loop must always yield: it does (socket waits +
+// the unconditional vTaskDelay at the bottom).
+void wifi_task(void* unused) {
+#ifdef DEBUG_MEMORY_WATERMARKS
+    uint32_t start_time = millis();
+#endif
+    for (;;) {
+        ++g_wifi_hb;  //  liveness: frozen here == wifi_task wedged; advancing == not starved
+        // Execute any deferred WiFi-off at a SAFE point (NOT inside handle()), so a
+        // server delete never races a webServer.handle()/handleClient on this task.
+        WebUI::wifi_config.lifecycleService();
+        if (WebUI::wifi_config.isOn()) {
+            WebUI::wifi_config.handle();
+            // Drain the per-channel TX rings (lifted verbatim from Stage-1 output_loop;
+            // dirty-gated so an idle pass is one atomic load). The socket sends here may
+            // block — harmless on this task.
+            if (g_net_tx_dirty.exchange(false, std::memory_order_acq_rel)) {
+                if (allChannels.drainTxRings()) {
+                    g_net_tx_dirty.store(true, std::memory_order_release);
+                }
+            }
+        }
+        vTaskDelay(1);  // always yield; bounds WS/HTTP service latency (WiFi is lowest tier)
+#ifdef DEBUG_MEMORY_WATERMARKS
+        if (millis() - start_time >= DEBUG_MEMORY_WM_TIME_MS) {
+            log_warn("wifi_task watermark -> " << uxTaskGetStackHighWaterMark(NULL));
             start_time = millis();
         }
 #endif
@@ -404,6 +513,7 @@ void polling_loop(void* unused) {
 #endif
     // Poll the input sources waiting for a complete line to arrive
     for (; true; /*feedLoopWDT(), */ vTaskDelay(0)) {
+        ++g_poll_hb;  //  poller liveness: frozen here == polling task wedged
 
         // Polling is paused when xmodem is using a channel for binary upload
         if (pollingPaused) {
@@ -412,31 +522,38 @@ void polling_loop(void* unused) {
             // pollingPaused is set exclusively when xmodemReceive() blocks
             // the main loop — no concurrent buffer access.
             if (config->_oled) {
+                g_poll_phase = 11;  //  paused: updateBusyScreen
                 config->_oled->updateBusyScreen();
+                g_poll_phase = 12;  //  paused: processDisplayRefresh (OLED I2C)
                 config->_oled->processDisplayRefresh();
             }
+            g_poll_phase = 13;      //  paused: vTaskDelay
             vTaskDelay(100);
             continue;
         }
 
         // Read ultrasonic sensor
         // protocol_read_ultrasonic(); // DISABLED 2025-08-29 --WHO.
-        
+
         // Process display refresh if needed
         if (config->_oled) {
+            g_poll_phase = 2;       //  processDisplayRefresh (OLED I2C)
             config->_oled->processDisplayRefresh();
         }
 
         if (activeChannel.load()) {
             // Poll for realtime characters when waiting for the primary loop
             // (in another thread) to pick up the line.
+            g_poll_phase = 3;       //  pollChannels() realtime-only (line held)
             pollChannels();
             continue;
         }
 
         // Polling without an argument both checks for realtime characters and
         // returns a line-oriented command if one is ready.
+        g_poll_phase = 4;           //  pollChannels(activeLine) — input read
         activeChannel.store(pollChannels(activeLine));
+        g_poll_phase = 0;           //  idle top of loop
 #ifdef DEBUG_MEMORY_WATERMARKS
         if (millis() - start_time >= DEBUG_MEMORY_WM_TIME_MS) {
             log_warn("polling_loop watermark -> " << uxTaskGetStackHighWaterMark(NULL));
@@ -537,6 +654,101 @@ void stop_polling() {
 
 // Use this to spinup various support tasks.
 // For example, polling, logging and WDT monitoring
+#ifdef DEBUG_HEAP_INSTRUMENTATION
+//  Liveness heartbeat INDEPENDENT of the comms loop. Runs at HIGH priority on
+// core 1 so it preempts a wedged core-0 comms task AND a wedged core-1 main loop, and
+// writes a snapshot DIRECT to USB-CDC (bypassing the message_queue / output_loop). On
+// a bench repro this is the discriminator: if these [HB] lines keep arriving while
+// out=/poll= are frozen, the CPU is alive and a core-0 comms task is wedged; if they
+// stop too, the CPU hung or the USB-Serial-JTAG peripheral dropped. DIAGNOSTIC ONLY —
+// compiled out of production; it streams to USB once per second.
+// ( round 2) one-char FreeRTOS task state, for the [HB]/[FROZEN] probes.
+static char rtos_state_ch(eTaskState s) {
+    switch (s) {
+        case eRunning:   return 'R';  // on-CPU now
+        case eReady:     return 'r';  // runnable, not scheduled
+        case eBlocked:   return 'B';  // parked on a lock/queue/sem/recv  <-- key signal
+        case eSuspended: return 'S';
+        case eDeleted:   return 'D';
+        default:         return '?';
+    }
+}
+
+// ( round 2) When the poller is frozen, dump the state of the suspect tasks
+// DIRECT to USB. This is the decisive probe the fresh-eyes review asked for: it
+// shows whether pollingTask is BLOCKED (on the lwIP/TCPIP core mutex or a socket
+// recv — the HTTP/WiFi-servicing hypothesis) vs RUNNING (a spin), AND whether
+// tcpip_thread / the wifi tasks (the candidate lock holders) are themselves wedged.
+// uxTaskGetSystemState is not linkable here (configUSE_TRACE_FACILITY off), so we
+// look tasks up by name with xTaskGetHandle + eTaskGetState.
+static void dump_one_task(const char* label, TaskHandle_t h) {
+    char line[64];
+    int  m = h ? snprintf(line, sizeof(line), "[TASK] %-14s st=%c\r\n", label, rtos_state_ch(eTaskGetState(h)))
+               : snprintf(line, sizeof(line), "[TASK] %-14s (not found)\r\n", label);
+    if (m > 0) {
+        Serial.write((const uint8_t*)line, (size_t)m);
+    }
+}
+static void dump_task_table_direct() {
+    dump_one_task("poller", pollingTask);
+    dump_one_task("output", outputTask);
+    dump_one_task("tcpip_thread", xTaskGetHandle("tcpip_thread"));
+    dump_one_task("wifi", xTaskGetHandle("wifi"));  // ESP-IDF WiFi driver task
+    dump_one_task("fnc_wifi", wifiTask);            // ( Stage 2) our decouple task (unique name)
+    dump_one_task("sys_evt", xTaskGetHandle("sys_evt"));
+    dump_one_task("loopTask", xTaskGetHandle("loopTask"));
+    dump_one_task("ipc0", xTaskGetHandle("ipc0"));
+    dump_one_task("ipc1", xTaskGetHandle("ipc1"));
+}
+
+static void liveness_hb_task(void* unused) {
+    uint32_t seq        = 0;
+    uint32_t last_poll  = 0;
+    int      frozen_for = 0;  // consecutive ~1s beats with g_poll_hb unchanged
+    for (;;) {
+        uint32_t now = millis();
+        // poll-freeze edge detection
+        if (g_poll_hb == last_poll) {
+            ++frozen_for;
+        } else {
+            frozen_for = 0;
+        }
+        last_poll = g_poll_hb;
+
+        eTaskState        pst = pollingTask ? eTaskGetState(pollingTask) : eDeleted;
+        eTaskState        ost = outputTask ? eTaskGetState(outputTask) : eDeleted;
+        multi_heap_info_t hi;
+        heap_caps_get_info(&hi, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+
+        eTaskState wst = wifiTask ? eTaskGetState(wifiTask) : eDeleted;
+        char buf[384];  // ( review F6) headroom so max-width %u counters never truncate trailing fields
+        int  n = snprintf(buf, sizeof(buf),
+                          "[HB] seq=%u out=%u poll=%u wifi=%u wst=%c pphase=%u pchan=%s svc=%u onw=%u pst=%c ost=%c dlv_age=%d maxwr=%u "
+                          "stalls=%u stuck=%s bcast=%s/%u heap=%u maxalloc=%u fblk=%u usb_drops=%u usb_age=%d txdrop=%u\r\n",
+                          (unsigned)++seq, (unsigned)g_output_hb, (unsigned)g_poll_hb, (unsigned)g_wifi_hb,
+                          rtos_state_ch(wst), (unsigned)g_poll_phase,
+                          g_poll_chan, (unsigned)g_wifi_svc, (unsigned)g_out_netwrite,
+                          rtos_state_ch(pst), rtos_state_ch(ost), (int)(now - g_last_deliver_ms),
+                          (unsigned)g_max_write_ms, (unsigned)g_write_stalls, g_stuck_channel, g_bcast_slow_leaf,
+                          (unsigned)g_bcast_slow_ms, (unsigned)hi.total_free_bytes,
+                          (unsigned)hi.largest_free_block, (unsigned)hi.free_blocks, (unsigned)g_usb_tx_drops,
+                          (int)(now - g_usb_last_tx_ms), (unsigned)g_net_tx_dropped.load(std::memory_order_relaxed));
+        if (n > 0) {
+            size_t wlen = ((size_t)n < sizeof(buf)) ? (size_t)n : sizeof(buf) - 1;  // clamp: snprintf returns would-be len
+            Serial.write((const uint8_t*)buf, wlen);  // direct: bypasses output_loop
+        }
+        // Dump the full task table ONCE at the freeze edge (~2s frozen), to name
+        // the wedged task / lock holder without spamming.
+        if (frozen_for == 2) {
+            const char* m = "[FROZEN] poller stalled >=2s -- task table:\r\n";
+            Serial.write((const uint8_t*)m, strlen(m));
+            dump_task_table_direct();
+        }
+        vTaskDelay(pdMS_TO_TICKS(1000));
+    }
+}
+#endif
+
 void start_polling() {
     if (pollingTask) {
         vTaskResume(pollingTask);
@@ -559,6 +771,36 @@ void start_polling() {
                                 &outputTask,       // task handle
                                 SUPPORT_TASK_CORE  // core
         );
+        // ( Stage 2) The decouple task. PRIORITY 1 — SAME as poller/output (P-B):
+        // poller/output idle via vTaskDelay(0) busy-spins, so a strictly-lower-prio
+        // wifi_task would be STARVED (vTaskDelay(0) never yields down a priority) =
+        // functional WiFi mute. Equal prio + time-slicing round-robins CPU here; a
+        // blocked wifi socket op yields, so the real-time tasks run full-speed. Core 0
+        // (network locality; motion is isolated on core 1). Created AFTER the poller/
+        // output and AFTER boot wifi_config.begin() (Main.cpp) so the servers exist.
+        // Stack 6144 = the proven shared-poller depth for the same handle() path.
+        BaseType_t wifiCreated = xTaskCreatePinnedToCore(wifi_task,         // task
+                                                         "fnc_wifi",        // name (NOT "wifi" — collides with the ESP-IDF driver task)
+                                                         6144,              // stack
+                                                         0,                 // parameters
+                                                         1,                 // priority (P-B: == poller/output)
+                                                         &wifiTask,         // task handle (::wifiTask)
+                                                         SUPPORT_TASK_CORE  // core 0
+        );
+        // ( Stage 2b, review F5) If the wifi_task can't be created (OOM at boot),
+        // wifiTask stays null -> WiFi services never run (no decouple task) and a runtime
+        // WiFi-off would take requestEnd()'s direct-end() branch on core-1. That direct
+        // end() is bounded-safe (no wifi_task == no task blocking a socket), but log it so
+        // a boot-time failure is visible rather than silent.
+        if (wifiCreated != pdPASS) {
+            wifiTask = nullptr;
+            log_error("wifi_task create FAILED (low heap?) — WiFi services will not run");
+        }
+#ifdef DEBUG_HEAP_INSTRUMENTATION
+        //  high-prio liveness heartbeat on core 1 (opposite the core-0 comms
+        // tasks) so it survives a core-0 wedge; diagnostic-only.
+        xTaskCreatePinnedToCore(liveness_hb_task, "hb", 3072, nullptr, 5, nullptr, 1 /* core 1 */);
+#endif
 #ifdef CORE0_WDT
         xTaskCreatePinnedToCore(core1_watchdog_task,    // Task
                                 "WatchdogTask",         // Name
@@ -1954,7 +2196,10 @@ static void protocol_do_enter() {
                             WebUI::wifi_on_mode->setStringValue((char*)modeStr);
                         }
                     }
-                    WebUI::wifi_config.end();  // calls StopWiFi()
+                    // ( Stage 2) Fire-and-forget: the wifi_task tears down the
+                    // servers at a safe point. NEVER block core-1 (this handler) on a
+                    // parked WiFi socket op. The menu rebuild below is still guarded.
+                    WebUI::wifi_config.requestEnd();
 
                     // Suspend the polling task while we modify menu data
                     // and write the popup buffer. The polling task runs on
