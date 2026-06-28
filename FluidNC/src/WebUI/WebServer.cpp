@@ -39,6 +39,7 @@
 
 #    include "src/HashFS.h"
 #    include "../OLED.h"
+#    include "WebUploadPath.h"
 #    include <list>
 
 namespace WebUI {
@@ -748,7 +749,7 @@ namespace WebUI {
 
     void Web_Server::sendJSON(int code, const char* s) {
         _webserver->sendHeader("Cache-Control", "no-cache");
-        _webserver->send(200, "application/json", s);
+        _webserver->send(code, "application/json", s);
     }
 
     // Flush the accumulated JSON fragment to the chunked HTTP response when
@@ -925,12 +926,15 @@ namespace WebUI {
 
         std::error_code ec;
 
-        std::string path("");
-        std::string sstatus("Ok");
-        if ((_upload_status == UploadStatus::FAILED) || (_upload_status == UploadStatus::FAILED)) {
-            sstatus = "Upload failed";
+        if (_upload_status == UploadStatus::FAILED) {
+            _upload_status = UploadStatus::NONE;
+            sendStatus(500, "Upload failed");
+            return;
         }
         _upload_status      = UploadStatus::NONE;
+
+        std::string path("");
+        std::string sstatus("Ok");
         bool     list_files = true;
         uint64_t totalspace = 0;
         uint64_t usedspace  = 0;
@@ -938,14 +942,7 @@ namespace WebUI {
         //get current path
         if (_webserver->hasArg("path")) {
             path += _webserver->arg("path").c_str();
-            // path.trim();
-            replace_string_in_place(path, "//", "/");
-            if (path[path.length() - 1] == '/') {
-                path = path.substr(0, path.length() - 1);
-            }
-            if (path.length() & path[0] == '/') {
-                path = path.substr(1);
-            }
+            path = normalizeWebUploadPath(path);
         }
 
         FluidPath fpath { path, fs, ec };
@@ -1266,6 +1263,8 @@ namespace WebUI {
             std::filesystem::path filepath = _uploadFile->fpath();
             delete _uploadFile;
             _uploadFile = nullptr;
+            std::error_code ec;
+            stdfs::remove(filepath, ec);
             HashFS::rehash_file(filepath);
         }
     }

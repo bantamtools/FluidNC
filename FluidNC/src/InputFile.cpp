@@ -22,6 +22,13 @@ InputFile::InputFile(const char* defaultFs, const char* path, WebUI::Authenticat
 
     // Clear comments when opening new file
     if (config && config->_oled) {
+        // Latch the plot/progress-screen gate deterministically here, at the single common open
+        // point for every launch path (auto-home post-homing open, OLED-menu launch_sd_file,
+        // $-command/WebUI runFile). _file_job_running was previously set ONLY by the OLED parsing
+        // the DROPPABLE "Run file opened" broadcast above; if that line was dropped at the bounded
+        // message queue, the OLED stayed on the prior screen for the whole job. Setting it directly
+        // removes that dependence on the queue.
+        config->_oled->set_file_job_running(true);
         config->_oled->set_comment("", false);  // Clear immediate
         config->_oled->clear_m0_comment();      // Clear M0
     }

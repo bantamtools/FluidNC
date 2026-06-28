@@ -546,6 +546,16 @@ void polling_loop(void* unused) {
             // (in another thread) to pick up the line.
             g_poll_phase = 3;       //  pollChannels() realtime-only (line held)
             pollChannels();
+            // While a file job holds activeChannel, pollChannels(null) is throttled (Serial.cpp
+            // counter) and skips allChannels.pollLine, so the OLED channel's OWN 250 ms autoReport
+            // -- which carries the SD: progress that drives the plot/progress screen -- never fires.
+            // The screen then freezes for the whole job and only recovers when external channel
+            // input forces a non-throttled poll. Fire the OLED's autoReport directly here; it
+            // self-limits to its 250 ms report interval (~4 emits/sec) and touches neither motion
+            // (core 1) nor the wifi_task/TX-ring path.
+            if (config->_oled) {
+                config->_oled->autoReport();
+            }
             continue;
         }
 

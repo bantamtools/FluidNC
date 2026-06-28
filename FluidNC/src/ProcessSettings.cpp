@@ -671,6 +671,17 @@ static Error xmodem_receive(const char* value, WebUI::AuthenticationLevel auth_l
     }
     std::filesystem::path fname = outfile->fpath();
     delete outfile;
+
+    if (size < 0) {
+        // Upload failed (wire error, cancel, or SD write failure): remove the
+        // partial/corrupt file so it cannot be listed, run, or flagged
+        // "recent". A truncated on-SD copy reported as a good upload was the
+        // err-26 "no axis words" root cause .
+        std::error_code ec;
+        std::filesystem::remove(fname, ec);
+        return Error::UploadFailed;
+    }
+
     HashFS::rehash_file(fname);
 
     // Incrementally refresh the SD file menu if the file was written to SD,
@@ -690,7 +701,7 @@ static Error xmodem_receive(const char* value, WebUI::AuthenticationLevel auth_l
         }
     }
 
-    return size < 0 ? Error::UploadFailed : Error::Ok;
+    return Error::Ok;
 }
 
 static Error xmodem_send(const char* value, WebUI::AuthenticationLevel auth_level, Channel& out) {

@@ -33,9 +33,9 @@
  */
 
 #include "xmodem.h"
+#include "XmodemReceiveWriter.h"
 
 static Channel* serialPort;
-static Print*   file;
 
 static int _inbyte(uint16_t timeout) {
     uint8_t data;
@@ -114,50 +114,18 @@ static void flushinput(void) {
         ;
 }
 
-// We delay writing each packet until the next one arrives
-// so that we can remove trailing control-Z's in only the
-// last one.  The Xmodem protocol has no good way to denote
-// the actual size of the file in bytes as opposed to packets.
-// Instead it pads the final packet with control-Z.  By removing
-// those trailing control-Z's before writing to the file, it
-// is possible to handle files of any length.  This heuristic
-// fails with binary files that are supposed to have trailing
-// control-Z's.  Doing the control-Z removal only on the final
-// packet avoids removing interior control-Z's that happen to
-// land at the end of a packet.
+// XModem has no byte-exact length — the final packet is padded with Ctrl-Z.
+// XmodemReceiveWriter buffers one packet so the trailing Ctrl-Z is stripped
+// from only the final packet, and detects short writes (SD full). See
+// XmodemReceiveWriter.h.
 volatile size_t xmodem_bytes_received = 0;
 
-static uint8_t held_packet[1024];
-static size_t  held_packet_len;
-static void    flush_packet(size_t packet_len, size_t& total_len) {
-    if (held_packet_len > 0) {
-        // Remove trailing ctrl-z's on the final packet
-        size_t count;
-        for (count = held_packet_len; count > 0; --count) {
-            if (held_packet[count - 1] != CTRLZ) {
-                break;
-            }
-        }
-        file->write(held_packet, count);
-        total_len += count;
-        xmodem_bytes_received += count;
-        held_packet_len = 0;
-    }
-}
-static void write_packet(uint8_t* buf, size_t packet_len, size_t& total_len) {
-    if (held_packet_len > 0) {
-        file->write(held_packet, held_packet_len);
-        total_len += held_packet_len;
-        xmodem_bytes_received += held_packet_len;
-        held_packet_len = 0;
-    }
-    memcpy(held_packet, buf, packet_len);
-    held_packet_len = packet_len;
-}
 int xmodemReceive(Channel* serial, FileStream* out) {
-    serialPort      = serial;
-    file            = out;
-    held_packet_len = 0;
+    serialPort = serial;
+
+    XmodemReceiveWriter writer([out](const uint8_t* b, size_t n) {
+        return out->write(b, n);
+    });
 
     uint8_t  xbuff[1030]; /* 1024 for XModem 1k + 3 head chars + 2 crc + nul */
     uint8_t* p;
@@ -166,8 +134,6 @@ int xmodemReceive(Channel* serial, FileStream* out) {
     uint8_t  packetno = 1;
     int      i, c           = 0;
     int      retry, retrans = MAXRETRANS;
-
-    size_t len = 0;
 
     for (;;) {
         for (retry = 0; retry < 16; ++retry) {
@@ -182,10 +148,17 @@ int xmodemReceive(Channel* serial, FileStream* out) {
                         bufsz = 1024;
                         goto start_recv;
                     case EOT:
-                        flush_packet(bufsz, len);
+                        if (!writer.flushFinal()) {
+                            flushinput();
+                            _outbyte(CAN);
+                            _outbyte(CAN);
+                            _outbyte(CAN);
+                            return -6; /* write/SD error */
+                        }
+                        xmodem_bytes_received = writer.totalWritten();
                         _outbyte(ACK);
                         flushinput();
-                        return len; /* normal end */
+                        return writer.totalWritten(); /* normal end */
                     case CAN:
                         if ((c = _inbyte(DLY_1S)) == CAN) {
                             flushinput();
@@ -222,7 +195,14 @@ int xmodemReceive(Channel* serial, FileStream* out) {
 
         if (xbuff[1] == (uint8_t)(~xbuff[2]) && (xbuff[1] == packetno || xbuff[1] == packetno - 1) && check(crc, &xbuff[3], bufsz)) {
             if (xbuff[1] == packetno) {
-                write_packet(xbuff + 3, bufsz, len);
+                if (!writer.acceptPacket(xbuff + 3, bufsz)) {
+                    flushinput();
+                    _outbyte(CAN);
+                    _outbyte(CAN);
+                    _outbyte(CAN);
+                    return -6; /* write/SD error */
+                }
+                xmodem_bytes_received = writer.totalWritten();
                 ++packetno;
                 retrans = MAXRETRANS + 1;
             }
