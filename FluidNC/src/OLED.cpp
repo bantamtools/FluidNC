@@ -1274,7 +1274,28 @@ void OLED::render_icon_menu() {
     } else if (_menu->is_run_menu()) {
         show_run_layout(selected);
     } else if (_menu->is_postrun_menu()) {
-        show_postrun_layout(selected);
+        if (sys.state == State::Idle) {
+            show_postrun_layout(selected);
+        } else {
+            // The file job has ended but the machine is still draining the final
+            // queued moves. Communicate that instead of showing an unusable menu;
+            // this re-renders each refresh and flips to the post-run menu when the
+            // machine reaches Idle (protocol_do_cycle_stop calls refresh_display).
+            // No blocking wait.
+            show_state();
+            clearContentAreaFast();
+            _oled->setFont(DejaVu_Sans_10);
+            _oled->setTextAlignment(TEXT_ALIGN_CENTER);
+            const int cx                = _width / 2;
+            const int line_h            = font_height(DejaVu_Sans_10);
+            constexpr int content_y     = 16;
+            constexpr int content_h     = 48;
+            const int     y             = content_y + (content_h - 2 * line_h) / 2;
+            _oled->drawString(cx, y, "Finishing");
+            _oled->drawString(cx, y + line_h, "motion queue");
+            _oled->setTextAlignment(TEXT_ALIGN_LEFT);
+            _oled->display();
+        }
     }
     _enc_scroll_lockout = false;  // Unlock scrolling to use menu (if needed)
 }
@@ -1457,14 +1478,22 @@ void OLED::show_postrun_layout(int highlight) {
                          strcmp(selected_label, "Run Next (HOLD to skip)") == 0;
     bool run_again_selected = selected_label && strcmp(selected_label, "Run Again") == 0;
 
-    // Top line: Back shows the run outcome WITH elapsed time (latched for both success
-    // and cancel). After a cancel, Run Again's label also carries the "Canceled" status,
+    // Top line: Back shows the run outcome WITH elapsed time (latched for success,
+    // cancel, and file error). After a cancel, Run Again's label also carries the "Canceled" status,
     // so it stays visible when Run Again is the cancel-default highlight (no room for a
     // separate status line). Other entries show their own label.
     if (back_selected) {
         char run_time_msg[24];
+        const char* time_label;
+        if (_menu->get_last_file_error()) {
+            time_label = "Elapsed time";
+        } else if (_menu->get_last_file_succeeded()) {
+            time_label = "Completed in:";
+        } else {
+            time_label = "Canceled at";
+        }
         snprintf(run_time_msg, 24, "%s %02d:%02d:%02d",
-            _menu->get_last_file_succeeded() ? "Completed in:" : "Canceled at",
+            time_label,
             (_saved_run_time / 3600),
             ((_saved_run_time % 3600) / 60),
             ((_saved_run_time % 3600) % 60));
@@ -1475,14 +1504,29 @@ void OLED::show_postrun_layout(int highlight) {
         show_state_text(selected_label);
     }
 
-    // Icons: three-up when a next file is available, two-up otherwise.
-    if (state.show_run_next) {
-        draw_postrun_icon(10,  highlight == 1, left_icon_bits);
-        draw_postrun_icon(52,  highlight == 2, draw_icon_bits);
-        draw_postrun_icon(94,  highlight == 3, draw_again_icon_bits);
-    } else {
-        draw_postrun_icon(20,  highlight == 1, left_icon_bits);
-        draw_postrun_icon(84,  highlight == 2, draw_again_icon_bits);
+    // One icon per available post-run action, matching the entries built by
+    // rebuild_postrun_menu: Back (always), Run Next (when a next file exists),
+    // Run Again (unless this was a file error). Positioned by count so a removed
+    // action leaves no dead icon: 3-up, 2-up, or a single centered icon.
+    const bool has_next  = state.show_run_next;
+    const bool has_again = !_menu->get_last_file_error();
+    const int  icon_count = 1 + (has_next ? 1 : 0) + (has_again ? 1 : 0);
+    static const int icon_x[4][3] = {
+        {0, 0, 0},     // 0 (unused)
+        {52, 0, 0},    // 1: centered
+        {20, 84, 0},   // 2
+        {10, 52, 94},  // 3
+    };
+    int slot = 0;
+    draw_postrun_icon(icon_x[icon_count][slot], highlight == slot + 1, left_icon_bits);
+    slot++;
+    if (has_next) {
+        draw_postrun_icon(icon_x[icon_count][slot], highlight == slot + 1, draw_icon_bits);
+        slot++;
+    }
+    if (has_again) {
+        draw_postrun_icon(icon_x[icon_count][slot], highlight == slot + 1, draw_again_icon_bits);
+        slot++;
     }
 
     // Bottom line: Run Next -> next file; Back -> "All files complete!" when the folder is

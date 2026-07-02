@@ -617,9 +617,23 @@ namespace WebUI {
     bool WiFiConfig::ConnectSTA2AP() {
         std::string msg, msg_out;
         uint8_t     dot = 0;
-        for (size_t i = 0; i < 10; ++i) {
+        //  Only BLOCK the boot briefly for a FAST connect. This runs inside
+        // setup(), and the USB console + FluidNC protocol loop do not start until
+        // setup() returns — so a long blocking wait here leaves the plotter MUTE
+        // to USB for the full connect (~17s on a slow AP, HW-measured). WiFi.begin()
+        // has already kicked off the connection asynchronously; if it hasn't landed
+        // within this short window, proceed OPTIMISTICALLY: begin() will start the
+        // services and enable auto-reconnect, and the connection completes in the
+        // background (the GOT_IP event + WiFiEvent handler set _sta_got_ip). Genuine
+        // failures (WL_NO_SSID_AVAIL / WL_CONNECT_FAILED) still return false so the
+        // AP-fallback path runs. Boot-block capped at ~3s (6×500ms) vs the old ~20s
+        // (10×2000ms). Slow-but-successful STA still connects — just without holding
+        // USB hostage during the join.
+        constexpr int kBootConnectPolls   = 6;
+        constexpr int kBootConnectPollMs  = 500;
+        for (int i = 0; i < kBootConnectPolls; ++i) {
             char buf[32];
-            snprintf(buf, sizeof(buf), "STA poll %d/10 s=%d", (int)(i + 1), (int)WiFi.status());
+            snprintf(buf, sizeof(buf), "STA poll %d s=%d", (int)(i + 1), (int)WiFi.status());
             wifi_breadcrumb(buf);
             switch (WiFi.status()) {
                 case WL_NO_SSID_AVAIL:
@@ -651,10 +665,14 @@ namespace WebUI {
                 wifi_oled_status(oled_buf);
             }
             log_info(msg);
-            delay_ms(2000);  // Give it some time to connect
+            delay_ms(kBootConnectPollMs);
         }
-        wifi_breadcrumb("STA: timeout");
-        return false;
+        // Not connected within the short boot window — do NOT block the boot any
+        // longer. Continue optimistically; the STA connection finishes in the
+        // background (auto-reconnect + GOT_IP), and the USB console comes up now.
+        log_info("WiFi still connecting — continuing boot; will connect in background");
+        wifi_breadcrumb("STA: async continue");
+        return true;
     }
 
     /*

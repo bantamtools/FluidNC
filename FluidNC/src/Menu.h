@@ -22,6 +22,7 @@ private:
     std::string _completed_file_path;
     std::string _completed_file_name;
     bool _last_file_succeeded = true;
+    bool _last_file_error = false;
 
     struct ListNodeType *get_active_tail(ListType *menu, int max_active_entries);
     void build();
@@ -101,6 +102,8 @@ public:
     PostrunState compute_postrun_state();
     void set_last_file_succeeded(bool success) { _last_file_succeeded = success; }
     bool get_last_file_succeeded() { return _last_file_succeeded; }
+    void set_last_file_error(bool e) { _last_file_error = e; }
+    bool get_last_file_error() { return _last_file_error; }
     void return_to_run_menu();
     void go_to_postrun_menu();
     // Rebuilds the postrun menu entries to match next-file availability and sets the

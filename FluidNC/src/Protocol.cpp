@@ -1884,6 +1884,15 @@ static void protocol_do_enter() {
         return;
     }
 
+    // A foreground popup is dismissed by a click from ANY state, before the
+    // state-specific routing below (feed-hold / resume). ConfigAlarm is excluded:
+    // its click triggers recovery (handled in the switch), not a plain dismissal.
+    if (sys.state != State::ConfigAlarm && config && config->_oled &&
+        config->_oled->showing_popup()) {
+        config->_oled->clear_popup();
+        return;  // consume this click; a second press performs the state action
+    }
+
     if (sys.state == State::Cycle) {
         
         // Normal user pause - no M0 pending
@@ -1985,12 +1994,6 @@ static void protocol_do_enter() {
                     break;
                 }
 
-                if (config->_oled->showing_popup()) {
-                    // click while popup is displayed -> clear popup, don't do anything else
-                    config->_oled->clear_popup();
-                    break;
-                }
-            
                 if (config->_oled->_menu->sd_browse_active()) {
                     sdfiles::EntryId outFile = sdfiles::kInvalidEntry;
                     // Hold the arena lock from id-resolution (activate) THROUGH the

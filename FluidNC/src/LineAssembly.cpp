@@ -36,8 +36,10 @@ Error term_to_error(LineTerm term, bool& ended_midline) {
             ended_midline = false;
             return Error::Ok;
         case LineTerm::EofWithContent:
+            // A truncated final line: detected here and routed to EOF so it is
+            // not executed. The bit tells the EOF handler the file ended mid-line.
             ended_midline = true;
-            return Error::Ok;
+            return Error::Eof;
     }
     return Error::Ok;  // unreachable; silences -Werror=return-type on GCC
 }

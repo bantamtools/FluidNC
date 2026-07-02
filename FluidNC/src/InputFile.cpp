@@ -4,13 +4,15 @@
 #include "InputFile.h"
 #include "LineAssembly.h"
 
-#include "CompletionMark.h"  // : mark-on-success
+#include "CompletionMark.h"
+#include "FileEndOutcome.h"
 #include "Report.h"
 #include "Protocol.h"
 #include "Machine/MachineConfig.h"  // config
 #include "GCode.h"  // For gc_clear_m0_comment()
 
-#include <string>  // for std::string final_path
+#include <string>    // std::string
+#include <utility>   // std::move, used in the Error::Eof block below
 
 InputFile::InputFile(const char* defaultFs, const char* path, WebUI::AuthenticationLevel auth_level, Channel& out) :
     FileStream(path, "r", defaultFs), _auth_level(auth_level), _out(out), _line_num(0)  {
@@ -61,21 +63,6 @@ float InputFile::percent_complete() {
 
 void InputFile::ack(Error status) {
     if (status != Error::Ok) {
-        if (_ended_midline) {
-            // The file ended mid-line. Surface only the truncation; the parse error
-            // from interpreting the partial line is incidental and not reported.
-            // Fail the job even for an unsupported-command status.
-            log_error("Unexpected file end");
-            log_info("Last line incomplete; file ended at line " << getLineNumber());
-            _hadError = true;
-            _notifyf("File job error", "Unexpected file end in %s at line: %d", path().c_str(),
-                     getLineNumber());
-            if (config->_oled) {
-                config->_oled->_menu->set_last_file_succeeded(false);
-            }
-            allChannels.kill(this);
-            return;
-        }
         log_error(static_cast<int>(status) << " (" << errorString(status) << ") in " << path()
                   << " at line " << getLineNumber());
         if (status != Error::GcodeUnsupportedCommand) {
@@ -85,6 +72,7 @@ void InputFile::ack(Error status) {
             _notifyf("File job error", "Error:%d in %s at line: %d", status, path().c_str(),
                      getLineNumber());
             config->_oled->_menu->set_last_file_succeeded(false);
+            config->_oled->_menu->set_last_file_error(false);
             allChannels.kill(this);
             return;
         }
@@ -108,59 +96,42 @@ Channel* InputFile::pollLine(char* line) {
         }
             return &allChannels;
         case Error::Eof: {
-            if (gc_saw_program_end == false && _ended_midline) {
-                // The file parsed clean but ended mid-line with no end-of-program
-                // marker (M2/M30): a truncated file. Treat as failure, not success,
-                // so a truncated plot is not completion-marked as done.
-                _hadError  = true;
-                _progress  = "";
-                log_error("Unexpected file end");
-                log_info("Last line incomplete; no end-of-program marker (M2/M30) in " << path());
-                _notifyf("File job error", "Unexpected file end in %s", path().c_str());
-                if (config->_oled) {
-                    config->_oled->_menu->set_completed_file(path().c_str());
-                    config->_oled->_menu->set_last_file_succeeded(false);
-                }
-                allChannels.kill(this);
-                return nullptr;
-            }
-            _progress = "";
-            _notifyf("File job done", "%s file job succeeded", path().c_str());
-            log_msg(path() << " file job succeeded");
-            uint32_t heap_free = ESP.getFreeHeap();
-            float heap_kb = heap_free / 1024.0;
+            FileEndOutcome outcome = evaluate_file_end(gc_saw_program_end, _ended_midline);
 
+            _hadError = outcome.had_error;
+            _progress = "";
+
+            if (outcome.had_error) {
+                // Truncated: ended mid-line with no M2/M30. The partial final line
+                // was routed here and not executed. Non-fatal, but a trailing
+                // command may have been dropped, so it is not marked done.
+                log_warn("File ended without end-of-program marker; last line incomplete in "
+                         << path());
+                _notifyf("File job error", "Unexpected file end in %s", path().c_str());
+            } else {
+                _notifyf("File job done", "%s file job succeeded", path().c_str());
+                log_msg(path() << " file job succeeded");
+                uint32_t heap_free = ESP.getFreeHeap();
+                float    heap_kb   = heap_free / 1024.0;
 #ifdef DEBUG_STACK_USAGE
-            const uint32_t STACK_TOTAL_WORDS = 6144; // From ARDUINO_LOOP_STACK_SIZE in main.cpp
-            uint32_t stack_words = uxTaskGetStackHighWaterMark(NULL);
-            float stack_kb = (stack_words * 4) / 1024.0;
-            float stack_total_kb = (STACK_TOTAL_WORDS * 4) / 1024.0;
-            uint32_t stack_used_pct = ((STACK_TOTAL_WORDS - stack_words) * 100) / STACK_TOTAL_WORDS;
-            log_info("File completed - Stack: " << stack_kb << " kB free / " << stack_total_kb << " kB total (" << stack_used_pct << "% peak used) | Heap: " << heap_kb << " kB free");
+                const uint32_t STACK_TOTAL_WORDS = 6144; // ARDUINO_LOOP_STACK_SIZE in main.cpp
+                uint32_t stack_words     = uxTaskGetStackHighWaterMark(NULL);
+                float    stack_kb        = (stack_words * 4) / 1024.0;
+                float    stack_total_kb  = (STACK_TOTAL_WORDS * 4) / 1024.0;
+                uint32_t stack_used_pct  = ((STACK_TOTAL_WORDS - stack_words) * 100) / STACK_TOTAL_WORDS;
+                log_info("File completed - Stack: " << stack_kb << " kB free / "
+                         << stack_total_kb << " kB total (" << stack_used_pct
+                         << "% peak used) | Heap: " << heap_kb << " kB free");
 #else
-            log_info("File completed - Heap: " << heap_kb << " kB free");
+                log_info("File completed - Heap: " << heap_kb << " kB free");
 #endif
-            // : mark on success, then update _completed_file_path so
-            // it reflects the post-rename on-disk name. Both "Run Again"
-            // and the end-of-plot display (OLED.cpp get_completed_file_name)
-            // read this stored path; if we stored the unmarked name first
-            // and renamed after, those consumers would later try to open
-            // a file that no longer exists.
-            //
-            // Reaching Error::Eof implies strict success: no alarm (would
-            // have exited via default case below, setting _hadError),
-            // no abort/cancel (stopJob() sets _hadError before re-entry).
-            //
-            // Lifetime note: FileStream::path() returns std::string by
-            // value. We keep one std::string (final_path) alive across
-            // the whole block and only take c_str() at the
-            // set_completed_file API boundary.
-            //
-            // Invariant established by this block: after it runs,
-            // _completed_file_path matches the on-disk reality —
-            // regardless of toggle state, regardless of rename success.
-            std::string final_path = path();  // copy by value, lives through block
-            if (CompletionMark::completion_marking_enabled()) {
+            }
+
+            // Completion-mark only the success paths. final_path tracks the
+            // on-disk name so set_completed_file reflects any rename the mark
+            // performs; consumers ("Run Again", end-of-plot display) open it.
+            std::string final_path = path();
+            if (outcome.mark_completed && CompletionMark::completion_marking_enabled()) {
                 Error me = CompletionMark::mark_completed(final_path.c_str());
                 if (me == Error::Ok) {
                     std::string marked = CompletionMark::compute_marked_path(final_path.c_str());
@@ -168,16 +139,25 @@ Channel* InputFile::pollLine(char* line) {
                         final_path = std::move(marked);
                     }
                 } else {
-                    // Rename failed; disk still unmarked; final_path
-                    // remains the unmarked name. Stored matches disk.
+                    // Rename failed; disk still unmarked; final_path stays the
+                    // unmarked name so stored matches disk.
                     log_warn("CompletionMark: failed to mark " << final_path
                              << " (Error " << static_cast<int>(me) << ")");
                 }
             }
 
-            config->_oled->_menu->set_completed_file(final_path.c_str());
-            config->_oled->_menu->set_last_file_succeeded(true);
-            if (gc_saw_program_end == false) { config->_oled->popup_msg("Warning: Program ended unexpectedly", 0); }
+            if (config->_oled) {
+                config->_oled->_menu->set_completed_file(final_path.c_str());
+                config->_oled->_menu->set_last_file_succeeded(outcome.job_succeeded);
+                config->_oled->_menu->set_last_file_error(outcome.had_error);
+                if (outcome.message) {
+                    // Persistent: clears only on a user button click. A mid-job
+                    // ending must be acknowledged; a brief auto-clearing toast
+                    // would be missed.
+                    config->_oled->popup_msg(outcome.message, 0);
+                }
+            }
+
             allChannels.kill(this);
             return nullptr;
         }
@@ -200,6 +180,7 @@ Channel* InputFile::pollLine(char* line) {
 #endif
             config->_oled->_menu->set_completed_file(path().c_str());
             config->_oled->_menu->set_last_file_succeeded(false);
+            config->_oled->_menu->set_last_file_error(false);
             allChannels.kill(this);
             return nullptr;
         }
@@ -226,6 +207,7 @@ void InputFile::stopJob() {
 #endif
     config->_oled->_menu->set_completed_file(path().c_str());
     config->_oled->_menu->set_last_file_succeeded(false);
+    config->_oled->_menu->set_last_file_error(false);
     allChannels.kill(this);
 }
 
@@ -242,9 +224,13 @@ InputFile::~InputFile() {
     _progress = "";
 
     if(config->_oled){
-        // Only wait for motion to complete if the file job completed successfully
-        // If there was an error, motion may never have started, so skip synchronization
-        if (!_hadError) {
+        // Wait for queued motion to finish before gc_sync_position() below, but only
+        // for a normally-ended program (M2/M30 seen, no error). A file that ends
+        // without a program-end marker, or with an error, is torn down without this
+        // wait: such a job issues no program-end, so the run state does not clear here
+        // and blocking would spin until it cleared on its own. The machine instead
+        // settles to Idle through the normal protocol loop after teardown.
+        if (!_hadError && gc_saw_program_end) {
             protocol_buffer_synchronize();
         }
 

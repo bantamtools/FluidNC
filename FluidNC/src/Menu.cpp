@@ -350,13 +350,17 @@ void Menu::rebuild_postrun_menu() {
     if (st.show_run_next) {
         add_entry(_postrun_menu, NULL, NULL, "Run Next (HOLD to skip)");
     }
-    add_entry(_postrun_menu, NULL, NULL, "Run Again");
+    if (!_last_file_error) {
+        add_entry(_postrun_menu, NULL, NULL, "Run Again");
+    }
 
     // add_entry selects the first entry (Back). Move the default highlight:
-    //   success + a next file -> Run Next; any cancel -> Run Again; done (no next,
-    //   success) -> leave Back highlighted.
+    //   file error -> Run Next if available, else Back; success + a next file -> Run Next;
+    //   any user cancel -> Run Again; done (no next, success) -> leave Back highlighted.
     const char* want = nullptr;
-    if (!_last_file_succeeded) {
+    if (_last_file_error) {
+        want = st.show_run_next ? "Run Next (HOLD to skip)" : nullptr;  // else Back stays selected
+    } else if (!_last_file_succeeded) {
         want = "Run Again";
     } else if (st.show_run_next) {
         want = "Run Next (HOLD to skip)";
