@@ -1,10 +1,9 @@
 name: "Bantam Tools Handwriter"
 board: "Serama Hen D"
-meta: "0.0.30" 
+meta: "1.0.0"
 
 planner_blocks: 16
-# usb_vid: 0x303A
-# usb_pid: 0x829F
+wifi_mode: -1
 
 start:
   must_home: false
@@ -32,7 +31,7 @@ parking:
   axis: Z
   pullout_distance_mm: 0
   pullout_rate_mm_per_min: 1000
-  target_mpos_mm: 0
+  target_mpos_mm: 7
   rate_mm_per_min: 2000
   park_on_feedhold: true
 
@@ -42,17 +41,17 @@ axes:
 
   x:
     steps_per_mm: 40
-    max_rate_mm_per_min: 20000
-    acceleration_mm_per_sec2: 2000
-    rapid_acceleration_mm_per_sec2: 8000
+    max_rate_mm_per_min: 10000
+    acceleration_mm_per_sec2: 50000
+    rapid_acceleration_mm_per_sec2: 10000
     max_travel_mm: 216
     soft_limits: false
     homing:
       cycle: 2
-      mpos_mm: 0
+      mpos_mm: 1.5
       positive_direction: false
-      feed_mm_per_min: 4000
-      seek_mm_per_min: 2000
+      feed_mm_per_min: 1500
+      seek_mm_per_min: 6000
 
     motor0:
       limit_neg_pin: gpio.3:high:pu
@@ -61,14 +60,14 @@ axes:
         uart_num: 1
         addr: 0
         r_sense_ohms: 0.100
-        run_amps: .8
+        run_amps: 0.900
         hold_amps: 0.500
         microsteps: 8
         stallguard: 0
         stallguard_debug: false
         toff_disable: 0
-        toff_stealthchop: 5
-        toff_coolstep: 3
+        toff_stealthchop: 3
+        toff_coolstep: 15
         run_mode: StealthChop
         homing_mode: StealthChop
         use_enable: true
@@ -79,33 +78,29 @@ axes:
       null_motor:
 
   y:
-    # 8 microsteps * 200 steps/rev = 1600 steps per motor revolution.
-    # Direct drive with roller of 16.35 mm OD 
-    #   1 revolution = π * 16.35 mm = 51.365 mm
-    # 1600 steps /  51.365 mm = 31.1496...
-    steps_per_mm: 31.1496
-    max_rate_mm_per_min: 15000
-    acceleration_mm_per_sec2: 4000
+    steps_per_mm: 30.8657
+    max_rate_mm_per_min: 10000
+    acceleration_mm_per_sec2: 50000
     rapid_acceleration_mm_per_sec2: 8000
     max_travel_mm: 297
     soft_limits: false
     homing:
       cycle: -1
-      mpos_mm: -82.5
+      mpos_mm: 0
 
     motor0:
       tmc_2209:
         uart_num: 1
         addr: 1
         r_sense_ohms: 0.100
-        run_amps: 0.500
-        hold_amps: 0.500
+        run_amps: 0.700
+        hold_amps: 0.400
         microsteps: 8
         stallguard: 0
         stallguard_debug: false
         toff_disable: 0
-        toff_stealthchop: 5
-        toff_coolstep: 3
+        toff_stealthchop: 3
+        toff_coolstep: 15
         run_mode: StealthChop
         homing_mode: StealthChop
         use_enable: true
@@ -115,39 +110,36 @@ axes:
     motor1:
       null_motor:
 
-
-  # 45 degrees turning range. At 8 microsteps, that gives 8*200 = 1600 steps/rev.
-  # 45/360 = 1/8, so this gives 200 steps from bottom to top.
-  # About 12 mm travel, so 16.66 steps/mm
   z:
-    steps_per_mm: 16.6666666
-    max_rate_mm_per_min: 15000
-    acceleration_mm_per_sec2: 2000
-    rapid_acceleration_mm_per_sec2: 2000
-    max_travel_mm: 15
+    steps_per_mm: 28.5714286
+    max_rate_mm_per_min: 25000
+    acceleration_mm_per_sec2: 350000
+    rapid_acceleration_mm_per_sec2: 25000
+    max_travel_mm: 7
     soft_limits: false
     homing:
       cycle: 1
-      mpos_mm: 15
+      mpos_mm: 8
       positive_direction: true
-      feed_mm_per_min: 1600
-      seek_mm_per_min: 1600
-      
+      feed_mm_per_min: 400
+      seek_mm_per_min: 800
+      seek_scaler: 3.0
+
     motor0:
       limit_pos_pin: gpio.4:high:pu
-      pulloff_mm: 1.5
+      pulloff_mm: 1
       tmc_2209:
         uart_num: 1
         addr: 2
         r_sense_ohms: 0.100
-        run_amps: 0.7
-        hold_amps: .4
+        run_amps: 0.700
+        hold_amps: 0.400
         microsteps: 8
         stallguard: 0
         stallguard_debug: false
         toff_disable: 0
-        toff_stealthchop: 5
-        toff_coolstep: 3
+        toff_stealthchop: 3
+        toff_coolstep: 15
         run_mode: StealthChop
         homing_mode: StealthChop
         use_enable: true
@@ -163,7 +155,7 @@ i2c0:
    sda_pin: gpio.41
    scl_pin: gpio.40
    frequency: 400000
-        
+
 oled:
    i2c_num: 0
    i2c_address: 60
@@ -175,7 +167,6 @@ oled:
 encoder:
   a_pin: gpio.35
   b_pin: gpio.48
-  old_scroll_behavior: true  # Optional, defaults to false  
 
 # Configure SD card in SDMMC mode
 sdcard:

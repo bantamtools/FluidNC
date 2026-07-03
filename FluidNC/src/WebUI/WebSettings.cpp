@@ -561,15 +561,7 @@ namespace WebUI {
         // a LocalFS path stashed via PendingFileRun would reopen against
         // SD, finding the wrong file. LocalFS callers take the
         // immediate-open path.
-        const bool homed   = config->_axes->_homed;
-        const bool canHome = config->_kinematics->canHome(0);
-        const bool eggbot  =
-            config->getMachineType() == Machine::MachineType::EggBot;
-        if (strcmp(fs, "sd") == 0 && !homed && canHome && !eggbot) {
-            log_info("Auto-home before remote file run: " << path_to_open);
-            protocol_set_pending_file(path_to_open);
-            config->_oled->popup_msg("Homing before file run...", 0);
-            Machine::Homing::run_cycles(Machine::Homing::AllCycles);
+        if (strcmp(fs, "sd") == 0 && protocol_home_before_run_if_needed(path_to_open)) {
             return Error::Ok;
         }
 

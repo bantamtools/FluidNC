@@ -208,6 +208,13 @@ void InputFile::stopJob() {
     config->_oled->_menu->set_completed_file(path().c_str());
     config->_oled->_menu->set_last_file_succeeded(false);
     config->_oled->_menu->set_last_file_error(false);
+    // (Bantam) A cancelled/aborted plot must re-home before the next run; the
+    // abrupt stop may have lost position. stopJob() runs only on a reset-driven
+    // abort of an active file job (from Cycle or a paused Hold:0), never on
+    // normal EOF completion — so success never unhomes.
+    if (config && config->_axes) {
+        config->_axes->set_unhomed();
+    }
     allChannels.kill(this);
 }
 

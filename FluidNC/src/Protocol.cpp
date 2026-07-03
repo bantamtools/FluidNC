@@ -10,6 +10,7 @@
 #include "Protocol.h"
 #include "Serial.h"  // ( Stage 1) allChannels.drainTxRings(), g_net_tx_dirty/g_net_tx_dropped
 #include "PendingFileRun.h"
+#include "HomeBeforeRun.h"   // pure home-before-run decision (unit-tested)
 #include "CompletionMark.h"  // : strip-on-start helper
 #include "Config.h"
 #include "Error.h"
@@ -134,6 +135,23 @@ void protocol_reset() {
 //  ---- deterministic post-homing file open ---------------------------
 void protocol_set_pending_file(const std::string& path) { PendingFileRun::set(path); }
 void protocol_clear_pending_file() { PendingFileRun::clear(); }
+
+bool protocol_home_before_run_if_needed(const char* sdPath) {
+    const bool homed         = config->_axes->_homed;
+    const bool canHome       = config->_kinematics->canHome(0);
+    const bool hasRealCycles = config->_axes->hasRealHomingCycles();
+    const bool eggbot        = config->getMachineType() == Machine::MachineType::EggBot;
+    if (!protocol_should_home_before_run(homed, canHome, hasRealCycles, eggbot)) {
+        return false;  // caller opens the file immediately
+    }
+    log_info("Unhomed - homing before file run: " << sdPath);
+    protocol_set_pending_file(sdPath);
+    if (config->_oled) {
+        config->_oled->popup_msg("Homing before file run...", 0);
+    }
+    Machine::Homing::run_cycles(Machine::Homing::AllCycles);
+    return true;
+}
 
 // Open + register an SD file. Mirrors the inline opens (slash-normalize,
 // set_completed_file, try/catch) so the post-homing path is parity-equal to
@@ -1834,6 +1852,9 @@ static void launch_sd_file(const char* path) {
         config->_oled->popup_msg("Cannot prepare\nfile to run", 3000);
         return;
     }
+    if (protocol_home_before_run_if_needed(path_to_open)) {
+        return;  // Homing started; file auto-runs on completion.
+    }
     log_info("launch_sd_file: " << path_to_open);
     try {
         InputFile* infile = new InputFile(
@@ -2047,12 +2068,9 @@ static void protocol_do_enter() {
                                     // homing, or opening — do not plot under a ✓ name.
                                     log_error("CompletionMark: cannot prepare file to run: " << pathbuf);
                                     config->_oled->popup_msg("Cannot prepare\nfile to run", 3000);
-                                } else if (!config->_axes->_homed && config->_kinematics->canHome(0) &&
-                                        !(config->getMachineType() == Machine::MachineType::EggBot)) {
-                                    log_info("Unhomed. About to home before running file: " << path_to_open);
-                                    PendingFileRun::set(path_to_open);
-                                    config->_oled->popup_msg("Homing before file run...", 0);
-                                    Machine::Homing::run_cycles(Machine::Homing::AllCycles);
+                                } else if (protocol_home_before_run_if_needed(path_to_open)) {
+                                    // Homing started; file auto-runs on completion
+                                    // (completed-file set by open_and_register_sd_file).
                                 } else {
                                     log_info("Passing path to InputFile: " << path_to_open);
                                     config->_oled->_menu->set_completed_file(path_to_open);
@@ -2317,14 +2335,10 @@ static void protocol_do_enter() {
                     config->_oled->popup_msg("Blah blahdee bla blah foobar quxbaazloremipsumdolorsitamat.", 0);
 
                 } else if (strcmp(config->_oled->_menu->get_selected()->display_name, "Run Latest") == 0) {
-                    // run most recent (mod date or just uploaded) gcode file, must be homed
-                    if (!config->_axes->_homed && config->_kinematics->canHome(0) &&
-                                !(config->getMachineType() == Machine::MachineType::EggBot)) {
-                        config->_oled->popup_msg("Machine not homed");
-                        log_info("Debug path during unhomed: " << config->_oled->_menu->get_recent_file_path().c_str());
-                    } else {
-                        // : strip the completion prefix on re-run if present.
-                        // Copy the std::string locally — get_recent_file_path() returns by value.
+                    // run most recent (mod date or just uploaded) gcode file; auto-homes if unhomed
+                    // : strip the completion prefix on re-run if present.
+                    // Copy the std::string locally — get_recent_file_path() returns by value.
+                    {
                         std::string source_path = config->_oled->_menu->get_recent_file_path();
                         log_info("Passing path to InputFile from Run Latest: " << source_path);
                         std::string stripped_storage;
@@ -2335,6 +2349,9 @@ static void protocol_do_enter() {
                             // ✓ name.
                             log_error("CompletionMark: cannot prepare file to run: " << source_path);
                             config->_oled->popup_msg("Cannot prepare\nfile to run", 3000);
+                        } else if (protocol_home_before_run_if_needed(path_to_open)) {
+                            // Homing started; file auto-runs on completion
+                            // (completed-file set by open_and_register_sd_file).
                         } else {
                             config->_oled->_menu->set_completed_file_from_recent(); // store run file path
                             InputFile *infile = new InputFile("sd", path_to_open, WebUI::AuthenticationLevel::LEVEL_ADMIN, allChannels);
@@ -2347,10 +2364,8 @@ static void protocol_do_enter() {
                     if (config->_oled->_menu->get_completed_file_path().empty()) {
                         config->_oled->popup_msg("Previously run file not found");
                         log_info("Run Again file path was empty");
-                    } else if (!config->_axes->_homed && config->_kinematics->canHome(0) &&
-                                !(config->getMachineType() == Machine::MachineType::EggBot)) {
-                        config->_oled->popup_msg("Machine not homed");
                     } else {
+                        // launch_sd_file() auto-homes first if unhomed.
                         std::string source_path = config->_oled->_menu->get_completed_file_path();
                         launch_sd_file(source_path.c_str());
                     }
@@ -2388,17 +2403,13 @@ static void protocol_do_enter() {
                             }
                         } else {
                             // Short press: mark the just-run file done, then launch next.
-                            if (!config->_axes->_homed && config->_kinematics->canHome(0) &&
-                                    !(config->getMachineType() == Machine::MachineType::EggBot)) {
-                                config->_oled->popup_msg("Machine not homed");
-                            } else {
-                                std::string j = config->_oled->_menu->get_completed_file_path();
-                                if (!j.empty()) {
-                                    CompletionMark::mark_completed(j.c_str());  // idempotent
-                                }
-                                std::string next_path = st.next_path;  // copy before launch
-                                launch_sd_file(next_path.c_str());
+                            // launch_sd_file() auto-homes first if unhomed.
+                            std::string j = config->_oled->_menu->get_completed_file_path();
+                            if (!j.empty()) {
+                                CompletionMark::mark_completed(j.c_str());  // idempotent
                             }
+                            std::string next_path = st.next_path;  // copy before launch
+                            launch_sd_file(next_path.c_str());
                         }
                     }
 

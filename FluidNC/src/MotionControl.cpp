@@ -455,6 +455,12 @@ void mc_reset() {
                 rtAlarm = ExecAlarm::AbortCycle;
             }
             Stepper::stop_stepping();  // Stop stepping immediately, possibly losing position
+            // (Bantam) An abrupt mid-motion abort (jog/cycle/homing) may lose
+            // position; require a re-home before the next run. Minimal bool
+            // write — safe at interrupt level.
+            if (config && config->_axes) {
+                config->_axes->set_unhomed();
+            }
         }
     }
 }

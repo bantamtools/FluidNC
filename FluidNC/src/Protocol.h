@@ -114,6 +114,12 @@ void protocol_clear_pending_file();
 void protocol_run_pending_file_after_homing();   // call from Homing::done after _homed
 void protocol_on_homing_failed();                 // call from Homing::fail
 
+// Shared auto-home-before-run used by every file launcher (OLED file menu,
+// Run Again/Next/Latest, Studio/serial $SD/Run). Returns true if it started a
+// homing cycle and stashed sdPath to auto-run on completion (caller must NOT
+// open the file itself); false if the caller should open immediately.
+bool protocol_home_before_run_if_needed(const char* sdPath);
+
 extern volatile ExecAlarm rtAlarm;  // Global realtime executor variable for setting various alarms.
 
 #include <map>
