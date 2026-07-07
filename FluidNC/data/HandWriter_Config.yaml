@@ -1,6 +1,6 @@
 name: "Bantam Tools Handwriter"
 board: "Serama Hen D"
-meta: "1.0.0"
+meta: "1.0.1"
 
 planner_blocks: 16
 wifi_mode: -1
@@ -113,7 +113,7 @@ axes:
   z:
     steps_per_mm: 28.5714286
     max_rate_mm_per_min: 25000
-    acceleration_mm_per_sec2: 350000
+    acceleration_mm_per_sec2: 35000
     rapid_acceleration_mm_per_sec2: 25000
     max_travel_mm: 7
     soft_limits: false

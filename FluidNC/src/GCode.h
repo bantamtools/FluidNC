@@ -317,6 +317,16 @@ void gc_init();
 // Clear pending M0 comment
 void gc_clear_m0_comment();
 
+//  Persistent pause-instruction emit API. emit_pause_instruction() is
+// called at the M0 Paused edge (sets the cache + emits [MSG:INSTR:<text>]);
+// emit_pause_instruction_clear() emits [MSG:INSTRCLR] iff an instruction was set
+// (resume/cancel/job-end); reemit_pause_instruction() re-emits the cached SET for
+// the Hold heartbeat backstop and reconnect probe-answers. See PauseInstruction.h
+// for the wire grammar and the pure, host-tested core.
+void emit_pause_instruction(const char* text);
+void emit_pause_instruction_clear();
+void reemit_pause_instruction();
+
 // Execute one block of rs275/ngc/g-code
 Error gc_execute_line(char* line);
 

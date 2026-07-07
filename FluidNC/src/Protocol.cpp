@@ -11,6 +11,7 @@
 #include "Serial.h"  // ( Stage 1) allChannels.drainTxRings(), g_net_tx_dirty/g_net_tx_dropped
 #include "PendingFileRun.h"
 #include "HomeBeforeRun.h"   // pure home-before-run decision (unit-tested)
+#include "GCode.h"           //  emit_pause_instruction_clear / reemit_pause_instruction
 #include "CompletionMark.h"  // : strip-on-start helper
 #include "Config.h"
 #include "Error.h"
@@ -416,6 +417,35 @@ void send_line(Channel& channel, const std::string& line) {
     }
 }
 
+//  Explicit-droppability variants of the three send_line() overloads
+// above. Identical bodies except they pass the caller's `droppable` straight to
+// enqueue_message() instead of computing !is_ack_line(). See Protocol.h for the
+// best-effort (NOT guaranteed) delivery contract.
+void send_line(Channel& channel, const char* line, bool droppable) {
+    if (outputTask) {
+        LogMessage msg { &channel, (void*)line, false };
+        enqueue_message(msg, droppable);
+    } else {
+        channel.println(line);
+    }
+}
+void send_line(Channel& channel, const std::string* line, bool droppable) {
+    if (outputTask) {
+        LogMessage msg { &channel, (void*)line, true };
+        enqueue_message(msg, droppable);
+    } else {
+        channel.println(line->c_str());
+        delete line;
+    }
+}
+void send_line(Channel& channel, const std::string& line, bool droppable) {
+    if (outputTask) {
+        send_line(channel, new std::string(line), droppable);
+    } else {
+        channel.println(line.c_str());
+    }
+}
+
 //  Idle-gated, state-change-only status heartbeat (backstop). Runs ONLY
 // from output_loop (core 0) when the message queue is empty, so it can never
 // delay motion or other messages. It self-heals a silently-dropped Part-1 edge:
@@ -445,6 +475,29 @@ static void maybe_emit_state_heartbeat() {
     g_last_state_heartbeat_ms = now;
 }
 
+//  Hold-state pause-instruction re-emit backstop — the real robustness
+// mechanism (delivery is best-effort, not guaranteed; §4.2). While the machine is
+// paused (State::Hold) with a cached instruction, periodically re-emit
+// [MSG:INSTR:<text>] on the status-heartbeat cadence. This self-heals a SET
+// dropped at the pause edge (WiFi TxRing<512> overflow) or a mid-pause (re)connect
+// on an open link where the host holds $Report/Interval=0 and never polls `?`.
+// reemit_pause_instruction() self-gates on a non-empty cache and Studio's setter
+// is idempotent, so redundant re-emits are harmless. Runs ONLY from output_loop's
+// queue-empty branch, like the state heartbeat, so it never delays motion/output
+// (enqueue wait=0 here — fine for a repeating backstop).
+static uint32_t g_last_instr_heartbeat_ms = 0;
+static void maybe_reemit_pause_instruction() {
+    if (sys.state != State::Hold) {
+        return;
+    }
+    uint32_t now = millis();
+    if (now - g_last_instr_heartbeat_ms < STATE_HEARTBEAT_MS) {
+        return;  // rate-limit to the status-heartbeat cadence
+    }
+    g_last_instr_heartbeat_ms = now;
+    reemit_pause_instruction();  // self-gated on a non-empty cache
+}
+
 void output_loop(void* unused) {
 #ifdef DEBUG_MEMORY_WATERMARKS
     uint32_t start_time = millis();
@@ -458,6 +511,7 @@ void output_loop(void* unused) {
             //  Queue empty == drainer idle: safe, motion-free moment to
             // opportunistically self-heal a missed state edge.
             maybe_emit_state_heartbeat();
+            maybe_reemit_pause_instruction();  //  Hold-state instruction backstop
         }
         // ( Stage 2) The network TX-ring drain MOVED to the wifi_task — output_loop
         // does ZERO socket I/O now (deliver_message -> AllChannels::write -> WS/telnet
@@ -1385,6 +1439,11 @@ static void protocol_do_cycle_start() {
                         if (config && config->_oled) {
                             config->_oled->clear_m0_comment();
                         }
+                        //  Clear the host pause instruction on resume. OUTSIDE
+                        // the config->_oled guard so the CLEAR token is not newly
+                        // OLED-gated; self-gated on a non-empty cache, so a bare user
+                        // feed-hold resume (no M0) emits nothing (§4.3).
+                        emit_pause_instruction_clear();
                         sys.suspend.bit.initiateRestore = true;
                         // Force display refresh to show "Resuming..." before unpark blocks
                         if (config && config->_oled) {
@@ -1396,6 +1455,7 @@ static void protocol_do_cycle_start() {
                         if (config && config->_oled) {
                             config->_oled->clear_m0_comment();
                         }
+                        emit_pause_instruction_clear();  //  see parking-path note above
                         protocol_do_initiate_cycle();
                     }
                 }

@@ -182,6 +182,16 @@ void send_line(Channel& channel, const char* message);
 void send_line(Channel& channel, const std::string* message);
 void send_line(Channel& channel, const std::string& message);
 
+//  Explicit-droppability overloads — force a bounded-wait (droppable=false
+// => 250ms then drop) delivery for a NON-ack protocol token. The default
+// overloads above hardcode droppable = !is_ack_line(message), so every [MSG:...]
+// token is enqueued droppable (wait=0). Best-effort, NOT a delivery guarantee:
+// enqueue collapses the wait to 0 on the output task, and the WiFi TxRing<512>
+// still drops-on-full downstream. Used by the  pause-instruction emit.
+void send_line(Channel& channel, const char* message, bool droppable);
+void send_line(Channel& channel, const std::string* message, bool droppable);
+void send_line(Channel& channel, const std::string& message, bool droppable);
+
 void drain_messages();
 
 extern uint32_t heapLowWater;

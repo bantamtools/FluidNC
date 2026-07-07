@@ -22,6 +22,7 @@
 #include "FileStream.h"           // FileStream()
 #include "xmodem.h"               // xmodemReceive(), xmodemTransmit()
 #include "OLED.h"
+#include "GCode.h"  //  reemit_pause_instruction()
 #include "StartupLog.h"           // startupLog
 #include "Driver/fluidnc_gpio.h"  // gpio_dump()
 #ifdef USE_SDMMC
@@ -448,6 +449,9 @@ static Error go_to_sleep(const char* value, WebUI::AuthenticationLevel auth_leve
 static Error get_report_build_info(const char* value, WebUI::AuthenticationLevel auth_level, Channel& out) {
     if (!value) {
         report_build_info(build_info->get(), out);
+        //  Studio's reconnect probe sends `$I` alongside `?`; re-emit the
+        // cached pause instruction so a mid-pause reconnect recovers it. Self-gated.
+        reemit_pause_instruction();
         return Error::Ok;
     }
     return Error::InvalidStatement;

@@ -58,6 +58,7 @@
 #include "System.h"
 #include "Protocol.h"  // *Event
 #include "InputFile.h"
+#include "GCode.h"  //  reemit_pause_instruction()
 #include "WebUI/InputBuffer.h"  // XXX could this be a StringStream ?
 #include "Main.h"               // display()
 #include "StartupLog.h"         // startupLog
@@ -103,6 +104,11 @@ void execute_realtime_command(Cmd command, Channel& channel) {
             break;
         case Cmd::StatusReport:
             report_realtime_status(channel);  // direct call instead of setting flag
+            //  USB/WiFi reconnect probe-answer: a host reconnecting
+            // mid-pause re-sends `?` (USB has no per-connect push hook). Re-emit
+            // the cached [MSG:INSTR:] so the instruction recovers. Self-gated on a
+            // non-empty cache (only set while paused), so it is a no-op otherwise.
+            reemit_pause_instruction();
             // protocol_send_event(&reportStatusEvent, int(&channel));
             break;
         case Cmd::CycleStart:

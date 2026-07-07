@@ -18,6 +18,7 @@
 #include "System.h"               // set_motor_steps_from_mpos
 
 #include "Machine/MachineConfig.h"
+#include "PauseInstruction.h"     //  sanitizer + cache state machine + wire format
 
 #include <string.h>   // memset
 #include <math.h>     // sqrt etc.
@@ -42,6 +43,13 @@ bool gc_saw_program_end; // for detecting premature file end
 
 std::string comment_msg;
 static char pending_m0_comment[65] = "";  // Static buffer for M0 comment (64 chars + null)
+
+//  Cache of the current persistent pause instruction (sized like
+// pending_m0_comment). Set at the M0 Paused edge, re-emitted on the Hold-state
+// heartbeat and reconnect probes, cleared on resume/cancel/job-end. Single
+// current instruction — a new M0 overwrites it; Studio mirrors that verbatim.
+static char current_pause_instruction[PAUSE_INSTR_BUFSZ] = "";
+
 static bool fw_update_notified = false;  // Show firmware update popup once per boot
 
 #define FAIL(status) return (status);
@@ -60,6 +68,48 @@ void gc_init() {
 
 void gc_clear_m0_comment() {
     pending_m0_comment[0] = '\0';
+}
+
+//  Emit the exact SET wire bytes for the current cached instruction —
+// "[MSG:INSTR:<text>]", NO space after the final colon (report-token grammar,
+// NOT a log_* macro). send_line(..., /*droppable=*/false) requests a 250ms
+// bounded-wait delivery (best-effort, NOT a delivery guarantee: it collapses to
+// wait=0 on the output task and the WiFi TxRing may still drop it). Robustness
+// comes from the Hold-state heartbeat re-emit + reconnect probe-answers, not this
+// wait. Must run OFF the output task to actually get the bounded wait.
+static void emit_current_instruction_line() {
+    std::string line;
+    format_instr_line(current_pause_instruction, line);
+    send_line(allChannels, line, /*droppable=*/false);
+}
+
+//  Sanitize `text` into the cache and emit the SET token. Called from the
+// M0 Paused edge with pending_m0_comment. If the text is empty after
+// sanitization, the cache stays empty and nothing is emitted.
+void emit_pause_instruction(const char* text) {
+    pause_instruction_set(current_pause_instruction, text);
+    if (pause_instruction_active(current_pause_instruction)) {
+        emit_current_instruction_line();
+    }
+}
+
+//  Emit the CLEAR token and reset the cache, but ONLY if an instruction
+// was set. A bare user feed-hold resume (no M0) leaves the cache empty, so the
+// resume path can call this unconditionally and it is a no-op there (§4.3).
+void emit_pause_instruction_clear() {
+    if (pause_instruction_clear(current_pause_instruction)) {
+        send_line(allChannels, PAUSE_INSTR_CLEAR_TOKEN, /*droppable=*/false);
+    }
+}
+
+//  Re-emit the cached SET token if one is active. Used by the Hold-state
+// heartbeat backstop and the USB/WiFi reconnect probe-answers to self-heal a
+// dropped SET or a mid-pause (re)connect. Studio's property setter is idempotent,
+// so redundant re-emits are harmless.
+void reemit_pause_instruction() {
+    if (pause_instruction_active(current_pause_instruction)) {
+        emit_current_instruction_line();
+    }
 }
 
 // Sets g-code parser position in mm. Input in steps. Called by the system abort and hard
@@ -2236,6 +2286,17 @@ Error gc_execute_line(char* line) {
             // Set the M0 comment in OLED after motions complete
             if (pending_m0_comment[0] != '\0' && config && config->_oled) {
                 config->_oled->set_comment(pending_m0_comment, true);
+                //  Surface the pen/tool-change instruction to connected
+                // hosts (Studio machine-control tab) as a structured, motion-synced
+                // protocol token. Emitted at this settled Paused edge (after the
+                // protocol_buffer_synchronize above), BEFORE the buffer clear
+                // below, and inside this config->_oled block because the text
+                // source (pending_m0_comment) is only populated on OLED machines
+                // (§4.2). Wire grammar (single source: PauseInstruction.h):
+                //   SET   [MSG:INSTR:<text>]   (no space after the final colon)
+                //   CLEAR [MSG:INSTRCLR]       (emitted on resume/cancel/job-end)
+                //   NOTICE [MSG:NOTICE:<text>] reserved, not emitted in v1.
+                emit_pause_instruction(pending_m0_comment);
                 pending_m0_comment[0] = '\0';  // Clear after use
             }
             

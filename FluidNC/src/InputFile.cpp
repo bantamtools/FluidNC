@@ -215,6 +215,11 @@ void InputFile::stopJob() {
     if (config && config->_axes) {
         config->_axes->set_unhomed();
     }
+    //  A cancelled/aborted plot clears any surfaced pause instruction on
+    // connected hosts. Emitted from stopJob (the file-job-scoped abort handler),
+    // NEVER from mc_reset (ISR-minimal). Self-gated on a non-empty cache, so this
+    // is a no-op if nothing was showing.
+    emit_pause_instruction_clear();
     allChannels.kill(this);
 }
 
@@ -227,7 +232,11 @@ InputFile::~InputFile() {
         config->_oled->clear_m0_comment();      // Clear M0
     }
     gc_clear_m0_comment();  // Clear pending M0 comment
-    
+    //  Job end (M30/EOF) or any file close: clear the host pause
+    // instruction. Self-gated, so this is a no-op after a cancel already cleared
+    // it in stopJob(), and after a normal resume already cleared it.
+    emit_pause_instruction_clear();
+
     _progress = "";
 
     if(config->_oled){

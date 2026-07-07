@@ -5,6 +5,7 @@
 #include "WifiConfig.h"     //  WiFiConfig::staTxSuspect()
 #include <esp_heap_caps.h>  //  heap attribution at the WS-drop instant
 #include <new>              // ( Stage 1) std::nothrow for channel allocation
+#include "../GCode.h"       //  reemit_pause_instruction()
 
 #ifdef ENABLE_WIFI
 #    include "WebServer.h"
@@ -392,6 +393,14 @@ namespace WebUI {
                         s += std::to_string(wsChannel->id());
                         wsChannel->sendTXT(s);
                     }
+                    //  WiFi reconnect recovery: a fresh WS channel means a
+                    // (re)connecting host. If we are paused with a cached
+                    // instruction, re-emit it (to allChannels, now including this
+                    // just-registered channel; idempotent on Studio). Self-gated,
+                    // so a connect while not paused is a no-op. USB has no analog
+                    // and instead answers the `?`/`$I` probe (Serial.cpp /
+                    // ProcessSettings.cpp).
+                    reemit_pause_instruction();
                 }
             } break;
             case WStype_TEXT:
