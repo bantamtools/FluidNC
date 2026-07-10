@@ -2313,6 +2313,7 @@ Error gc_execute_line(char* line) {
             // overrides (Media* soft limits, (Accel) acceleration) do not leak
             // into the next job. Fires on both M2 and M30 (shared case body).
             config->_axes->restoreJobDefaults();
+            config->_parking->restoreJobDefault();  //  wipe (Park Height:) override
 
             // Upon program complete, only a subset of g-codes reset to certain defaults, according to
             // LinuxCNC's program end descriptions and testing. Only modal groups [G-code 1,2,3,5,7,12]

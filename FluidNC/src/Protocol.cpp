@@ -1249,6 +1249,10 @@ static void protocol_do_feedhold(void *arg) {
 
         case State::Cycle:
             sys.state = State::Hold;  // Set state BEFORE starting deceleration
+#ifdef DEBUG_PARK_DIAG
+            log_warn("PARK-DIAG feedhold-edge sync=" << sync << " state=Cycle->Hold");  //  diagnostic (dev builds only)
+            config->_parking->logState("feedhold-edge");
+#endif
             config->_oled->refresh_display();  // Immediately update OLED to show "Pausing"
             protocol_start_holding();
             break;

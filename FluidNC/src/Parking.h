@@ -22,6 +22,11 @@ private:
     int   _axis             = 2;  // Default to Z
     bool  _park_on_feedhold = false;
 
+    // Config-authority copy of _target_mpos, captured in afterParse(), so a
+    // job-boundary restore can wipe any (Park Height:) g-code comment override.
+    // Mirrors Axis::_accelerationConfig .
+    float _targetMposConfig = -5.0;
+
     // local variables
     float parking_target[MAX_N_AXIS];
     float restore_target[MAX_N_AXIS];
@@ -58,6 +63,11 @@ public:
 
     // Configuration handlers.
     void group(Configuration::HandlerBase& handler) override;
+    void afterParse() override;   // captures _targetMposConfig 
+    void restoreJobDefault();     // resets _target_mpos to _targetMposConfig at job end 
+#ifdef DEBUG_PARK_DIAG
+    void logState(const char* tag);   //  pause/park diagnostic (dev builds only)
+#endif
 
     ~Parking() = default;
 };

@@ -106,6 +106,10 @@ void Parking::park(bool restart) {
     // Clear any stale deferred pause request
     sys.deferredPauseRequest = false;
 
+#ifdef DEBUG_PARK_DIAG
+    logState("park-entry");  //  diagnostic (dev builds only)
+#endif
+
     log_debug("PARK: INITIAL position =\t[ " << get_mpos()[0] << " " << get_mpos()[1] << " " << get_mpos()[2] << " ]");
 
     if (!restart) {
@@ -148,6 +152,9 @@ void Parking::park(bool restart) {
         }
     } else {
         log_debug("Spin down only");
+#ifdef DEBUG_PARK_DIAG
+        logState("park-no-retract");  //  retract skipped — capture why (dev builds only)
+#endif
         // Parking motion not possible. Just disable the spindle and coolant.
         // NOTE: Laser mode does not start a parking motion to ensure the laser stops immediately.
         spindle->spinDown();
@@ -235,3 +242,35 @@ void Parking::group(Configuration::HandlerBase& handler) {
     handler.item("pullout_rate_mm_per_min", _pullout_rate);
     handler.item("park_on_feedhold", _park_on_feedhold);
 }
+
+void Parking::afterParse() {
+    // Capture the config-authority parking target so a job-boundary restore
+    // can wipe any (Park Height:) comment override . Re-runs on config
+    // reload, so an intentional config change becomes the new baseline.
+    _targetMposConfig = _target_mpos;
+}
+
+void Parking::restoreJobDefault() {
+    // Wipe any (Park Height:) g-code comment override back to the config value,
+    // so a prior job's park height cannot leak into the next job's user-feedhold
+    // retract ( D2b). Mirrors Axes::restoreJobDefaults() for acceleration.
+    if (_target_mpos != _targetMposConfig) {
+        _target_mpos = _targetMposConfig;
+        log_info("Parking target_mpos restored to config default " << _targetMposConfig);
+    }
+}
+
+#ifdef DEBUG_PARK_DIAG
+void Parking::logState(const char* tag) {
+    //  Dev-only pause/park diagnostic — compiled out of production
+    // firmware (DEBUG_PARK_DIAG is defined only in the wifi_s3_debug env, not in
+    // public wifi_s3). It shows WHY a retract did or did not happen: C2
+    // (target_mpos wrong) shows in the guard values; C3 (knob path never reaches
+    // park) shows by which tags appear. log_warn (not log_info) because the
+    // runtime message level filters INFO/DBG and would drop it.
+    log_warn("PARK-DIAG " << tag << " enable=" << _enable << " park_on_feedhold=" << _park_on_feedhold
+                          << " axis=" << _axis << " target_mpos=" << _target_mpos
+                          << " target_cfg=" << _targetMposConfig << " mpos=" << get_mpos()[_axis]
+                          << " can_park=" << can_park() << " guard(mpos<target)=" << (get_mpos()[_axis] < _target_mpos));
+}
+#endif  // DEBUG_PARK_DIAG
