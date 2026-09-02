@@ -261,6 +261,11 @@ namespace Pins {
 
         // If the pin is ActiveLow, we should take that into account here:
         if (value.has(PinAttributes::Output)) {
+            // Keep _lastWrittenValue in step with the pin. write() discards a
+            // value equal to it, so driving the GPIO here without updating it
+            // leaves the cache describing a level the pin no longer holds, and
+            // every later write of that value is silently dropped.
+            _lastWrittenValue = value.has(PinAttributes::InitialOn);
             gpio_write(_index, int(value.has(PinAttributes::InitialOn)) ^ _readWriteMask);
         }
 

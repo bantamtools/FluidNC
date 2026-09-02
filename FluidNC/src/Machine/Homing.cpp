@@ -396,6 +396,17 @@ namespace Machine {
 
     void Homing::fail(ExecAlarm alarm) {
         Stepper::reset();  // Stop moving
+
+        // Return step control to normal operation, as the success path does
+        // in set_mpos(). protocol_initiate_homing_cycle() sets
+        // executeSysMotion before a homing cycle; leaving it set means the
+        // next mc_reset() sees its "was moving" guard satisfied on a
+        // stationary machine and raises AbortCycle, stops stepping, and marks
+        // the machine unhomed. The OLED's Enter-in-Alarm handler performs
+        // exactly that reset, so without this a failed homing would need a
+        // second acknowledgement to clear the alarm the first one raised.
+        sys.step_control = {};
+
         rtAlarm = alarm;
         config->_axes->set_homing_mode(_cycleAxes, false);  // tell motors homing is done...failed
         config->_axes->set_disable(config->_stepping->_idleMsecs != 255);

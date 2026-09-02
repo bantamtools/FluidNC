@@ -103,24 +103,28 @@ namespace Machine {
         auto n_axis = _numberAxis;
         //log_info("motors_set_direction_pins:0x%02X", onMask);
 
-        // Set the direction pins, but optimize for the common
-        // situation where the direction bits haven't changed.
-        static uint8_t previous_dir = 255;  // should never be this value
-        if (dir_mask != previous_dir) {
-            previous_dir = dir_mask;
+        // Write the direction pins on every step. Caching the last mask and
+        // skipping the write when it matches would make that cache a software
+        // shadow of the hardware with nothing keeping the two in agreement:
+        // init_step_dir_pins() re-establishes the pins without touching such a
+        // cache, after which a move whose direction matched the stale value
+        // would skip the write and drive the axis the wrong way.
+        //
+        // The cost is bounded. maxPulsesPerSec() computes the rate ceiling as
+        // 1000000 / (2 * pulse_us + dir_delay_us), already assuming the
+        // direction delay is paid on every pulse, so writing every step
+        // matches the timing model the config validator enforces.
+        for (int axis = X_AXIS; axis < n_axis; axis++) {
+            bool thisDir = bitnum_is_true(dir_mask, axis);
 
-            for (int axis = X_AXIS; axis < n_axis; axis++) {
-                bool thisDir = bitnum_is_true(dir_mask, axis);
-
-                for (size_t motor = 0; motor < Axis::MAX_MOTORS_PER_AXIS; motor++) {
-                    auto m = _axis[axis]->_motors[motor];
-                    if (m) {
-                        m->_driver->set_direction(thisDir);
-                    }
+            for (size_t motor = 0; motor < Axis::MAX_MOTORS_PER_AXIS; motor++) {
+                auto m = _axis[axis]->_motors[motor];
+                if (m) {
+                    m->_driver->set_direction(thisDir);
                 }
             }
-            config->_stepping->waitDirection();
         }
+        config->_stepping->waitDirection();
 
         // Turn on step pulses for motors that are supposed to step now
         for (size_t axis = X_AXIS; axis < n_axis; axis++) {

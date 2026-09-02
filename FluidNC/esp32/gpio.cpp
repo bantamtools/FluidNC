@@ -490,13 +490,16 @@ void gpio_dump(Print& out) {
             out << gpio_num << " ";
             const char* function_name = pin_function_name(gpio_num, gpio_function(gpio_num));
             out << function_name;
-            if (!strncmp(function_name, "GPIO", 4)) {
-                if (is_output(gpio_num)) {
-                    out << " O" << output_level(gpio_num);
-                }
-                if (is_input(gpio_num)) {
-                    out << " I" << gpio_get_level(gpio_num);
-                }
+            // Print the level for every pin, not only those the mux table
+            // names "GPIO*". That table carries original-ESP32 function
+            // names, so on the S3 the lookup yields "-" for most pins and
+            // their levels would never be reported - which makes $GD unable
+            // to show the state of a direction or limit pin at all.
+            if (is_output(gpio_num)) {
+                out << " O" << output_level(gpio_num);
+            }
+            if (is_input(gpio_num)) {
+                out << " I" << gpio_get_level(gpio_num);
             }
             uint32_t out_sel = gpio_out_sel(gpio_num);
             if (out_sel != 256) {
