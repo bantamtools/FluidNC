@@ -16,17 +16,12 @@
 
 #include <cstdint>
 
-// Pause state storage for parking resume functionality
-struct pause_state_t {
-    float target_position[MAX_N_AXIS];  // Where the block was heading
-    float feed_rate;                    // Feed rate for the motion  
-    SpindleSpeed spindle_speed;         // Actual spindle speed value
-    SpindleState spindle;               // Spindle state
-    CoolantState coolant;               // Coolant state
-    int32_t line_number;                // Line number for reporting
-    PlMotion motion;                    // Motion type flags (includes rapidMotion)
-    bool valid;                         // Indicates if pause data is valid
-};
+#ifdef PAUSESIM
+// Host simulator only (env:pausesim): lets a test read the segment-prep state.
+// Definition lives in StepperPrivate.h; forward-declared here so the accessor
+// below needs no extra include. Compiled out of firmware.
+struct st_prep_t;
+#endif
 
 namespace Stepper {
     void init();
@@ -61,4 +56,9 @@ namespace Stepper {
     float get_realtime_rate();
 
     extern uint32_t isr_count;
+
+#ifdef PAUSESIM
+    // Host simulator only: read-only view of the file-static segment prep state.
+    const st_prep_t& debug_prep();
+#endif
 }

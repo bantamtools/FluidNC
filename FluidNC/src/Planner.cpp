@@ -518,7 +518,6 @@ void plan_cycle_reinitialize() {
 }
 
 // Returns the current planner position in millimeter coordinates.
-// Used for pause/resume functionality to determine target position.
 void plan_get_planner_mpos(float* target) {
     motor_steps_to_mpos(target, pl.position);
 }

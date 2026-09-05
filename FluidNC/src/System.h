@@ -52,6 +52,8 @@ struct system_t {
     bool           pauseRequested;     // Indicates user has requested pause (immediate feedback)
     bool           parkingInProgress;     // True when parking motion is active  
     bool           deferredPauseRequest;  // Pause request deferred during parking
+    bool           deferredResumeRequest;  // Cycle start deferred during the parking retract 
+    bool           programHold;           // M0 program hold in progress: Parking must not retract 
 };
 extern system_t sys;
 

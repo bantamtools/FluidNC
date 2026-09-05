@@ -56,6 +56,11 @@ void protocol_buffer_synchronize();
 void protocol_disable_steppers();
 void protocol_cancel_disable_steppers();
 
+// Non-static so the hold machine in HoldController.cpp can call them (M1 of the
+// pause-simulator work; the HoldPorts seam in M2 replaces these direct calls).
+void protocol_initiate_homing_cycle();
+void protocol_manage_spindle();
+
 extern volatile bool rtReset;
 extern volatile bool rtCycleStop;
 

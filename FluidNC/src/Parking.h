@@ -61,6 +61,23 @@ public:
 
     bool park_on_feedhold() { return _park_on_feedhold; };
 
+#ifdef PAUSESIM
+    // Host simulator only: set config fields without the YAML parser, and read
+    // the private targets. Compiled out of firmware.
+    void hostsim_configure(bool enable, int axis, float target_mpos, float pullout, float rate, bool park_on_feedhold) {
+        _enable           = enable;
+        _axis             = axis;
+        _target_mpos      = target_mpos;
+        _targetMposConfig = target_mpos;
+        _pullout          = pullout;
+        _rate             = rate;
+        _pullout_rate     = rate;
+        _park_on_feedhold = park_on_feedhold;
+    }
+    const float* hostsim_restore_target() const { return restore_target; }
+    const float* hostsim_parking_target() const { return parking_target; }
+#endif
+
     // Configuration handlers.
     void group(Configuration::HandlerBase& handler) override;
     void afterParse() override;   // captures _targetMposConfig 

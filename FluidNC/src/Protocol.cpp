@@ -8,6 +8,7 @@
 */
 
 #include "Protocol.h"
+#include "HoldController.h"  // the feed-hold / park / resume state machine (moved out of this file)
 #include "Serial.h"  // ( Stage 1) allChannels.drainTxRings(), g_net_tx_dirty/g_net_tx_dropped
 #include "PendingFileRun.h"
 #include "HomeBeforeRun.h"   // pure home-before-run decision (unit-tested)
@@ -73,8 +74,6 @@ static volatile bool rtSafetyDoor;
 
 volatile bool runLimitLoop;  // Interface to show_limits()
 
-static void protocol_exec_rt_suspend();
-
 static char line[LINE_BUFFER_SIZE];     // Line to be executed. Zero-terminated.
 static char comment[LINE_BUFFER_SIZE];  // Line to be executed. Zero-terminated.
 // static uint8_t line_flags           = 0;
@@ -88,20 +87,6 @@ void clearRcServoCalibration() {
     rcServoZCal = false;
     rcServoZOriginalPos = -99999.0f;
 }
-
-// Spindle stop override control states.
-struct SpindleStopBits {
-    uint8_t enabled : 1;
-    uint8_t initiate : 1;
-    uint8_t restore : 1;
-    uint8_t restoreCycle : 1;
-};
-union SpindleStop {
-    uint8_t         value;
-    SpindleStopBits bit;
-};
-
-static SpindleStop spindle_stop_ovr;
 
 // Forward declarations for the polling-task / main-loop handshake globals
 // defined later in this file. protocol_reset() clears them so a line that
@@ -1137,29 +1122,6 @@ static void protocol_do_alarm() {
     rtAlarm = ExecAlarm::None;
 }
 
-static void protocol_start_holding() {
-    if (!(sys.suspend.bit.motionCancel || sys.suspend.bit.jogCancel)) {  // Block, if already holding.
-        sys.step_control = {};
-        if (!Stepper::update_plan_block_parameters()) {  // Notify stepper module to recompute for hold deceleration.
-            sys.step_control.endMotion = true;
-        }
-        sys.step_control.executeHold = true;  // Initiate suspend state with active flag.
-    }
-    // log_info("protocol_start_holding");
-    // config->_oled->refresh_display();  // Update display to show "Pausing" message
-}
-
-static void protocol_cancel_jogging() {
-    if (!sys.suspend.bit.motionCancel) {
-        sys.suspend.bit.jogCancel = true;
-    }
-}
-
-static void protocol_hold_complete() {
-    sys.suspend.value            = 0;
-    sys.suspend.bit.holdComplete = true;
-}
-
 static void protocol_do_motion_cancel() {
     // log_debug("protocol_do_motion_cancel " << state_name());
     // Execute and flag a motion cancel with deceleration and return to idle. Used primarily by probing cycle
@@ -1196,79 +1158,6 @@ static void protocol_do_motion_cancel() {
             break;
     }
     sys.suspend.bit.motionCancel = true;
-}
-
-static void protocol_do_feedhold(void *arg) {
-
-    bool sync = (bool)arg;
-    
-    // Set flag immediately for user feedback (State::Cycle is the internal name for "Run")
-    if (sys.state == State::Cycle || sys.state == State::Jog) {
-        sys.pauseRequested = true;
-    }
-    
-    log_info("Feedhold process initiated");
-    
-    // Block feedhold during parking operations only
-    if (sys.parkingInProgress) {
-        log_info("Feedhold deferred during parking operation");
-        sys.deferredPauseRequest = true;
-        return;  // Defer feedhold
-    }
-
-    // Sync buffers before feedholding if requested
-    if (sync) {
-        protocol_buffer_synchronize();  // Sync and finish all remaining buffered motions before moving on.
-    }
-
-    if (runLimitLoop) {
-        runLimitLoop = false;  // Hack to stop show_limits()
-        return;
-    }
-
-    // log_debug("protocol_do_feedhold " << state_name());
-    // Execute a feed hold with deceleration, if required. Then, suspend system.
-    switch (sys.state) {
-        case State::ConfigAlarm:
-        case State::Alarm:
-        case State::CheckMode:
-        case State::SafetyDoor:
-        case State::Sleep:
-            return;  // Do not change the state to Hold
-
-        case State::Homing:
-            // XXX maybe feedhold should stop homing
-            // log_info("Feedhold ignored while homing; use Reset instead");
-            return;
-        case State::Hold:
-            break;
-
-        case State::Idle:
-            protocol_hold_complete();
-            break;
-
-        case State::Cycle:
-            sys.state = State::Hold;  // Set state BEFORE starting deceleration
-#ifdef DEBUG_PARK_DIAG
-            log_warn("PARK-DIAG feedhold-edge sync=" << sync << " state=Cycle->Hold");  //  diagnostic (dev builds only)
-            config->_parking->logState("feedhold-edge");
-#endif
-            config->_oled->refresh_display();  // Immediately update OLED to show "Pausing"
-            protocol_start_holding();
-            break;
-
-        case State::Jog:
-            protocol_start_holding();
-            protocol_cancel_jogging();
-            return;  // Do not change the state to Hold
-    }
-    // State::Cycle now sets state above, other cases fall through to here
-    if (sys.state != State::Hold) {
-        sys.state = State::Hold;
-    }
-    //  Push the Hold edge immediately (Decel/"Hold:1") for prompt pause
-    // feedback; the existing :1076 emit later sends "Hold:0" at full stop.
-    report_realtime_status(allChannels);
 }
 
 static void protocol_do_safety_door() {
@@ -1364,115 +1253,13 @@ void protocol_cancel_disable_steppers() {
     idleEndTime = 0;
 }
 
-static void protocol_do_initiate_cycle() {
-    // log_debug("protocol_do_initiate_cycle " << state_name());
-    // Start cycle only if queued motions exist in planner buffer and the motion is not canceled.
-    sys.step_control = {};  // Restore step control to normal operation
-    plan_block_t* pb;
-    if ((pb = plan_get_current_block()) && !sys.suspend.bit.motionCancel) {
-        sys.suspend.value = 0;  // Break suspend state.
-#ifdef ENABLE_WIFI
-        WiFi.setAutoReconnect(false);
-#endif
-        sys.state         = pb->is_jog ? State::Jog : State::Cycle;
-        
-        // Clear any deferred pause when resuming motion
-        if (sys.deferredPauseRequest) {
-            log_info("Cleared stale deferred pause on resume to " << state_name());
-            sys.deferredPauseRequest = false;
-        }
-
-        Stepper::prep_buffer();  // Initialize step segment buffer before beginning cycle.
-        Stepper::wake_up();
-    } else {  // Otherwise, do nothing. Set and resume IDLE state.
-
-        sys.suspend.value = 0;  // Break suspend state.
-        sys.state         = State::Idle;
-#ifdef ENABLE_WIFI
-        WiFi.setAutoReconnect(true);
-        if (WiFi.status() != WL_CONNECTED) {
-            WiFi.reconnect();
-        }
-#endif
-    }
-    //  Push the resulting state edge (Run/Jog from wake_up above, or Idle).
-    // Best-effort/droppable; does NOT touch g_last_emitted_token (backstop owns it).
-    report_realtime_status(allChannels);
-}
-static void protocol_initiate_homing_cycle() {
+void protocol_initiate_homing_cycle() {
     // log_debug("protocol_initiate_homing_cycle " << state_name());
     sys.step_control                  = {};    // Restore step control to normal operation
     sys.suspend.value                 = 0;     // Break suspend state.
     sys.step_control.executeSysMotion = true;  // Set to execute homing motion and clear existing flags.
     Stepper::prep_buffer();                    // Initialize step segment buffer before beginning cycle.
     Stepper::wake_up();
-}
-
-static void protocol_do_cycle_start() {
-    sys.pauseRequested = false;  // Clear when resuming
-    // log_debug("protocol_do_cycle_start " << state_name());
-    // Execute a cycle start by starting the stepper interrupt to begin executing the blocks in queue.
-
-    // Resume door state when parking motion has retracted and door has been closed.
-    switch (sys.state) {
-        case State::SafetyDoor:
-            if (!sys.suspend.bit.safetyDoorAjar) {
-                if (sys.suspend.bit.restoreComplete) {
-                    sys.state = State::Idle;
-                    protocol_do_initiate_cycle();
-                } else if (sys.suspend.bit.retractComplete) {
-                    sys.suspend.bit.initiateRestore = true;
-                }
-            }
-            break;
-        case State::Idle:
-            protocol_do_initiate_cycle();
-            break;
-        case State::Homing:
-            protocol_initiate_homing_cycle();
-            break;
-        case State::Hold:
-            // Cycle start only when IDLE or when a hold is complete and ready to resume.
-            if (sys.suspend.bit.holdComplete) {
-                if (spindle_stop_ovr.value) {
-                    spindle_stop_ovr.bit.restoreCycle = true;  // Set to restore in suspend routine and cycle start after.
-                } else {
-                    // Unpark before resuming if needed
-                    if ((config->_parking->park_on_feedhold()) && (sys.suspend.bit.retractComplete)) {
-                        // Clear M0 comment when initiating restore (parking path)
-                        if (config && config->_oled) {
-                            config->_oled->clear_m0_comment();
-                        }
-                        //  Clear the host pause instruction on resume. OUTSIDE
-                        // the config->_oled guard so the CLEAR token is not newly
-                        // OLED-gated; self-gated on a non-empty cache, so a bare user
-                        // feed-hold resume (no M0) emits nothing (§4.3).
-                        emit_pause_instruction_clear();
-                        sys.suspend.bit.initiateRestore = true;
-                        // Force display refresh to show "Resuming..." before unpark blocks
-                        if (config && config->_oled) {
-                            config->_oled->refresh_display();
-                        }
-                    // Otherwise, resume
-                    } else {
-                        // Clear M0 comment when resuming
-                        if (config && config->_oled) {
-                            config->_oled->clear_m0_comment();
-                        }
-                        emit_pause_instruction_clear();  //  see parking-path note above
-                        protocol_do_initiate_cycle();
-                    }
-                }
-            }
-            break;
-        case State::ConfigAlarm:
-        case State::Alarm:
-        case State::CheckMode:
-        case State::Sleep:
-        case State::Cycle:
-        case State::Jog:
-            break;
-    }
 }
 
 void protocol_disable_steppers() {
@@ -1511,27 +1298,7 @@ void protocol_do_cycle_stop() {
         case State::Hold:
         case State::SafetyDoor:
         case State::Sleep:
-            // Reinitializes the cycle plan and stepper system after a feed hold for a resume. Called by
-            // realtime command execution in the main program, ensuring that the planner re-plans safely.
-            // NOTE: Bresenham algorithm variables are still maintained through both the planner and stepper
-            // cycle reinitializations. The stepper path should continue exactly as if nothing has happened.
-            // NOTE: cycleStopEvent is set by the stepper subsystem when a cycle or feed hold completes.
-            if (!soft_limit && !sys.suspend.bit.jogCancel) {
-                // Hold complete. Set to indicate ready to resume.  Remain in HOLD or DOOR states until user
-                // has issued a resume command or reset.
-                plan_cycle_reinitialize();
-if (sys.step_control.executeHold) {
-                    sys.suspend.bit.holdComplete = true;
-                    // Force status report to update OLED with Hold:0 state
-                    report_realtime_status(allChannels);
-                } else {
-                    // This is likely parking motion completing - send status report to update OLED
-                    if (sys.state == State::Hold && sys.suspend.bit.holdComplete) {
-                        report_realtime_status(allChannels);
-                    }
-                }
-                sys.step_control.executeHold      = false;
-                sys.step_control.executeSysMotion = false;
+            if (hold_cycle_stop()) {  // HoldController.cpp
                 break;
             }
             // Fall through
@@ -1599,6 +1366,10 @@ static void protocol_do_late_reset() {
     // g-code comment override (Media* soft limits, (Accel) acceleration) does
     // not leak into the next attempt.
     config->_axes->restoreJobDefaults();
+    // Same for the (Park Height:) override . GCode.cpp restores it at
+    // M2/M30 only, so a cancelled job left its park height in force for any
+    // later feedhold that ran before another file's install block reset it.
+    config->_parking->restoreJobDefault();
 
     // do we need to stop a running file job?
     allChannels.stopJob();
@@ -1642,7 +1413,7 @@ void protocol_exec_rt_system() {
     }
 }
 
-static void protocol_manage_spindle() {
+void protocol_manage_spindle() {
     // Feed hold manager. Controls spindle stop override states.
     // NOTE: Hold ensured as completed by condition check at the beginning of suspend routine.
     if (spindle_stop_ovr.value) {
@@ -1680,111 +1451,6 @@ static void protocol_manage_spindle() {
             config->_parking->restore_spindle();
             sys.step_control.updateSpindleSpeed = false;
         }
-    }
-}
-
-// Handles system suspend procedures, such as feed hold, safety door, and parking motion.
-// The system will enter this loop, create local variables for suspend tasks, and return to
-// whatever function that invoked the suspend, resuming normal operation.
-static void protocol_exec_rt_suspend() {
-    config->_parking->setup();
-
-    if (spindle->isRateAdjusted()) {
-        protocol_send_event(&accessoryOverrideEvent, (void*)AccessoryOverride::SpindleStopOvr);
-    }
-
-    while (sys.suspend.value) {
-        if (sys.abort) {
-            return;
-        }
-        // if a jogCancel comes in and we have a jog "in-flight" (parsed and handed over to mc_move_motors()),
-        //  then we need to cancel it before it reaches the planner.  otherwise we may try to move way out of
-        //  normal bounds, especially with senders that issue a series of jog commands before sending a cancel.
-        if (sys.suspend.bit.jogCancel) {
-            mc_cancel_jog();
-        }
-        // Block until initial hold is complete and the machine has stopped motion.
-        if (sys.suspend.bit.holdComplete) {
-            // Parking manager. Handles de/re-energizing, switch state checks, and parking motions for
-            // the safety door, sleep and hold states (if enabled).
-            if (sys.state == State::SafetyDoor || sys.state == State::Sleep || (sys.state == State::Hold && config->_parking->park_on_feedhold())) {
-                // Handles retraction motions and de-energizing.
-                config->_parking->set_target();
-                if (!sys.suspend.bit.retractComplete) {
-                    // Ensure any prior spindle stop override is disabled at start of safety door routine.
-                    spindle_stop_ovr.value = 0;  // Disable override
-
-                    // Execute slow pull-out parking retract motion. Parking requires homing enabled, the
-                    // current location not exceeding the parking target location, and laser mode disabled.
-                    // NOTE: State will remain DOOR, until the de-energizing and retract is complete.
-                    config->_parking->park(sys.suspend.bit.restartRetract);
-
-                    sys.suspend.bit.retractComplete = true;
-                    sys.suspend.bit.restartRetract  = false;
-
-                    // Send status report to update OLED after parking completes
-                    report_realtime_status(allChannels);
-
-                    if (config->_control->enter_locked()) {
-                        config->_control->unlock_enter();
-                    }
-                } else {
-                    if (sys.state == State::Sleep) {
-                        report_feedback_message(Message::SleepMode);
-                        // Spindle and coolant should already be stopped, but do it again just to be sure.
-                        spindle->spinDown();
-                        config->_coolant->off();
-                        report_ovr_counter = 0;  // Set to report change immediately
-                        Stepper::go_idle();      // Stop stepping and maybe disable steppers
-                        while (!(sys.abort)) {
-                            protocol_exec_rt_system();  // Do nothing until reset.
-                        }
-                        return;  // Abort received. Return to re-initialize.
-                    }
-                    // Allows resuming from parking/safety door. Polls to see if safety door is closed and ready to resume.
-                    if (sys.state == State::SafetyDoor && !config->_control->safety_door_ajar()) {
-                        if (sys.suspend.bit.safetyDoorAjar) {
-                            log_info("Safety door closed.  Issue cycle start to resume");
-                        }
-                        sys.suspend.bit.safetyDoorAjar = false;  // Reset door ajar flag to denote ready to resume.
-                    }
-                    if (sys.suspend.bit.initiateRestore) {
-                        config->_parking->unpark(sys.suspend.bit.restartRetract);
-                        
-                        // Clear flags for park on feedhold
-                        if (config->_parking->park_on_feedhold()) {
-                            sys.suspend.bit.initiateRestore = false;
-                            sys.suspend.bit.retractComplete = false;
-                        }
-
-                        if (!sys.suspend.bit.restartRetract && 
-                            ((sys.state == State::SafetyDoor && !sys.suspend.bit.safetyDoorAjar) ||
-                             (sys.state == State::Hold && config->_parking->park_on_feedhold()))) {
-                            // Check deferred pause BEFORE resuming to prevent motion corruption
-                            if (sys.deferredPauseRequest) {
-                                log_info("Deferred pause after unparking - re-parking immediately");
-                                sys.deferredPauseRequest = false;
-                                
-                                // Re-park with original position preserved
-                                config->_parking->park(true);  // true = keep original restore position
-                                
-                                // Stay in Hold:0 - no state change, no resume
-                            } else {
-                                // Only resume if no deferred pause
-                                sys.state = State::Idle;
-                                protocol_send_event(&cycleStartEvent);  // Resume program
-                            }
-                        }
-                    }
-                }
-            } else {
-                protocol_manage_spindle();
-                if (!config->_parking->park_on_feedhold() && config->_control->enter_locked()) {
-                    config->_control->unlock_enter();   // Unlock enter button once hold complete
-                }
-            }
-        }
-        protocol_exec_rt_system();
     }
 }
 

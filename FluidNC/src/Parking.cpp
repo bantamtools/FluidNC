@@ -6,12 +6,16 @@
 #include "Stepper.h"                // Stepper::
 #include "Machine/MachineConfig.h"  // config
 #include "Spindles/Spindle.h"       // spindle
+#ifdef PAUSESIM
+#    include "../hostsim/host_protocol.h"  // hostsim::g_phase (host simulator only)
+#endif
 
 // Plans and executes the single special motion case for parking. Independent of main planner buffer.
 // NOTE: Uses the always free planner ring buffer head to store motion parameters for execution.
 void Parking::moveto(float* target) {
-      // Check if the program flow is paused and skip if feedhold is from an M0 command 
-    if (gc_state.modal.program_flow == ProgramFlow::Paused) {
+    //  Skip parking motion only for the M0/M1 program hold itself, not for a
+    // user feedhold that lands while M0 is still draining the buffer.
+    if (sys.programHold) {
         return;
     }
     if (sys.abort) {
@@ -129,7 +133,14 @@ void Parking::park(bool restart) {
             plan_data.coolant       = saved_coolant;
             plan_data.spindle       = saved_spindle;
             plan_data.spindle_speed = saved_spindle_speed;
+#ifdef PAUSESIM
+            const hostsim::Phase saved_phase = hostsim::g_phase;  // nests inside M0Hold
+            hostsim::g_phase                 = hostsim::Phase::Retract;
+#endif
             moveto(parking_target);
+#ifdef PAUSESIM
+            hostsim::g_phase = saved_phase;
+#endif
         }
 
         // NOTE: Clear accessory state after retract and after an aborted restore motion.
@@ -148,7 +159,14 @@ void Parking::park(bool restart) {
         if (parking_target[_axis] < _target_mpos) {
             parking_target[_axis] = _target_mpos;
             plan_data.feed_rate   = _rate;
+#ifdef PAUSESIM
+            const hostsim::Phase saved_phase = hostsim::g_phase;  // nests inside M0Hold
+            hostsim::g_phase                 = hostsim::Phase::Retract;
+#endif
             moveto(parking_target);  //NOTE: This breaks immediate parking
+#ifdef PAUSESIM
+            hostsim::g_phase = saved_phase;
+#endif
         }
     } else {
         log_debug("Spin down only");
@@ -183,7 +201,14 @@ void Parking::unpark(bool restart) {
             log_debug("Parking return to pullout position");
             parking_target[_axis] = retract_waypoint;
             plan_data.feed_rate   = _rate;
+#ifdef PAUSESIM
+            const hostsim::Phase saved_phase = hostsim::g_phase;  // nests inside M0Hold
+            hostsim::g_phase                 = hostsim::Phase::Unpark;
+#endif
             moveto(parking_target);
+#ifdef PAUSESIM
+            hostsim::g_phase = saved_phase;
+#endif
         }
     }
 
@@ -220,7 +245,14 @@ void Parking::unpark(bool restart) {
             plan_data.spindle       = saved_spindle;
             plan_data.coolant       = saved_coolant;
             plan_data.spindle_speed = saved_spindle_speed;
+#ifdef PAUSESIM
+            const hostsim::Phase saved_phase = hostsim::g_phase;  // nests inside M0Hold
+            hostsim::g_phase                 = hostsim::Phase::Unpark;
+#endif
             moveto(restore_target);
+#ifdef PAUSESIM
+            hostsim::g_phase = saved_phase;
+#endif
         }
     }
 }

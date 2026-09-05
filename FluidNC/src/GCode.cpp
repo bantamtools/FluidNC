@@ -19,6 +19,9 @@
 
 #include "Machine/MachineConfig.h"
 #include "PauseInstruction.h"     //  sanitizer + cache state machine + wire format
+#ifdef PAUSESIM
+#    include "../hostsim/host_protocol.h"  // hostsim::g_phase (host simulator only)
+#endif
 
 #include <string.h>   // memset
 #include <math.h>     // sqrt etc.
@@ -2281,6 +2284,9 @@ Error gc_execute_line(char* line) {
             // Then either break or fall through to actually stop.
             break;
         case ProgramFlow::Paused:
+#ifdef PAUSESIM
+            hostsim::g_phase = hostsim::Phase::M0Drain;
+#endif
             protocol_buffer_synchronize();  // Sync and finish all remaining buffered motions before moving on.
             
             // Set the M0 comment in OLED after motions complete
@@ -2301,8 +2307,18 @@ Error gc_execute_line(char* line) {
             }
             
             if (sys.state != State::CheckMode) {
+#ifdef PAUSESIM
+                hostsim::g_phase = hostsim::Phase::M0Hold;
+#endif
+                //  Suppress the park retract for the M0 hold ITSELF. Scoped to just
+                // this hold, so a user feedhold landing in the drain above still retracts.
+                sys.programHold = true;
                 protocol_send_event(&feedHoldEvent, false);
                 protocol_execute_realtime();  // Execute suspend.
+                sys.programHold = false;
+#ifdef PAUSESIM
+                hostsim::g_phase = hostsim::Phase::None;
+#endif
             }
             break;
         case ProgramFlow::CompletedM2:
