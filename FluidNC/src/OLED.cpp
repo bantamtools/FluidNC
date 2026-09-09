@@ -25,6 +25,7 @@ static bool* saved_limits = NULL;
 static volatile JogState jog_state;
 
 static int encoder_scroll_count = 0;
+static int jog_scroll_count     = 0;  // jog-mode counterpart of encoder_scroll_count
 
 // Jog target accumulator — always in machine coordinates (MPos/G53)
 static float jog_target[MAX_N_AXIS] = {0};
@@ -509,6 +510,17 @@ void OLED::encoder_update(int16_t enc_diff) {
         if (axis_char != jog_active_axis) {
             jog_target_initialized = false;
             jog_active_axis = axis_char;
+            jog_scroll_count = 0;
+        }
+
+        // Newer encoders send two transitions per detent; act on every other
+        // one so a detent is one jog increment, matching the menu scroll.
+        if (!config->_encoder->_old_scroll_behavior) {
+            if (jog_scroll_count == 0) {
+                jog_scroll_count++;
+                return;
+            }
+            jog_scroll_count = 0;
         }
 
         // Initialize jog_target from current machine position on first tick

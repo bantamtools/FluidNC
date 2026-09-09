@@ -1,6 +1,6 @@
 name: "Bantam Tools Handwriter"
 board: "Serama Hen D"
-meta: "1.0.1"
+meta: "1.0.6"
 
 planner_blocks: 16
 wifi_mode: -1
@@ -29,7 +29,7 @@ stepping:
 parking:
   enable: true
   axis: Z
-  pullout_distance_mm: 0
+  pullout_distance_mm: 7
   pullout_rate_mm_per_min: 1000
   target_mpos_mm: 7
   rate_mm_per_min: 2000
@@ -94,7 +94,7 @@ axes:
         addr: 1
         r_sense_ohms: 0.100
         run_amps: 0.700
-        hold_amps: 0.400
+        hold_amps: 0.500
         microsteps: 8
         stallguard: 0
         stallguard_debug: false
@@ -119,11 +119,12 @@ axes:
     soft_limits: false
     homing:
       cycle: 1
-      mpos_mm: 8
+      mpos_mm: 7
       positive_direction: true
       feed_mm_per_min: 400
       seek_mm_per_min: 800
       seek_scaler: 3.0
+      feed_scaler: 2.0
 
     motor0:
       limit_pos_pin: gpio.4:high:pu

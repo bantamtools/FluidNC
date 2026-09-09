@@ -200,9 +200,13 @@ void protocol_do_initiate_cycle() {
         sys.state         = State::Idle;
         hold_ports().wifi_resume();
     }
-    //  Push the resulting state edge (Run/Jog from wake_up above, or Idle).
+    //  Push the resulting state edge (Run from wake_up above, or Idle).
     // Best-effort/droppable; does NOT touch g_last_emitted_token (backstop owns it).
-    hold_ports().report_realtime_status();
+    // Jog transitions are deliberately not broadcast: each encoder jog would
+    // produce several reports, and that traffic visibly disturbs the OLED.
+    if (sys.state != State::Jog) {
+        hold_ports().report_realtime_status();
+    }
 }
 
 //  Consume a cycle start that was deferred during a parking retract. Single shot.

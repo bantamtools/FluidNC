@@ -451,6 +451,21 @@ static void maybe_emit_state_heartbeat() {
     if (g_last_emitted_token != nullptr && strcmp(tok, g_last_emitted_token) == 0) {
         return;  // token unchanged since our last emit — nothing to self-heal
     }
+    // Jog is invisible to the backstop: entering Jog emits nothing, and leaving
+    // it emits only if the new state differs from the last state actually
+    // reported, so an alarm raised during a jog still reports. Jog reports are
+    // withheld because their volume disturbs the OLED during encoder jogging.
+    static bool inJog = false;
+    if (sys.state == State::Jog) {
+        inJog = true;
+        return;
+    }
+    if (inJog) {
+        inJog = false;
+        if (g_last_emitted_token != nullptr && strcmp(tok, g_last_emitted_token) == 0) {
+            return;
+        }
+    }
     uint32_t now = millis();
     if (now - g_last_state_heartbeat_ms < STATE_HEARTBEAT_MS) {
         return;  // rate-limit to at most one backstop emit per interval
@@ -1292,6 +1307,7 @@ void protocol_disable_steppers() {
 
 void protocol_do_cycle_stop() {
     // log_debug("protocol_do_cycle_stop " << state_name());
+    const bool leavingJog = (sys.state == State::Jog);
     protocol_disable_steppers();
 
     switch (sys.state) {
@@ -1330,7 +1346,11 @@ void protocol_do_cycle_stop() {
                     WiFi.reconnect();
                 }
 #endif
-                report_realtime_status(allChannels);  //  push job-complete -> Idle edge
+                // Jog-end edges are deliberately not broadcast; see the note on
+                // Jog transitions in protocol_do_initiate_cycle().
+                if (!leavingJog) {
+                    report_realtime_status(allChannels);  //  push job-complete -> Idle edge
+                }
             }
             break;
         case State::Homing:
