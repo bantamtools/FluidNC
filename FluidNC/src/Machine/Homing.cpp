@@ -77,6 +77,9 @@ namespace Machine {
 
     void Homing::cycleStop() {
         log_debug("CycleStop " << phaseName(_phase));
+        if (_phase == Phase::None) {
+            return;  // The cycle has already failed; there is nothing to advance.
+        }
         if (approach()) {
             // The cycleStopEvent (posted from Stepper::pulse_func when the
             // segment buffer drains) can race ahead of the limit dispatch
@@ -301,6 +304,11 @@ namespace Machine {
         // means in terms of axes, motors, and whether to stop and replan
         MotorMask limited = Machine::Axes::posLimitMask | Machine::Axes::negLimitMask;
 
+        if (_phase == Phase::None) {
+            log_debug("Homing ignoring limit after failure");
+            return;
+        }
+
         if (!approach()) {
             // Ignore limit switch chatter while pulling off
             return;
@@ -396,6 +404,10 @@ namespace Machine {
 
     void Homing::fail(ExecAlarm alarm) {
         Stepper::reset();  // Stop moving
+
+        // The cycle is over. Park the state machine so a limit or cycle-stop
+        // event that arrives before the alarm is processed cannot advance it.
+        _phase = Phase::None;
 
         // Return step control to normal operation, as the success path does
         // in set_mpos(). protocol_initiate_homing_cycle() sets
@@ -533,6 +545,10 @@ namespace Machine {
             
             return;
         }
+
+        // A previous cycle may have ended with a block still loaded in the
+        // stepper. Start clean so the first phase loads its own block.
+        Stepper::reset();
 
         config->_stepping->beginLowLatency();
 
