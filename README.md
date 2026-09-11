@@ -1,16 +1,30 @@
-# Bantam Tools FluidNC v2.10.9 - source release
+# Bantam Tools FluidNC v2.10.10 - source release
 
-Corresponding source for Bantam Tools FluidNC firmware v2.10.9, a modified version of
+Corresponding source for Bantam Tools FluidNC firmware v2.10.10, a modified version of
 [FluidNC](https://github.com/bdring/FluidNC), distributed under the GNU General Public
 License v3 (see `LICENSE` and `NOTICE`).
 
 ## Building
 
+### Machine configuration files
+
+The machine configuration files for this release (for example `config.yaml` and the per-machine
+YAML files) ship inside the released `littlefs.bin` and are not part of this source tree. A
+filesystem image built from this source with `buildfs` does not contain them, and flashing it
+replaces the configuration on a machine.
+
+To update an existing install, flash only `firmware.bin` at the app0 offset (see Flashing
+below), or extract the configuration files from the released `littlefs.bin` into
+`FluidNC/data/` before building a filesystem image.
+
+`build-release.py` requires `FluidNC/data/configs.json`, which is not included in this source
+tree.
+
 Requires [PlatformIO](https://platformio.org/). Clone with submodules:
 
     git clone --recurse-submodules https://github.com/bantamtools/FluidNC
     cd FluidNC
-    git checkout v2.10.9
+    git checkout v2.10.10
     git submodule update --init --recursive
     pio run -e wifi_s3            # firmware.bin
     pio run -e wifi_s3_usb-otg    # USB-OTG variant (where present in platformio.ini)
@@ -30,10 +44,11 @@ has not moved since.
 
 ## Flashing (ESP32-S3)
 
-    esptool.py --chip esp32s3 write_flash 0x10000 firmware.bin 0x3D0000 littlefs.bin
+    esptool.py --chip esp32s3 write_flash 0x10000 firmware.bin
 
-This updates the application and filesystem built from this source. Use the `firmware.bin`
-of the environment you built (for example `wifi_s3` or `wifi_s3_usb-otg`). For a full image
+This updates the application only and leaves the machine configuration in place; see
+"Machine configuration files" under Building before writing a filesystem image. Use the
+`firmware.bin` of the environment you built (for example `wifi_s3` or `wifi_s3_usb-otg`). For a full image
 set including the bootloader and partition table, see the scripts in
 `install_scripts/` and `build-release.py`, which give the exact offsets used for the released
 images.
