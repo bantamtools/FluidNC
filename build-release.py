@@ -3,7 +3,6 @@
 # Build FluidNC release bundles (.zip files) for each host platform
 
 from shutil import copy
-from zipfile import ZipFile
 import subprocess, os, sys, shutil
 import io, hashlib
 
@@ -59,11 +58,6 @@ version = tag.lstrip('v')
 
 
 
-def addToUpdateZip(zipObj, filePath, destPath):
-    """Add a specific file to the update zip."""
-    with open(filePath, 'rb') as f:
-        data = f.read()
-    zipObj.write(filePath, destPath)
 
 relPath = os.path.join('release')
 if not os.path.exists(relPath):
@@ -226,24 +220,6 @@ with open(os.path.join(manifestRelPath, "manifest.json"), "w") as manifest_file:
     json.dump(manifest, manifest_file, indent=2)
                  
 
-    # Create "update only" zip
-    updateZipName = os.path.join(relPath, f'fluidnc-bantam-update-only-{version}.zip')
-    with ZipFile(updateZipName, 'w') as updateZip:
-        # Add index.html.gz
-        addToUpdateZip(updateZip, os.path.join('FluidNC', 'data', 'index.html.gz'), os.path.join('update', 'index.html.gz'))
-        
-        # Add firmware.bin for each environment with envName appended
-        for envName in ['wifi_s3', 'wifi_s3_usb-otg']:
-            firmwarePath = os.path.join('.pio', 'build', envName, 'firmware.bin')
-        # Append envName to the destination path in the update zip
-            destinationPath = os.path.join('update', f'{envName}_firmware.bin')
-            addToUpdateZip(updateZip, firmwarePath, destinationPath)
-        
-        # Add config.yaml
-        configPath = os.path.join('FluidNC', 'data', 'config.yaml')
-        addToUpdateZip(updateZip, configPath, os.path.join('update', 'config.yaml'))
-    
-    print(f"Update only zip file created: {updateZipName}")
 
 from release_assets import write_images_zip, write_elf_zip  # noqa: E402  (scripts/ is on sys.path above)
 imagesZip = os.path.join(relPath, f'fluidnc-bantam-{version}-images.zip')
