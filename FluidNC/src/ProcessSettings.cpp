@@ -22,6 +22,8 @@
 #include "FileStream.h"           // FileStream()
 #include "xmodem.h"               // xmodemReceive(), xmodemTransmit()
 #include "OLED.h"
+#include "OledDump.h"             // oleddump::rowToHex()
+#include "NutsBolts.h"            // delay_ms()
 #include "GCode.h"  //  reemit_pause_instruction()
 #include "StartupLog.h"           // startupLog
 #include "Driver/fluidnc_gpio.h"  // gpio_dump()
@@ -35,8 +37,14 @@
 #include "FluidPath.h"
 #include "HashFS.h"
 
+#include <Arduino.h>              // millis()
+
+#include <cstdint>
+#include <cstdio>
 #include <cstring>
 #include <map>
+#include <memory>
+#include <new>
 #include <filesystem>
 #include <string>
 
@@ -785,6 +793,74 @@ static Error showGPIOs(const char* value, WebUI::AuthenticationLevel auth_level,
     return Error::Ok;
 }
 
+// Developer command $OD / $OLED/Dump: streams the OLED framebuffer as hex rows
+// framed by OLEDDUMP-BEGIN/END markers. Dispatched by name from
+// do_command_or_setting() rather than registered as a UserCommand, so it holds no
+// RAM until invoked. The frame is copied until the copy matches the live buffer,
+// so a redraw in progress on another task is not captured half-drawn. Not
+// motion-safe: the copy loop and output block the protocol loop.
+static Error dump_oled(Channel& out) {
+    if (!config->_oled || !config->_oled->is_active() || !config->_oled->_oled) {
+        log_error_to(out, "No active OLED display");
+        return Error::InvalidStatement;
+    }
+    OLEDDisplay*   display = config->_oled->_oled;
+    const uint16_t width   = display->width();
+    const uint16_t height  = display->height();
+    const size_t   size    = oleddump::bufferSize(width, height);
+
+    if (oleddump::rowHexLength(width) > oleddump::kMaxRowHex) {
+        log_error_to(out, "OLED geometry too wide to dump");
+        return Error::InvalidStatement;
+    }
+
+    // The single frame copy exists only while the command runs and is freed on
+    // return. Stability is checked against the live buffer, so no second copy.
+    std::unique_ptr<uint8_t[]> frame(new (std::nothrow) uint8_t[size]);
+    if (!frame) {
+        log_error_to(out, "Not enough memory to dump OLED");
+        return Error::AnotherInterfaceBusy;
+    }
+
+    const int kMaxAttempts = 20;  // 5 ms apart: about 100 ms
+    bool      stable       = false;
+    memcpy(frame.get(), display->buffer, size);
+    for (int attempt = 0; attempt < kMaxAttempts && !stable; ++attempt) {
+        delay_ms(5);
+        stable = memcmp(frame.get(), display->buffer, size) == 0;
+        if (!stable) {
+            memcpy(frame.get(), display->buffer, size);
+        }
+    }
+    if (!stable) {
+        log_error_to(out, "OLED frame did not settle");
+        return Error::AnotherInterfaceBusy;
+    }
+
+    char fw[64];
+    snprintf(fw, sizeof(fw), "%s", git_info);
+    for (char* c = fw; *c; ++c) {
+        if (*c == ' ') {
+            *c = '_';
+        }
+    }
+
+    char line[128];
+    snprintf(line, sizeof(line), "OLEDDUMP-BEGIN w=%u h=%u rows=%u fw=%s ms=%lu", static_cast<unsigned>(width),
+             static_cast<unsigned>(height), static_cast<unsigned>(height), fw, static_cast<unsigned long>(millis()));
+    log_to(out, "", line);
+
+    char hex[oleddump::kMaxRowHex + 1];
+    for (uint16_t y = 0; y < height; ++y) {
+        oleddump::rowToHex(frame.get(), width, height, y, hex, sizeof(hex));
+        log_to(out, "", hex);
+    }
+
+    snprintf(line, sizeof(line), "OLEDDUMP-END rows=%u", static_cast<unsigned>(height));
+    log_to(out, "", line);
+    return Error::Ok;
+}
+
 static Error setReportInterval(const char* value, WebUI::AuthenticationLevel auth_level, Channel& out) {
     if (!value) {
         uint32_t actual = out.getReportInterval();
@@ -1000,6 +1076,11 @@ Error do_command_or_setting(const char* key, char* value, WebUI::AuthenticationL
             }
             return cp->action(value, auth_level, out);
         }
+    }
+
+    // Developer-only command, dispatched by name so it holds no RAM until invoked.
+    if (!value && (strcasecmp(key, "OD") == 0 || strcasecmp(key, "OLED/Dump") == 0)) {
+        return dump_oled(out);
     }
 
     // If we did not find an exact match and there is no value,

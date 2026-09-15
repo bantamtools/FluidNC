@@ -646,6 +646,11 @@ void OLED::show_menu() {
     (_menu->is_full_width()) ? menu_width = 128 : menu_width = 64;
     menu_max_active_entries = 4;
 
+    // Row labels start one pixel in and end one pixel short of the menu edge,
+    // so a highlighted row keeps a lit column on both sides of its text.
+    const int16_t row_text_x     = 1;
+    const int16_t row_right_edge = menu_width - 1;
+
     // Clear any highlighting left in menu area
     if (menu_width == _width) {
         clearContentAreaFast();
@@ -731,7 +736,7 @@ void OLED::show_menu() {
                     label[off] = '\0';
                 }
             }
-            truncated_draw_string(_header_height + (menu_height * i), label, DejaVu_Sans_10);
+            truncated_draw_string(row_text_x, _header_height + (menu_height * i), label, DejaVu_Sans_10, row_right_edge);
         }
     } else {
     // Traverse the list and print out each menu entry name
@@ -745,7 +750,7 @@ void OLED::show_menu() {
         (entry->selected) ? _oled->setColor(BLACK) : _oled->setColor(WHITE);
 
         // Write out the entry name, bolding updated ones
-        truncated_draw_string(_header_height + (menu_height * i), entry->display_name, DejaVu_Sans_10); //(entry->updated ? DejaVu_Sans_Bold_10 : DejaVu_Sans_10));
+        truncated_draw_string(row_text_x, _header_height + (menu_height * i), entry->display_name, DejaVu_Sans_10, row_right_edge); //(entry->updated ? DejaVu_Sans_Bold_10 : DejaVu_Sans_10));
 
         // Advance the line and pointer
         entry = entry->next;
@@ -820,8 +825,8 @@ void OLED::show_file() {
             // TODO(busy-screen): This display will be replaced by
             // showBusyDisplay() when RSS downloads migrate to BusyScreen.
 
-            truncated_draw_string(_header_height, "Downloading:", DejaVu_Sans_10);
-            truncated_draw_string(_header_height + 12, _filename, DejaVu_Sans_10);
+            truncated_draw_string(0, _header_height, "Downloading:", DejaVu_Sans_10, _width);
+            truncated_draw_string(0, _header_height + 12, _filename, DejaVu_Sans_10, _width);
             _oled->drawProgressBar(0, _header_height + 12 + 16, 120, 10, pct);          
 
         } else {
@@ -839,7 +844,7 @@ void OLED::show_file() {
 
             show(elapsedTimeLayout, time_str);
 
-            truncated_draw_string(_header_height, _filename, DejaVu_Sans_10);
+            truncated_draw_string(0, _header_height, _filename, DejaVu_Sans_10, _width);
 
             _oled->drawProgressBar(0, _header_height + 12, 120, 10, pct);
         }
@@ -2486,7 +2491,7 @@ struct xfont_t {
     uint8_t nchars;
     glyph_t glyphs[];
 };
-size_t OLED::char_width(char c, font_t font) {
+size_t OLED::char_width(uint8_t c, font_t font) {
     xfont_t* xf    = (xfont_t*)font;
     int      index = c - xf->first;
     return (index < 0) ? 0 : xf->glyphs[index].width;
@@ -2684,28 +2689,53 @@ void OLED::wrapped_draw_string(int16_t y, const std::string& s, font_t font, boo
     }
 }
 
-void OLED::truncated_draw_string(int16_t y, const std::string& s, font_t font) {
+void OLED::truncated_draw_string(int16_t x, int16_t y, const std::string& s, font_t font, int16_t right_edge) {
     _oled->setFont(font);
     _oled->setTextAlignment(TEXT_ALIGN_LEFT);
 
-    std::string dots = "...";
-    size_t dots_width = char_width(dots[0] * dots.length(), font);
+    // Every glyph in the OLED font ends with one blank column, so a run of
+    // glyphs with total advance w drawn at x has its last lit pixel at
+    // column x + w - 2. It stays left of right_edge while w <= fit_width.
+    const int fit_width  = right_edge - x + 1;
+    const int dots_width = 3 * static_cast<int>(char_width('.', font));
 
-    size_t slen   = s.length();
-    size_t swidth = 0;
-    size_t i;
-    for (i = 0; i < slen && swidth < _width; i++) {
-        swidth += char_width(s[i], font);
-        if (swidth > (_width - dots_width)) {
+    // Measure through the same UTF-8 lookup drawString uses, so multi-byte
+    // characters count as the single glyph they render as. The lookup keeps
+    // partial-sequence state between calls; a NUL byte clears it.
+    customFontTableLookup(0);
+    int    width     = 0;
+    bool   fits      = true;
+    size_t cut       = 0;  // bytes in the longest prefix that leaves room for "..."
+    int    cut_width = 0;
+    for (size_t i = 0; i < s.length(); ++i) {
+        char glyph = customFontTableLookup(static_cast<uint8_t>(s[i]));
+        if (glyph == 0) {
+            continue;  // inside a multi-byte sequence, or a dropped byte
+        }
+        width += static_cast<int>(char_width(static_cast<uint8_t>(glyph), font));
+        if (width > fit_width) {
+            fits = false;
             break;
         }
+        if (width <= fit_width - dots_width) {
+            cut       = i + 1;
+            cut_width = width;
+        }
     }
-    if (swidth < (_width - dots_width)) {
-        _oled->drawString(0, y, s.c_str());
-    } else {
-        _oled->drawString(0, y, s.substr(0, i).c_str());
-        _oled->drawString((_width - dots_width), y, dots.c_str()); // Ellipsis dots for truncation
+    customFontTableLookup(0);
+
+    if (fits) {
+        _oled->drawString(x, y, s.c_str());
+        return;
     }
+
+    // Keep the ellipsis attached to the last word rather than a trailing space.
+    while (cut > 0 && s[cut - 1] == ' ') {
+        --cut;
+        cut_width -= static_cast<int>(char_width(' ', font));
+    }
+    _oled->drawString(x, y, s.substr(0, cut).c_str());
+    _oled->drawString(x + cut_width, y, "...");
 }
 
 void OLED::draw_checkbox(int16_t x, int16_t y, int16_t width, int16_t height, bool checked) {
