@@ -2172,34 +2172,31 @@ Error gc_execute_line(char* line) {
             // Update gc_state.position for each axis named in the block, then
             // write the resulting mpos into the motor step counters and snap
             // the parser's and planner's position vectors to match. No motion
-            // is enqueued and no motion is halted.
+            // is enqueued.
             //
-            // Precondition: no motion may be in flight on the axes named in
-            // this block. The firmware does NOT enforce this — calling G28.3
-            // with named-axis motion in flight is undefined behavior and will
-            // corrupt machine state. Generators are responsible for ensuring
-            // the precondition holds.
+            // Drain the planner first. set_motor_steps_from_mpos() writes the
+            // counter of EVERY axis from gc_state.position, which is the
+            // parser's end-of-queue target, not where the motors are. Any
+            // motion still queued when this line is parsed -- on a named axis
+            // or not -- would then run on top of a counter already at its
+            // target and leave the counter high by the queued distance. The
+            // planner is snapped to that counter, so later file moves still
+            // land physically correct, but anything that plans from the motor
+            // counters is off by the same amount: parking did exactly that,
+            // and a "park to 6" lifted the pen 1.4 mm.
             //
-            // Two safe emission patterns:
+            // Studio's paper-load block triggers it:
+            //     G53 G1 Z5.5 F10000
+            //     G4 P0.1        (queues a C-axis dwell BEHIND the Z move;
+            //                     it does not drain the planner)
+            //     G28.3 Y0
+            // Without the drain, MPos Z read 10.080 after this block on a
+            // HandWriter whose Z travel is 6 mm.
             //
-            //   1. M0 / G28.3 — operator-gated. M0's executor calls
-            //      protocol_buffer_synchronize() before entering pause, so
-            //      the planner is fully drained by the time the operator
-            //      presses resume and the next line (G28.3) is parsed.
+            // G28.3 must still never name C: C is reserved for G4 dwell timing.
             //
-            //   2. G4 P0.x / G28.3 — automated workflows. G4 enqueues a
-            //      C-axis dwell segment rather than draining the planner;
-            //      this is safe ONLY because on this firmware C is reserved
-            //      for G4 dwell timing, is unwired, and has no user-facing
-            //      consumers. G28.3 must never name C (would race with the
-            //      in-flight dwell and may hang the stepper task). XYZAB
-            //      are the only legal G28.3 axes.
-            //
-            // M2 / M30 and spindle/coolant state changes also drain via
-            // protocol_buffer_synchronize() but carry side effects that
-            // typically make them inappropriate as pure sync barriers.
-            //
-            // See issue.
+            // See issues.
+            protocol_buffer_synchronize();
             auto n_axis = config->_axes->_numberAxis;
             for (size_t axis = 0; axis < n_axis; ++axis) {
                 if (bitnum_is_true(axis_words, axis)) {

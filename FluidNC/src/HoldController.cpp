@@ -381,7 +381,12 @@ void protocol_exec_rt_suspend() {
                                 log_info("Deferred pause after unparking - re-parking immediately");
                                 sys.deferredPauseRequest = false;
                                 
-                                // Re-park with original position preserved
+                                // Re-park with original position preserved. parking_target
+                                // still holds the parked Z captured at the top of this pass,
+                                // before unpark plunged; with a pullout that reaches the target
+                                // unpark never overwrites it, so park()'s at-target guard would
+                                // skip the lift and leave the pen down. Re-read the position.
+                                config->_parking->set_target();
                                 config->_parking->park(true);  // true = keep original restore position
                                 
                                 //  Mark the retract done. Without this the next loop pass
