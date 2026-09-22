@@ -15,6 +15,7 @@ namespace SDScan {
 bool addScannedEntry(SDFileTable& t, const char* relPath, bool isDir,
                      uint32_t mtime, FileClass cls) {
     if (relPath == nullptr || relPath[0] != '/') return false;
+    if (isHiddenPath(relPath)) return false;
     const char* lastSlash = std::strrchr(relPath, '/');
     if (lastSlash == nullptr) return false;
     const char* basename = lastSlash + 1;
@@ -35,10 +36,33 @@ bool addScannedEntry(SDFileTable& t, const char* relPath, bool isDir,
     return id != kInvalidEntry;
 }
 
+// Folders Windows creates at the root of removable cards . They hold no
+// user files and would otherwise surface in the SDCACHE listing.
+static const char* const kSystemRootFolders[] = { "System Volume Information", "$RECYCLE.BIN" };
+
+// True if the first component of relPath ("/<first>" or "/<first>/...") equals
+// name, ignoring ASCII case.
+static bool firstComponentIs(const char* relPath, const char* name) {
+    const char* p = relPath + 1;
+    for (; *name != '\0'; ++p, ++name) {
+        char a = *p, b = *name;
+        if (a >= 'A' && a <= 'Z') a = static_cast<char>(a - 'A' + 'a');
+        if (b >= 'A' && b <= 'Z') b = static_cast<char>(b - 'A' + 'a');
+        if (a != b) return false;  // also stops at the terminator of a shorter path
+    }
+    return *p == '\0' || *p == '/';
+}
+
 bool isHiddenPath(const char* relPath) {
     if (relPath == nullptr) return false;
     // Hidden first component: path begins with "/.".
     if (relPath[0] == '/' && relPath[1] == '.') return true;
+    // Windows system folder at the card root, and anything below it.
+    if (relPath[0] == '/') {
+        for (const char* name : kSystemRootFolders) {
+            if (firstComponentIs(relPath, name)) return true;
+        }
+    }
     // Hidden leaf: basename (after the last '/') begins with '.'.
     const char* lastSlash = std::strrchr(relPath, '/');
     if (lastSlash != nullptr && lastSlash[1] == '.') return true;

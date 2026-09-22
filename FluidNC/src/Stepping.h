@@ -19,7 +19,13 @@ namespace Machine {
         static const int ticksPerMicrosecond = fStepperTimer / 1000000;
 
         bool    _switchedStepper = false;
-        int32_t _stepPulseEndTime;
+        //  True only while a step pulse started by startPulseTimer() has
+        // not yet been waited out by waitPulse(). Without it, _stepPulseEndTime
+        // is a deadline of unbounded age and waitPulse() misreads it; see the
+        // comment there. Zero-initialized so the very first unstep() after boot
+        // cannot spin on an indeterminate deadline either.
+        bool    _stepPulsePending = false;
+        int32_t _stepPulseEndTime = 0;
 
     public:
         enum stepper_id_t {

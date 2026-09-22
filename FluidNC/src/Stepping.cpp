@@ -60,7 +60,18 @@ namespace Machine {
     // Called only from Axes::unstep()
     void IRAM_ATTR Stepping::waitPulse() {
         if (_engine == I2S_STATIC || _engine == TIMED) {
-            spinUntil(_stepPulseEndTime);
+            //  Wait only when a pulse is actually in flight. Axes::unstep()
+            // is also reached from Stepper::stop_stepping() with no preceding
+            // Axes::step(), e.g. Homing::run_cycles -> Stepper::reset -> go_idle,
+            // and there _stepPulseEndTime is a deadline from an arbitrarily long
+            // time ago. spinUntil() compares 32-bit CPU cycle counts using signed
+            // arithmetic, so a deadline more than 2^31 ticks (~8.95 s at 240 MHz)
+            // in the past reads as far in the FUTURE, and the spin -- which never
+            // yields -- burns core 1 for up to that long before homing can start.
+            if (_stepPulsePending) {
+                spinUntil(_stepPulseEndTime);
+                _stepPulsePending = false;
+            }
         }
     }
 
@@ -92,8 +103,10 @@ namespace Machine {
         } else if (_engine == stepper_id_t::I2S_STATIC) {
             i2s_out_push();
             _stepPulseEndTime = usToEndTicks(_pulseUsecs);
+            _stepPulsePending = true;  //  paired with waitPulse()
         } else if (_engine == stepper_id_t::TIMED) {
             _stepPulseEndTime = usToEndTicks(_pulseUsecs);
+            _stepPulsePending = true;  //  paired with waitPulse()
         }
     }
 

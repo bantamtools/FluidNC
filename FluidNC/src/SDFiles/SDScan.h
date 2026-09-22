@@ -22,8 +22,8 @@ namespace SDScan {
 // in topological order (parent dirs before their children);
 // std::filesystem::recursive_directory_iterator yields entries in that order.
 //
-// Returns false on: arena/handle-table full, a malformed path (missing leading
-// '/', no basename), or an unresolvable parent prefix (defensive — caller's
+// Returns false on: a hidden path (see isHiddenPath), arena/handle-table full, a
+// malformed path (missing leading '/', no basename), or an unresolvable parent prefix (defensive — caller's
 // iterator ordering would be broken).
 //
 // For directory entries, the `cls` argument is don't-care; pass any FileClass.
@@ -72,7 +72,9 @@ bool applyCompletionTransition(SDFileTable& t, const char* sourceRel,
 
 // Returns true if relPath names a hidden file: either the first path component begins with
 // '.' (i.e. the path starts with "/.") or the leaf basename (the part after the last '/')
-// begins with '.'. A hidden middle path component does not make the path hidden.
+// begins with '.'. A first component naming a Windows system folder ("System Volume
+// Information", "$RECYCLE.BIN", compared case-insensitively) also makes the path hidden
+// . A hidden middle path component does not make the path hidden.
 // Returns false for a null pointer.
 bool isHiddenPath(const char* relPath);
 

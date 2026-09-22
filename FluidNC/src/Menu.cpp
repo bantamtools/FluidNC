@@ -6,7 +6,7 @@
 #include "SDFiles/MenuSortConfig.h"   // menuSortMode for the live re-sort
 #include "SDFiles/NextRunFile.h"
 #include "SDFiles/SDMenu.h"
-#include "Driver/sdmmc.h"             // sd_card_is_present
+#include "Driver/sdmmc.h"             // sd_card_is_present, sd_unavailable_msg
 #include <cstring>  // strrchr
 #include <mutex>    // std::lock_guard — arena lock for the live re-sort
 #include <Esp.h>
@@ -270,7 +270,7 @@ void Menu::enter_submenu(void) {
             if (row_count == 1) {  // only the Back row
                 const char* empty_msg;
                 if (!sd_card_is_present()) {
-                    empty_msg = "No microSD Card";
+                    empty_msg = sd_unavailable_msg();
                 } else if (_current_menu == _firmware_menu) {
                     empty_msg = "No firmware files\non microSD Card";
                 } else if (_current_menu == _config_menu) {

@@ -225,6 +225,33 @@ namespace WebUI {
                     log_to(out, "Phy Mode: ", modeName);
                     log_to(out, "Channel: ", WiFi.channel());
 
+                    //  RF diagnostics for upload stalls on congested 2.4 GHz networks.
+                    // Raw dBm because "Signal: N%" above is a lossy 2*(RSSI+100) remap;
+                    // BSSID names WHICH AP we are on when several share an SSID; the in-use
+                    // bandwidth decides whether HT40 adjacent-channel desense is in play; and the
+                    // beacon-inactivity window is the timer that actually ends a stalled
+                    // upload -- its documented 6s default has never been confirmed at
+                    // runtime, and measured silence->BEACON_TIMEOUT is 8.5-12.6s.
+                    log_to(out, "RSSI: ", WiFi.RSSI() << " dBm");
+                    log_to(out, "BSSID: ", WiFi.BSSIDstr().c_str());
+
+                    // esp_wifi_get_bandwidth() is the configured value; the channel's
+                    // secondary offset is what the link is using (none = 20 MHz).
+                    wifi_bandwidth_t bw;
+                    if (esp_wifi_get_bandwidth(WIFI_IF_STA, &bw) == ESP_OK) {
+                        log_to(out, "Bandwidth (configured): ", (bw == WIFI_BW_HT40 ? "HT40" : "HT20"));
+                    }
+                    uint8_t            primary;
+                    wifi_second_chan_t second;
+                    if (esp_wifi_get_channel(&primary, &second) == ESP_OK) {
+                        log_to(out, "Bandwidth (in use): ", (second == WIFI_SECOND_CHAN_NONE ? "HT20" : "HT40"));
+                    }
+
+                    uint16_t inactive_sec = 0;
+                    if (esp_wifi_get_inactive_time(WIFI_IF_STA, &inactive_sec) == ESP_OK) {
+                        log_to(out, "Beacon inactive time: ", inactive_sec << "s");
+                    }
+
                     tcpip_adapter_dhcp_status_t dhcp_status;
                     tcpip_adapter_dhcpc_get_status(TCPIP_ADAPTER_IF_STA, &dhcp_status);
                     log_to(out, "IP Mode: ", (dhcp_status == TCPIP_ADAPTER_DHCP_STARTED ? "DHCP" : "Static"));
@@ -534,6 +561,39 @@ namespace WebUI {
     volatile bool WiFiConfig::_sta_got_ip = false;
     std::atomic<bool> WiFiConfig::_sta_tx_suspect{ false };  // 
 
+    //  Pin the station to HT20 on 2.4 GHz.
+    //
+    // The band has room for three non-overlapping 20 MHz channels and none at 40 MHz,
+    // so an HT40 station's receiver is open across 40 MHz and is desensed by any
+    // neighbouring AP whose own 40 MHz span reaches into it -- the overlap is forced by
+    // the band edges, not a misconfiguration: channel 1 at 40 MHz must extend upward
+    // (2402-2442) and channel 11 at 40 MHz must extend downward (2432-2472).
+    //
+    // This costs nothing we are using. Measured upload throughput is ~182 kbps, orders
+    // of magnitude below what HT20 delivers, so the extra width buys no real capacity
+    // while widening the window through which interference arrives.
+    //
+    // Must run BEFORE association: bandwidth is advertised in the association request,
+    // and esp_wifi_get_bandwidth() reports the configured value, not what was negotiated,
+    // so setting it on a live link cannot be confirmed to change anything. Called from
+    // StartSTA() between WiFi.mode(WIFI_STA) and WiFi.begin(), the only path into STA
+    // mode; the setting is driver configuration, so auto-reconnects keep it.
+    static void setStaBandwidthHT20() {
+        wifi_bandwidth_t bw;
+        if (esp_wifi_get_bandwidth(WIFI_IF_STA, &bw) != ESP_OK) {
+            log_warn("WiFi STA bandwidth: interface not ready, HT20 not set");
+            return;
+        }
+        if (bw == WIFI_BW_HT20) {
+            return;  // already configured
+        }
+        if (esp_wifi_set_bandwidth(WIFI_IF_STA, WIFI_BW_HT20) == ESP_OK) {
+            log_info("WiFi STA bandwidth set to HT20 (was HT40)");
+        } else {
+            log_warn("WiFi STA bandwidth: could not set HT20");
+        }
+    }
+
     void WiFiConfig::WiFiEvent(arduino_event_id_t event, arduino_event_info_t info) {
         switch (event) {
             case ARDUINO_EVENT_WIFI_STA_GOT_IP:
@@ -547,7 +607,10 @@ namespace WebUI {
                 // that worsens exactly the congestion responsiveness  cares about.
                 // WiFi.setSleep(false) sets ps=NONE AND the core bookkeeping.
                 WiFi.setSleep(false);
-                log_info("WiFi STA connected - IP is " << IP_string(WiFi.localIP()));
+                //  Log the BSSID/RSSI we landed on so a reconnect can be compared
+                // against the disconnect below -- a changed BSSID means we roamed.
+                log_info("WiFi STA connected - IP is " << IP_string(WiFi.localIP()) << " (bssid " << WiFi.BSSIDstr().c_str()
+                                                       << ", rssi " << WiFi.RSSI() << " dBm)");
                 break;
             case ARDUINO_EVENT_WIFI_STA_DISCONNECTED: {
                 _sta_got_ip = false;
@@ -556,8 +619,26 @@ namespace WebUI {
                 // ~1.3-10s in lwIP send() per leaf and wedge the comms tasks. Just a
                 // flag store — no channel free / container mutation off this task.
                 _sta_tx_suspect.store(true, std::memory_order_relaxed);
-                auto reason = (wifi_err_reason_t)info.wifi_sta_disconnected.reason;
-                log_info("WiFi STA disconnected (reason: " << WiFi.disconnectReasonName(reason) << ")");
+                //  The event already carries the RSSI at the moment of loss and the
+                // BSSID we were associated to; both were being discarded. On a multi-AP
+                // network the BSSID distinguishes a roam from a link that simply faded,
+                // and the RSSI says whether it faded at all -- in the captured failures
+                // the signal was a healthy -64 dBm right up to the disconnect, which
+                // points at contention/collisions rather than range.
+                const auto& dis    = info.wifi_sta_disconnected;
+                auto        reason = (wifi_err_reason_t)dis.reason;
+                char        bssid[18];
+                snprintf(bssid,
+                         sizeof(bssid),
+                         "%02x:%02x:%02x:%02x:%02x:%02x",
+                         dis.bssid[0],
+                         dis.bssid[1],
+                         dis.bssid[2],
+                         dis.bssid[3],
+                         dis.bssid[4],
+                         dis.bssid[5]);
+                log_info("WiFi STA disconnected (reason: " << WiFi.disconnectReasonName(reason) << ", rssi: " << (int)dis.rssi
+                                                           << " dBm, bssid: " << bssid << ")");
                 break;
             }
             default:
@@ -726,6 +807,7 @@ namespace WebUI {
         wifi_breadcrumb("STA: WiFi.mode");
         WiFi.mode(WIFI_STA);
         wifi_breadcrumb("STA: mode set");
+        setStaBandwidthHT20();  //  before WiFi.begin(): must precede association
         WiFi.setMinSecurity(static_cast<wifi_auth_mode_t>(wifi_sta_min_security->get()));
         WiFi.setScanMethod(wifi_fast_scan->get() ? WIFI_FAST_SCAN : WIFI_ALL_CHANNEL_SCAN);
         //Get parameters for STA

@@ -1786,22 +1786,32 @@ static void protocol_do_enter() {
                         config->_oled->refresh_display();
                     } else if (act == sdfiles::SDBrowser::Activation::SelectedFile) {
                         sdfiles::FileClass cls = config->_oled->_menu->sd_browser().classFilter();
-                        if (cls == sdfiles::FileClass::Firmware) {
-                            char nm[sdfiles::kMaxNameLen + 1];
-                            config->_oled->_menu->sd_table().copyName(outFile, nm, sizeof(nm));
+                        if (cls == sdfiles::FileClass::Firmware || cls == sdfiles::FileClass::Config) {
+                            // Pass the full path, like the G-code branch below: the picker
+                            // browses into folders, and a bare name would open (or fail to
+                            // open) a same-named file at the card root instead .
+                            char pathbuf[LIST_NAME_MAX_PATH];
+                            bool path_ok = config->_oled->_menu->sd_table().fullPath(
+                                outFile, pathbuf, sizeof(pathbuf), /*includeCompletionMark=*/true);
                             arenaLock.unlock();
-                            std::string fw_file = nm;
-                            log_info("Selected: " << fw_file);
-                            config->_oled->popup_msg("Updating Firmware\nPlotter will restart...", 0);
-                            Flashing::update_firmware_from_sdcard(fw_file);
-                        } else if (cls == sdfiles::FileClass::Config) {
-                            char nm[sdfiles::kMaxNameLen + 1];
-                            config->_oled->_menu->sd_table().copyName(outFile, nm, sizeof(nm));
-                            arenaLock.unlock();
-                            std::string cfg_file = nm;
-                            log_info("Config Selected: " << cfg_file);
-                            config->_oled->popup_msg("Updating Config File\nPlotter will restart...", 0);
-                            Flashing::update_config_from_sdcard(cfg_file, true);
+                            const bool fw = cls == sdfiles::FileClass::Firmware;
+                            if (!path_ok) {
+                                config->_oled->popup_msg("Path too long", 3000);
+                            } else {
+                                log_info((fw ? "Firmware" : "Config") << " selected: " << pathbuf);
+                                config->_oled->popup_msg(fw ? "Updating Firmware\nPlotter will restart..."
+                                                            : "Updating Config File\nPlotter will restart...",
+                                                         0);
+                                // Returns only on failure (success restarts the device).
+                                // Replace the persistent progress popup with the reason.
+                                Flashing::Failure f = fw ? Flashing::update_firmware_from_sdcard(pathbuf)
+                                                         : Flashing::update_config_from_sdcard(pathbuf);
+                                // Popups fit three lines: title plus a reason of at most two.
+                                // A failure that changed the device (a truncated config.yaml)
+                                // stays up until dismissed rather than timing out.
+                                config->_oled->popup_msg(std::string("Update failed\n") + f.reason,
+                                                         f.persistent ? 0 : 4000);
+                            }
                         } else {
                             char pathbuf[LIST_NAME_MAX_PATH];
                             bool path_ok = config->_oled->_menu->sd_table().fullPath(

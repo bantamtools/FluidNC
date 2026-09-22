@@ -1675,6 +1675,7 @@ void OLED::popup_msg(const std::string& msg, int dly, bool preserve_header, Popu
     }
     _popup       = true;
     _popup_level = level;
+    ++_popup_seq;
 
     // Split on '\n' into raw lines (preserve empty lines).
     std::vector<std::string> raw;
@@ -1766,6 +1767,12 @@ void OLED::clear_popup() {
     _popup_level = PopupLevel::Normal;
     _error = false;
     refresh_display();
+}
+
+void OLED::clear_popup_if(uint32_t seq) {
+    if (_popup && _popup_seq == seq) {
+        clear_popup();
+    }
 }
 
 void OLED::clear_popup(PopupLevel max_level) {

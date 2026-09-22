@@ -22,6 +22,10 @@ bool sd_card_is_present();
 // Call with present=true on card insertion, false on removal.
 // Not called on boards with no card-detect pin; those boards always attempt the mount.
 void sd_set_card_present(bool present);
+// Returns the OLED message for a card that is not mounted: "No microSD Card"
+// when absent, or the unsupported format and how to fix it when the card
+// responded but could not be mounted.
+const char* sd_unavailable_msg();
 void sd_populate_files_menu();
 
 // Incremental SD menu cache mutations. See FluidNC/src/SDMenuEvents.h

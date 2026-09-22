@@ -24,6 +24,7 @@
 #    include <StreamString.h>
 #    include <Update.h>
 #    include <esp_wifi_types.h>
+#    include <esp_wifi.h>  //  esp_wifi_get/set_inactive_time for the upload link guard
 #    include <ESPmDNS.h>
 #    include <ESP32SSDP.h>
 #    include <DNSServer.h>
@@ -63,6 +64,63 @@ namespace WebUI {
     const int ESP_ERROR_FILE_CLOSE       = 7;
 
     static const char LOCATION_HEADER[] = "Location";
+
+    //  Beacon-inactivity guard for the duration of an upload.
+    //
+    // On a congested 2.4 GHz network the station routinely loses the downlink for several
+    // seconds and recovers. Uploads that fail do so not because of the blackout itself but
+    // because it outlasts the driver's beacon-inactivity window: the driver declares
+    // BEACON_TIMEOUT, the netif goes down, the socket closes under the upload handler, and
+    // a transfer that was seconds from finishing is discarded. Captured failures showed
+    // blackouts up to ~20 s while blackouts of several seconds were survived routinely.
+    //
+    // Widening that window only while an upload is in flight buys the transfer time to ride
+    // out a blackout, and leaves idle disconnect detection at its normal value. The ceiling
+    // is deliberately below HTTP_MAX_SEND_WAIT (30 s, WebServer.h) so the HTTP read timeout
+    // stays the governing deadline and a genuinely dead link still fails in bounded time.
+    static const uint16_t UPLOAD_BEACON_INACTIVE_S = 25;
+
+    // True while WebUpdateUpload's own Update.begin() is in effect. Its failure cleanup
+    // must not touch an Updater that something else (the SD menu's firmware update, on
+    // the protocol task) armed: aborting it would free the buffer that update is writing.
+    static bool s_web_update_armed = false;
+
+    // The current upload's target already existed, so a failed upload has destroyed a
+    // listed file and must unlist it . A new name was never listed.
+    static bool s_upload_replaces_existing = false;
+
+    // Previous inactive-time value while the guard is raised; 0 means "not raised".
+    static uint16_t s_saved_inactive_s = 0;
+
+    static void raiseUploadLinkGuard() {
+        // Always check the driver's live value rather than trusting s_saved_inactive_s:
+        // the driver re-applies its default when WiFi restarts, so a guard recorded as
+        // raised can have silently lapsed. Re-widen in that case, keeping the saved value.
+        uint16_t current = 0;
+        if (esp_wifi_get_inactive_time(WIFI_IF_STA, &current) != ESP_OK) {
+            return;  // not in STA mode / WiFi not started -- nothing to guard
+        }
+        if (current >= UPLOAD_BEACON_INACTIVE_S) {
+            return;  // already at least this tolerant (or already raised); leave it alone
+        }
+        if (esp_wifi_set_inactive_time(WIFI_IF_STA, UPLOAD_BEACON_INACTIVE_S) == ESP_OK) {
+            if (!s_saved_inactive_s) {
+                s_saved_inactive_s = current;
+            }
+            log_debug("Upload link guard: beacon inactive time " << current << "s -> " << UPLOAD_BEACON_INACTIVE_S << "s");
+        }
+    }
+
+    static void releaseUploadLinkGuard() {
+        if (!s_saved_inactive_s) {
+            return;
+        }
+        // Restore whatever was in force before, rather than assuming the documented
+        // default -- the value is not persisted and is re-applied by the driver on connect.
+        esp_wifi_set_inactive_time(WIFI_IF_STA, s_saved_inactive_s);
+        log_debug("Upload link guard released: beacon inactive time -> " << s_saved_inactive_s << "s");
+        s_saved_inactive_s = 0;
+    }
 
     Web_Server webServer __attribute__((init_priority(108))) ;
     bool       Web_Server::_setupdone = false;
@@ -207,6 +265,8 @@ namespace WebUI {
 
     void Web_Server::end() {
         _setupdone = false;
+        // Don't carry a raised upload guard across a WiFi stop/start .
+        releaseUploadLinkGuard();
 
         SSDP.end();
 
@@ -864,6 +924,7 @@ namespace WebUI {
                             log_info("Update cancelled");
                             pushError(ESP_ERROR_NOT_ENOUGH_SPACE, "Upload rejected, not enough space");
                         } else {
+                            s_web_update_armed = true;
                             log_info("Update 0%");
                         }
                     }
@@ -893,7 +954,8 @@ namespace WebUI {
                     //Upload end
                     //**************
                 } else if (upload.status == UPLOAD_FILE_END) {
-                    if (Update.end(true)) {  //true to set the size to the current progress
+                    if (s_web_update_armed && Update.end(true)) {  //true to set the size to the current progress
+                        s_web_update_armed = false;
                         //Now Reboot
                         log_info("Update 100%");
                         _upload_status = UploadStatus::SUCCESSFUL;
@@ -905,6 +967,13 @@ namespace WebUI {
                 } else if (upload.status == UPLOAD_FILE_ABORTED) {
                     log_info("Update failed");
                     _upload_status = UploadStatus::FAILED;
+                    // Disarm the Updater: returning with it mid-update left _size set, so
+                    // every later Update.begin() (another web update, or the SD menu's)
+                    // failed as "already running" until reboot.
+                    if (s_web_update_armed) {
+                        Update.abort();
+                        s_web_update_armed = false;
+                    }
                     return;
                 }
             }
@@ -912,7 +981,10 @@ namespace WebUI {
 
         if (_upload_status == UploadStatus::FAILED) {
             cancelUpload();
-            Update.end();
+            if (s_web_update_armed) {
+                Update.abort();
+                s_web_update_armed = false;
+            }
         }
     }
 
@@ -1150,12 +1222,14 @@ namespace WebUI {
         }
 
         if (_upload_status != UploadStatus::FAILED) {
+            s_upload_replaces_existing = stdfs::exists(fpath, ec);
             //Create file for writing
             try {
                 _uploadFile    = new FileStream(fpath, "w");
                 _upload_status       = UploadStatus::ONGOING;
                 _uploadBytesReceived = 0;
                 _uploadTotalSize     = filesize;
+                raiseUploadLinkGuard();  //  ride out transient RF blackouts
                 if (config && config->_oled) {
                     config->_oled->setBusy(BusyReason::FileUpload);
                 }
@@ -1195,12 +1269,11 @@ namespace WebUI {
     }
 
     void Web_Server::uploadEnd(size_t filesize) {
+        releaseUploadLinkGuard();  //  restore normal disconnect detection
         //if file is open close it
+        std::string pathname;
         if (_uploadFile) {
-            //            delete _uploadFile;
-            // _uploadFile = nullptr;
-
-            std::string pathname = _uploadFile->fpath();
+            pathname = _uploadFile->fpath();
             delete _uploadFile;
             _uploadFile = nullptr;
             log_debug("pathname " << pathname);
@@ -1222,6 +1295,24 @@ namespace WebUI {
                     log_info("Upload failed - size mismatch - exp " << filesize << " got " << actual_size);
                 }
             }
+        }
+        // A size mismatch (the only way to reach here FAILED: fileUpload() skips
+        // uploadEnd() once an upload has failed) must not leave the file on the card.
+        // Remove it here, since _uploadFile is now null and uploadCheck() no longer can,
+        // and skip the added-file notifications. If it overwrote a listed file, drop that
+        // entry too: the original is gone .
+        if (!pathname.empty() && _upload_status == UploadStatus::FAILED) {
+            FluidPath filepath { pathname, "" };
+            std::error_code ec;
+            stdfs::remove(filepath, ec);
+            if (ec) {
+                log_info("Upload failed - could not remove " << pathname << ": " << ec.message());
+            }
+            HashFS::rehash_file(filepath);
+            if (s_upload_replaces_existing) {
+                sd_files_removed(pathname.c_str(), false);
+            }
+        } else if (!pathname.empty()) {
             log_info("uploadEnd, no error, filepath: " << pathname);
 
             // Incremental SD menu refresh . Helper
@@ -1254,6 +1345,7 @@ namespace WebUI {
         }
     }
     void Web_Server::uploadStop() {
+        releaseUploadLinkGuard();  //  restore normal disconnect detection
         _upload_status = UploadStatus::FAILED;
         if (config && config->_oled) {
             config->_oled->clearBusy(BusyReason::FileUpload);
@@ -1266,11 +1358,20 @@ namespace WebUI {
             std::error_code ec;
             stdfs::remove(filepath, ec);
             HashFS::rehash_file(filepath);
+            if (s_upload_replaces_existing) {
+                if (s_upload_replaces_existing) {
+                    sd_files_removed(filepath.c_str(), false);  // a failed overwrite unlists the original 
+                }
+            }
         }
     }
     void Web_Server::uploadCheck() {
         std::error_code error_code;
         if (_upload_status == UploadStatus::FAILED) {
+            //  Belt and braces: a rejected/aborted upload can reach FAILED without
+            // passing through uploadStop(), which would otherwise leave the widened
+            // beacon-inactivity window in force indefinitely. Releasing is idempotent.
+            releaseUploadLinkGuard();
             cancelUpload();
             if (_uploadFile) {
                 std::filesystem::path filepath = _uploadFile->fpath();
@@ -1278,6 +1379,11 @@ namespace WebUI {
                 _uploadFile = nullptr;
                 stdfs::remove(filepath, error_code);
                 HashFS::rehash_file(filepath);
+                if (s_upload_replaces_existing) {
+                if (s_upload_replaces_existing) {
+                    sd_files_removed(filepath.c_str(), false);  // a failed overwrite unlists the original 
+                }
+            }
             }
             // Clear busy screen on upload failure — without this,
             // FileUpload busy state is stuck permanently (no idle timeout).

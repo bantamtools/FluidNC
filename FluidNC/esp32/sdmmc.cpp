@@ -14,6 +14,7 @@
 #include "src/SDFiles/SDFileTable.h"
 #include "src/SDFiles/MenuSortConfig.h"
 #include "src/SDFiles/FsTime.h"
+#include "src/SDFiles/SDVolumeFormat.h"
 
 #include <unordered_set>
 #include <filesystem>
@@ -41,6 +42,10 @@ static uint32_t _freq_hz = 20000000;
 // Updated by sd_set_card_present() when a card-detect pin is configured.
 // Remains true (permissive) on boards with no card-detect pin.
 static bool sd_cd_pin_present = true;
+
+// Why the most recent mount attempt failed. Absent unless the card responded
+// but its filesystem could not be mounted.
+static sdfiles::SDVolumeFormat sd_mount_failure = sdfiles::SDVolumeFormat::Absent;
 
 static esp_err_t mount_to_vfs_fat(int max_files, sdmmc_card_t* card, uint8_t pdrv, const char* base_path) {
     FATFS*    fs = NULL;
@@ -91,6 +96,28 @@ static void call_host_deinit(const sdmmc_host_t* host_config) {
     } else {
         host_config->deinit();
     }
+}
+
+// Identifies the format of a card that initialized but failed to mount.
+// Brings the host up just long enough to read the boot sectors, because the
+// failed mount has already released its host and card state.
+static sdfiles::SDVolumeFormat probe_card_format() {
+    esp_err_t err = host_config.init();
+    if (err != ESP_OK) {
+        return sdfiles::SDVolumeFormat::ReadError;
+    }
+
+    auto         format = sdfiles::SDVolumeFormat::ReadError;
+    sdmmc_card_t probe_card;
+    if (sdmmc_host_init_slot(host_config.slot, &slot_config) == ESP_OK &&
+        sdmmc_card_init(&host_config, &probe_card) == ESP_OK) {
+        format = sdfiles::classifyVolume([&probe_card](uint32_t lba, uint8_t* buf) {
+            return sdmmc_read_sectors(&probe_card, buf, lba, 1) == ESP_OK;
+        });
+    }
+
+    call_host_deinit(&host_config);
+    return format;
 }
 
 bool sd_init_slot(uint32_t freq_hz, int width, int clk_pin, int cmd_pin, int d0_pin, int d1_pin, int d2_pin, int d3_pin, int cd_pin) {
@@ -144,6 +171,7 @@ std::error_code sd_mount(int max_files) {
     // when no card is present. Boards with no card-detect pin leave
     // sd_cd_pin_present true, so this guard never fires for them.
     if (!sd_cd_pin_present) {
+        sd_mount_failure = sdfiles::SDVolumeFormat::Absent;
         log_info("sd_mount: no card detected, skipping mount");
         return std::error_code(ESP_ERR_NOT_FOUND, std::system_category());
     }
@@ -165,6 +193,14 @@ std::error_code sd_mount(int max_files) {
     if (err == ESP_OK) {
         log_info("Mount_sd sdmmc successful");
         sd_is_mounted = true;
+    }
+
+    // ESP_FAIL means the card initialized but FatFs found no volume it can
+    // mount; other errors mean the card is absent or not responding.
+    sd_mount_failure = sdfiles::SDVolumeFormat::Absent;
+    if (err == ESP_FAIL) {
+        sd_mount_failure = probe_card_format();
+        log_warn("microSD card could not be mounted: " << sdfiles::formatName(sd_mount_failure));
     }
     
     return std::error_code(err, std::system_category());
@@ -197,6 +233,13 @@ bool sd_card_is_present() {
 // sd_cd_pin_present stays true and sd_mount() always attempts the mount.
 void sd_set_card_present(bool present) {
     sd_cd_pin_present = present;
+    if (!present) {
+        sd_mount_failure = sdfiles::SDVolumeFormat::Absent;
+    }
+}
+
+const char* sd_unavailable_msg() {
+    return sdfiles::unavailableMessage(sd_mount_failure);
 }
 
 // Returns the last-write-time of full_path as a mtime sort key, or 0 on error.
@@ -221,7 +264,7 @@ static void sd_reopen_browser(Menu* m, sdfiles::FileClass cls) {
         // Only the Back row — nothing to browse.
         const char* empty_msg;
         if (!sd_card_is_present()) {
-            empty_msg = "No microSD Card";
+            empty_msg = sd_unavailable_msg();
         } else if (cls == sdfiles::FileClass::Firmware) {
             empty_msg = "No firmware files\non microSD Card";
         } else if (cls == sdfiles::FileClass::Config) {
@@ -235,6 +278,22 @@ static void sd_reopen_browser(Menu* m, sdfiles::FileClass cls) {
     } else {
         m->set_sd_browse_active(true);
     }
+}
+
+// Plain-language OLED message for a scan that threw . The usual cause is the
+// card being pulled mid-scan. sd_cd_pin_present cannot tell us: the card-detect event
+// that would clear it is handled on this same task, after the scan returns. Critical,
+// like the log_error popup it replaces, so the progress popup cannot overwrite it.
+// Recovery by reinsertion alone is unverified (see ), so keep the restart advice;
+// a later clean scan dismisses this popup (and only this one) so a recovery is visible.
+static bool     s_scan_error_popup = false;
+static uint32_t s_scan_error_popup_seq;
+
+static void sd_scan_error_to_oled() {
+    config->_oled->popup_msg("microSD removed\nor unreadable\nReinsert and restart", 0, true,
+                             OLED::PopupLevel::Critical);
+    s_scan_error_popup     = true;
+    s_scan_error_popup_seq = config->_oled->popup_seq();
 }
 
 void sd_populate_files_menu() {
@@ -282,7 +341,7 @@ void sd_populate_files_menu() {
         config->_oled->_menu->finish_sd_update();
         // Inform the user when a card is removed while they are browsing.
         if (was_browsing) {
-            config->_oled->popup_msg("No microSD Card", 0, true, OLED::PopupLevel::Status);
+            config->_oled->popup_msg(sd_unavailable_msg(), 0, true, OLED::PopupLevel::Status);
         }
         config->_oled->refresh_display(true);
         return;
@@ -302,10 +361,11 @@ void sd_populate_files_menu() {
                 std::filesystem::recursive_directory_iterator end;
                 while (iter != end) {
                     const auto& dir_entry = *iter;
-                    std::string filename = dir_entry.path().filename().string();
 
-                    // Skip hidden files and directories
-                    if (!filename.empty() && filename[0] == '.') {
+                    // Skip hidden files and directories (dotfiles, and Windows system
+                    // folders at the root, ) without descending into them.
+                    if (sdfiles::SDScan::isHiddenPath(
+                            dir_entry.path().string().c_str() + strlen(base_path))) {
                         if (dir_entry.is_directory()) {
                             iter.disable_recursion_pending();
                         }
@@ -472,16 +532,14 @@ void sd_populate_files_menu() {
 
             }
         } catch (const std::exception& e) {
-            std::string err_msg = e.what();
-            // Extract just the error type from verbose filesystem error messages
-            if (err_msg.find("Bad file number") != std::string::npos) {
-                log_error("microSD I/O error. Please restart machine. [bad file number]");
-            } else {
-                log_error("microSD I/O error. Please restart machine. [" << err_msg << "]");
-            }
+            // The exception text is for diagnosis only: log it at WARN (serial, not
+            // the OLED) and give the operator a plain message .
+            log_warn("SD scan failed: " << e.what());
+            sd_scan_error_to_oled();
             scan_error = true;
         } catch (...) {
-            log_error("microSD I/O error. Please restart machine. [unknown error]");
+            log_warn("SD scan failed: unknown exception");
+            sd_scan_error_to_oled();
             scan_error = true;
         }
     }
@@ -493,6 +551,10 @@ void sd_populate_files_menu() {
     // Clear loading progress message (unless we hit a limit or error and are showing that message)
     if (!limit_reached && !scan_error) {
         config->_oled->clear_popup(OLED::PopupLevel::Status);
+        if (s_scan_error_popup) {
+            config->_oled->clear_popup_if(s_scan_error_popup_seq);
+            s_scan_error_popup = false;
+        }
     }
 
     config->_oled->_menu->sd_table().setScanComplete(!limit_reached && !scan_error);

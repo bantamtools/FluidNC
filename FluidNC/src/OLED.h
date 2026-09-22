@@ -109,6 +109,7 @@ private: // AIDAN
 
     bool _popup = false;
     PopupLevel _popup_level = PopupLevel::Normal;  // priority of the popup on screen
+    uint32_t   _popup_seq   = 0;                   // see popup_seq()
 
     // BusyScreen state machine
     volatile BusyReason _busy_reason = BusyReason::None;  // volatile: written by WebServer task
@@ -248,6 +249,11 @@ public:
 	// foreground (Normal/Critical) message.
 	void clear_popup(PopupLevel max_level);
 	bool showing_popup() { return _popup; }
+	// Identity of the popup on screen: bumped each time popup_msg() draws one. A caller
+	// that raised a popup can later dismiss exactly that popup, and nothing that has
+	// replaced it since, with clear_popup_if(seq).
+	uint32_t popup_seq() const { return _popup_seq; }
+	void clear_popup_if(uint32_t seq);
 
 	// Drop any pending encoder rotation accumulated in _enc_diff.
 	// Rotary encoders can emit a spurious rotation pulse from
