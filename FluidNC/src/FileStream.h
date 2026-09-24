@@ -50,6 +50,10 @@ public:
     size_t size();
     size_t position();
 
+    // Consumes a UTF-8 byte-order mark at the start of a file opened for
+    // reading. Call before the first read. Returns true if a mark was consumed.
+    bool skipUtf8Bom();
+
     // pollLine() is a required method of the Channel class that
     // FileStream implements as a no-op.
     Channel* pollLine(char* line) override { return nullptr; }

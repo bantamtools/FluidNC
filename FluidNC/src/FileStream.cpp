@@ -3,6 +3,7 @@
 
 #include "FileStream.h"
 #include "Machine/MachineConfig.h"  // config->
+#include "Utf8Bom.h"
 
 std::string FileStream::path() {
     return _fpath.c_str();
@@ -46,6 +47,10 @@ size_t FileStream::size() {
 
 size_t FileStream::position() {
     return ftell(_fd);
+}
+
+bool FileStream::skipUtf8Bom() {
+    return skip_utf8_bom(_fd);
 }
 
 void FileStream::setup(const char* mode) {

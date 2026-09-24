@@ -198,6 +198,12 @@ private: // AIDAN
     // breaks for runs without spaces.
     void split_to_width(const std::string& s, font_t font, int max_w, std::vector<std::string>& out);
 
+    // Line pitch and line budget for popup_msg. Popup text is DejaVu_Sans_10
+    // drawn one pixel tighter than its 13 px cell; its glyphs leave the top
+    // rows of the cell blank, so lines still do not touch.
+    int    popup_line_height();
+    size_t popup_max_lines();
+
     void show(Layout& layout, const std::string& msg) { show(layout, msg.c_str()); }
     void show(Layout& layout, const char* msg);
 

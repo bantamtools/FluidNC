@@ -16,6 +16,9 @@
 
 InputFile::InputFile(const char* defaultFs, const char* path, WebUI::AuthenticationLevel auth_level, Channel& out) :
     FileStream(path, "r", defaultFs), _auth_level(auth_level), _out(out), _line_num(0)  {
+    // Editors such as older Windows Notepad begin UTF-8 files with a byte-order
+    // mark, which the G-code parser would reject as a stray token on line 1.
+    skipUtf8Bom();
     log_info("Run file opened");  // Used by OLED for elapsed time
     gc_saw_program_end = false; // clear flag for truncated file checking
 

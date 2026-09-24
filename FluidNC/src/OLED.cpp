@@ -8,6 +8,7 @@
 #include "Error.h"      // Error (InputFile constructor throws)
 #include "SDFiles/SDFileTable.h"
 #include "SDFiles/SDBrowser.h"
+#include "OledTextFit.h"
 #include <cmath>       // ceilf, floorf
 #include <cstdio>      // snprintf
 #include <cstring>     // memcpy, memset
@@ -16,6 +17,10 @@
 #include <mutex>       // std::unique_lock — arena lock across the SD render
 #include "WebUI/WebServer.h"   // WebUI::Web_Server::getUploadBytesReceived(), getUploadTotalSize()
 #include "xmodem.h"            // xmodem_bytes_received
+
+// Popup content area: rows 16-63, the part clearContentAreaFast wipes.
+static constexpr int kPopupContentY = 16;
+static constexpr int kPopupContentH = 48;
 
 // Static variables
 static float* saved_axes = NULL;   // Saved dro values for refreshing display
@@ -1689,7 +1694,8 @@ void OLED::popup_msg(const std::string& msg, int dly, bool preserve_header, Popu
         }
     }
 
-    // Word-wrap each raw line to display width.
+    // Word-wrap each raw line to display width, then cap at the number of
+    // lines the content area holds; a longer message ends in "...".
     std::vector<std::string> lines;
     for (const auto& line : raw) {
         if (line.empty()) {
@@ -1698,22 +1704,22 @@ void OLED::popup_msg(const std::string& msg, int dly, bool preserve_header, Popu
             split_to_width(line, DejaVu_Sans_10, _width, lines);
         }
     }
+    cap_lines(lines, popup_max_lines(), _width,
+              [this](uint8_t c) { return static_cast<int>(char_width(c, DejaVu_Sans_10)); });
 
     // Vertical centering. Anchor and floor depend on preserve_header.
-    // For preserve_header == true, content_y/content_h are constants
-    // (16, 48) matching clearContentAreaFast's actual page-aligned
-    // wipe — NOT _header_height (15). Row 15 is page 1 / bit 7 and is
-    // never touched by clearContentAreaFast, so anchoring at row 16
-    // ensures the popup text top lands on a known-cleared row.
-    const int line_h  = font_height(DejaVu_Sans_10);
+    // For preserve_header == true, the content area (rows 16-63) matches
+    // clearContentAreaFast's actual page-aligned wipe — NOT
+    // _header_height (15). Row 15 is page 1 / bit 7 and is never touched
+    // by clearContentAreaFast, so anchoring at row 16 ensures the popup
+    // text top lands on a known-cleared row.
+    const int line_h  = popup_line_height();
     const int block_h = (int)lines.size() * line_h;
     int       y;
     if (preserve_header) {
-        constexpr int content_y = 16;
-        constexpr int content_h = 48;
-        y = content_y + (content_h - block_h) / 2;
-        if (y < content_y) {
-            y = content_y;
+        y = kPopupContentY + (kPopupContentH - block_h) / 2;
+        if (y < kPopupContentY) {
+            y = kPopupContentY;
         }
     } else {
         // Full-screen wipe: center over the whole 64px panel so a short popup sits at
@@ -2304,21 +2310,11 @@ void OLED::parse_error_report() {
     if (_report.substr(0, 5) == "ERR: ") {
         _report = _report.substr(5); // trim "ERR: " prefix
     }
-    // Strip directory path from filename to save display space.
-    // " in /sd/path/file.gcode at line" -> " in file.gcode at line"
-    // If filename > 18 chars, drop it: -> " in G-code file at line"
-    size_t in_pos = _report.find(" in ");
-    size_t at_pos = _report.find(" at line");
-    if (in_pos != std::string::npos && at_pos != std::string::npos && at_pos > in_pos) {
-        std::string filepath = _report.substr(in_pos + 4, at_pos - in_pos - 4);
-        auto slash = filepath.rfind('/');
-        std::string fname = (slash != std::string::npos) ? filepath.substr(slash + 1) : filepath;
-        if (fname.length() <= 18) {
-            _report = _report.substr(0, in_pos) + " in " + fname + _report.substr(at_pos);
-        } else {
-            _report = _report.substr(0, in_pos) + " in G-code file" + _report.substr(at_pos);
-        }
-    }
+    // Shorten the file location so the report fits in the popup:
+    // " in /sd/path/file.gcode at line" -> " in file.gcode at line",
+    // or " in G-code file at line", or just " at line".
+    _report = fit_error_report(_report, popup_max_lines(), _width,
+                               [this](uint8_t c) { return static_cast<int>(char_width(c, DejaVu_Sans_10)); });
     _popup = true;
     _error = true; // Mark as error popup to prevent WiFi overwrite
     show_error(_report); // popup error report until next button click
@@ -2631,43 +2627,18 @@ void OLED::showJogHeaderFast(bool moving) {
 }
 
 // Word-wrap a string into substring lines that each fit within max_w pixels
-// at the given font. Splits at the most recent space when possible; falls
-// back to mid-character breaks for runs without spaces. Used by both
-// popup_msg (centered draw) and wrapped_draw_string (left-aligned draw).
-// Centralized in  to deduplicate the wrap algorithm.
+// at the given font. Used by both popup_msg (centered draw) and
+// wrapped_draw_string (left-aligned draw); the algorithm is wrap_to_width.
 void OLED::split_to_width(const std::string& s, font_t font, int max_w, std::vector<std::string>& out) {
-    if (s.empty()) {
-        out.emplace_back();
-        return;
-    }
+    wrap_to_width(s, max_w, [this, font](uint8_t c) { return static_cast<int>(char_width(c, font)); }, out);
+}
 
-    size_t       slen      = s.length();
-    size_t       swidth    = 0;
-    size_t       i;
-    size_t       lastSpace = 0;
-    for (i = 0; i < slen && swidth < (size_t)max_w; i++) {
-        swidth += char_width(s[i], font);
-        if (s[i] == ' ') {
-            lastSpace = i;
-        }
-        if (swidth > (size_t)max_w) {
-            break;
-        }
-    }
-    if (swidth < (size_t)max_w) {
-        out.emplace_back(s);
-        return;
-    }
-    if (lastSpace == 0) {
-        // No spaces found in this width; break at character.
-        out.emplace_back(s.substr(0, i));
-        split_to_width(s.substr(i, slen), font, max_w, out);
-    } else {
-        // Break at most recent space (skip the space itself on the
-        // continuation line).
-        out.emplace_back(s.substr(0, lastSpace));
-        split_to_width(s.substr(lastSpace + 1, slen), font, max_w, out);
-    }
+int OLED::popup_line_height() {
+    return font_height(DejaVu_Sans_10) - 1;
+}
+
+size_t OLED::popup_max_lines() {
+    return kPopupContentH / popup_line_height();
 }
 
 void OLED::wrapped_draw_string(int16_t y, const std::string& s, font_t font, bool setFont) {
