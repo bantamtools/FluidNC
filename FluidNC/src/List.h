@@ -12,7 +12,7 @@
 // key (see Menu.cpp, Protocol.cpp). Centralizing the definition
 // ensures all call sites compare identical bytes.
 // The ◀ character is U+25C0 BLACK LEFT-POINTING TRIANGLE; rendering
-// on the OLED is handled by customFontTableLookup in OLED.cpp, which
+// on the OLED is handled by font_table_lookup in OledTextFit.cpp, which
 // maps it to font slot 0x81.
 #define BACK_LABEL "◀ Back"
 

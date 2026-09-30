@@ -3,8 +3,10 @@
 #pragma once
 
 // Text layout for the OLED, kept free of display and font machinery so it
-// can be unit-tested. Glyph widths come from the caller through a GlyphWidth
-// function, which measures one byte at a time the way OLED::char_width does.
+// can be unit-tested. Strings are UTF-8; they are measured one glyph at a
+// time through font_table_lookup, the same mapping the display applies when
+// drawing. Glyph widths come from the caller through a GlyphWidth function,
+// which takes a font glyph code the way OLED::char_width does.
 
 #include <cstddef>
 #include <cstdint>
@@ -14,9 +16,23 @@
 
 using GlyphWidth = std::function<int(uint8_t)>;
 
+// Bytes of a multi-byte sequence seen so far, most recent in prev1.
+struct FontLookupState {
+    uint8_t prev3 = 0;
+    uint8_t prev2 = 0;
+    uint8_t prev1 = 0;
+};
+
+// Maps the next byte of a UTF-8 string to a glyph code in the OLED font.
+// ASCII passes through; Latin-1 (C2/C3 lead bytes) maps to its code point;
+// ←, →, ◀, ˣ, ✓ and 🛜 map to the font's custom slots 0x7F-0x84. Returns 0
+// for a byte inside a multi-byte sequence and for characters the font lacks.
+char font_table_lookup(FontLookupState& state, uint8_t ch);
+
 // Word-wraps s into lines no wider than max_w pixels, appending them to out.
 // Splits at the most recent space when possible (the space itself is
-// dropped); falls back to a mid-character break for a run without spaces.
+// dropped); a run without spaces breaks between characters, never inside a
+// multi-byte one. Every line holds at least one character.
 void wrap_to_width(const std::string& s, int max_w, const GlyphWidth& width, std::vector<std::string>& out);
 
 // Total advance width of s in pixels.
@@ -33,7 +49,7 @@ void cap_lines(std::vector<std::string>& lines, size_t max_lines, int max_w, con
 // the most specific of these that fits:
 //   "... in <filename> at line <n>"   (directory stripped; the filename must
 //                                      also fit on one line by itself)
-//   "... in G-code file at line <n>"
+//   "... in G-Code file at line <n>"
 //   "... at line <n>"
 // Reports in any other form are returned unchanged.
 std::string fit_error_report(const std::string& report, size_t max_lines, int max_w, const GlyphWidth& width);

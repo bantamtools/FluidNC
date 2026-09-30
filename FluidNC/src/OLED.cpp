@@ -173,79 +173,17 @@ static uint8_t draw_again_icon_bits[] PROGMEM = {
 };
 
 
-// Custom UTF-8 → font-index lookup for the SSD1306 OLED font.
+// UTF-8 → font-index lookup registered with the SSD1306 driver in place of
+// DefaultFontTableLookup; the mapping itself is font_table_lookup.
 //
-// Replaces DefaultFontTableLookup. Recognizes specific Unicode
-// codepoints as multi-byte UTF-8 sequences and maps them to font
-// slots 0x80–0x84 (→, ◀, ˣ, ✓, 🛜). Unrecognized bytes either push
-// onto state (potential mid-sequence) or drop (return 0).
-//
-// Reference implementation + unit tests:
-//   misc-oskay/fluidnc-font/font_table_lookup.py
-//   misc-oskay/fluidnc-font/test_font_table_lookup.py
-//
-// Called byte-by-byte during drawStringInternal. State persists
-// across the bytes of one string; it is effectively reset at the
-// start of each string because incomplete sequences at the end of
-// the previous string either completed or drifted out of the
-// 3-byte state window.
+// Called byte-by-byte during drawStringInternal. State persists across the
+// bytes of one string; it is effectively reset at the start of each string
+// because incomplete sequences at the end of the previous string either
+// completed or drifted out of the 3-byte state window. Text measurement uses
+// its own FontLookupState, never this one.
 static char customFontTableLookup(const uint8_t ch) {
-    static uint8_t prev3 = 0;
-    static uint8_t prev2 = 0;
-    static uint8_t prev1 = 0;
-
-    // ASCII: passthrough, clear state.
-    if (ch < 0x80) {
-        prev3 = prev2 = prev1 = 0;
-        return (char)ch;
-    }
-
-    // Latin-1 passthrough ranges (matches DefaultFontTableLookup).
-    if (prev1 == 0xC2) {
-        prev3 = prev2 = prev1 = 0;
-        return (char)ch;
-    }
-    if (prev1 == 0xC3) {
-        prev3 = prev2 = prev1 = 0;
-        return (char)(ch | 0xC0);
-    }
-
-    // Mapped 2-byte: ˣ U+02E3 (CB A3) -> 0x82
-    if (prev1 == 0xCB && ch == 0xA3) {
-        prev3 = prev2 = prev1 = 0;
-        return (char)0x82;
-    }
-
-    // Mapped 3-byte sequences, lead byte 0xE2.
-    if (prev2 == 0xE2 && prev1 == 0x86 && ch == 0x90) {
-        prev3 = prev2 = prev1 = 0;
-        return (char)0x7F;  // ← U+2190
-    }
-    if (prev2 == 0xE2 && prev1 == 0x86 && ch == 0x92) {
-        prev3 = prev2 = prev1 = 0;
-        return (char)0x80;  // → U+2192
-    }
-    if (prev2 == 0xE2 && prev1 == 0x97 && ch == 0x80) {
-        prev3 = prev2 = prev1 = 0;
-        return (char)0x81;  // ◀ U+25C0
-    }
-    if (prev2 == 0xE2 && prev1 == 0x9C && ch == 0x93) {
-        prev3 = prev2 = prev1 = 0;
-        return (char)0x83;  // ✓ U+2713
-    }
-
-    // Mapped 4-byte: 🛜 U+1F6DC (F0 9F 9B 9C) -> 0x84
-    if (prev3 == 0xF0 && prev2 == 0x9F && prev1 == 0x9B
-        && ch == 0x9C) {
-        prev3 = prev2 = prev1 = 0;
-        return (char)0x84;
-    }
-
-    // Otherwise: push onto state, return 0 (no glyph yet / drop).
-    prev3 = prev2;
-    prev2 = prev1;
-    prev1 = ch;
-    return (char)0;
+    static FontLookupState state;
+    return font_table_lookup(state, ch);
 }
 
 
@@ -1738,11 +1676,14 @@ void OLED::popup_msg(const std::string& msg, int dly, bool preserve_header, Popu
     } else {
         clearScreenFast();
     }
-    _oled->setFont(DejaVu_Sans_10);
-    _oled->setTextAlignment(TEXT_ALIGN_CENTER);
-    const int cx = _width / 2;
+    // Center each line by measuring it and drawing at an explicit x. Other
+    // tasks paint the screen too and change the shared text alignment, so a
+    // centered drawString() can land left-aligned at the midpoint.
+    SSD1306_I2C* ssd1306 = static_cast<SSD1306_I2C*>(_oled);
+    const auto   glyph_w = [this](uint8_t c) { return static_cast<int>(char_width(c, DejaVu_Sans_10)); };
+    const int    cx      = _width / 2;
     for (const auto& l : lines) {
-        _oled->drawString(cx, y, l.c_str());
+        ssd1306->drawStringAt(cx - text_width(l, glyph_w) / 2, y, l, DejaVu_Sans_10);
         y += line_h;
     }
     _oled->display();
@@ -2678,15 +2619,14 @@ void OLED::truncated_draw_string(int16_t x, int16_t y, const std::string& s, fon
     const int dots_width = 3 * static_cast<int>(char_width('.', font));
 
     // Measure through the same UTF-8 lookup drawString uses, so multi-byte
-    // characters count as the single glyph they render as. The lookup keeps
-    // partial-sequence state between calls; a NUL byte clears it.
-    customFontTableLookup(0);
+    // characters count as the single glyph they render as.
+    FontLookupState lookup;
     int    width     = 0;
     bool   fits      = true;
     size_t cut       = 0;  // bytes in the longest prefix that leaves room for "..."
     int    cut_width = 0;
     for (size_t i = 0; i < s.length(); ++i) {
-        char glyph = customFontTableLookup(static_cast<uint8_t>(s[i]));
+        char glyph = font_table_lookup(lookup, static_cast<uint8_t>(s[i]));
         if (glyph == 0) {
             continue;  // inside a multi-byte sequence, or a dropped byte
         }
@@ -2700,7 +2640,6 @@ void OLED::truncated_draw_string(int16_t x, int16_t y, const std::string& s, fon
             cut_width = width;
         }
     }
-    customFontTableLookup(0);
 
     if (fits) {
         _oled->drawString(x, y, s.c_str());

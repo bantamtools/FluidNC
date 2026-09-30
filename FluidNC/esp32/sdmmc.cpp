@@ -270,7 +270,7 @@ static void sd_reopen_browser(Menu* m, sdfiles::FileClass cls) {
         } else if (cls == sdfiles::FileClass::Config) {
             empty_msg = "No config files\non microSD Card";
         } else {
-            empty_msg = "No G-code files\non microSD Card";
+            empty_msg = "No G-Code files\non microSD Card";
         }
         log_info("No files of the selected type on SD");
         config->_oled->popup_msg(empty_msg, 0, true, OLED::PopupLevel::Status);

@@ -3,8 +3,11 @@
 
 #include <OLEDDisplay.h>
 #include "Machine/I2CBus.h"
+#include "OledTextFit.h"  // font_table_lookup, FontLookupState
 #include <algorithm>
+#include <cstdint>
 #include <cstring>  // For memcpy in safe buffer implementation
+#include <string>
 
 #define OLED_USE_SAFE_BUFFER  // Comment out this line to use original buffer[-1] method
 
@@ -46,6 +49,51 @@ public:
         _refresh_needed = true;
     }
     
+    // Draws s in white with the left edge of its first glyph at x and its top
+    // at y, using the given font. The display's text alignment, current font,
+    // draw color and font lookup state are shared by every task that paints
+    // the screen, and another task can change them in the middle of a
+    // drawString(). This reads none of them, so the text lands where the caller
+    // placed it. Glyphs are decoded and blitted as drawString() does.
+    void drawStringAt(int16_t x, int16_t y, const std::string& s, const uint8_t* font) {
+        const uint8_t  height         = pgm_read_byte(font + HEIGHT_POS);
+        const uint8_t  first_char     = pgm_read_byte(font + FIRST_CHAR_POS);
+        const uint16_t jump_table_len = pgm_read_byte(font + CHAR_NUM_POS) * JUMPTABLE_BYTES;
+        const uint8_t  raster_height  = 1 + ((height - 1) >> 3);  // bytes per glyph column
+        const int      y_offset       = y & 7;                    // bit offset within a page
+        const int      w              = this->width();
+
+        FontLookupState lookup;
+        int             cursor_x = x;
+        for (char c : s) {
+            const uint8_t code = static_cast<uint8_t>(font_table_lookup(lookup, static_cast<uint8_t>(c)));
+            if (code == 0 || code < first_char) {
+                continue;  // inside a multi-byte sequence, a dropped byte, or not in the font
+            }
+            const uint8_t* entry      = font + JUMPTABLE_START + (code - first_char) * JUMPTABLE_BYTES;
+            const uint8_t  msb        = pgm_read_byte(entry);
+            const uint8_t  lsb        = pgm_read_byte(entry + JUMPTABLE_LSB);
+            const uint8_t  byte_count = pgm_read_byte(entry + JUMPTABLE_SIZE);
+            const uint8_t  advance    = pgm_read_byte(entry + JUMPTABLE_WIDTH);
+            if (!(msb == 255 && lsb == 255)) {  // 0xFFFF marks a glyph with no pixels
+                const uint8_t* glyph = font + JUMPTABLE_START + jump_table_len + ((msb << 8) + lsb);
+                for (uint16_t i = 0; i < byte_count; i++) {
+                    const uint8_t bits  = pgm_read_byte(glyph + i);
+                    const int     col   = cursor_x + i / raster_height;
+                    const int     index = col + ((y >> 3) + i % raster_height) * w;
+                    if (col < 0 || col >= w || index < 0 || index >= displayBufferSize) {
+                        continue;
+                    }
+                    buffer[index] |= bits << y_offset;
+                    if (y_offset != 0 && index < displayBufferSize - w) {
+                        buffer[index + w] |= bits >> (8 - y_offset);
+                    }
+                }
+            }
+            cursor_x += advance;
+        }
+    }
+
     void performDisplayUpdate(void) {
         if (_error) {
             return;

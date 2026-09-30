@@ -54,7 +54,7 @@ Menu::Menu()
 
     // Initialize menu titles
     strcpy(_main_menu->title, "Main Menu");
-    strcpy(_files_menu->title, "Select G-code file");
+    strcpy(_files_menu->title, "Select G-Code file");
     strcpy(_settings_menu->title, "Settings");
     strcpy(_jogging_menu->title, "Jog mode");
     strcpy(_version_menu->title, "Version");
@@ -276,7 +276,7 @@ void Menu::enter_submenu(void) {
                 } else if (_current_menu == _config_menu) {
                     empty_msg = "No config files\non microSD Card";
                 } else {
-                    empty_msg = "No G-code files\non microSD Card";
+                    empty_msg = "No G-Code files\non microSD Card";
                 }
                 log_info("No files of the selected type on SD");
                 config->_oled->popup_msg(empty_msg, 0);
