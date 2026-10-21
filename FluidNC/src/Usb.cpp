@@ -9,6 +9,16 @@
 
 #include "Usb.h"
 #include "Protocol.h"  //  g_usb_tx_drops / g_usb_last_tx_ms
+#include "UsbRxDrain.h"
+
+#include <soc/soc_caps.h>
+#if ARDUINO_USB_MODE && defined(SOC_USB_SERIAL_JTAG_SUPPORTED) && SOC_USB_SERIAL_JTAG_SUPPORTED
+#    define FLUIDNC_USB_SERIAL_JTAG_DRAIN 1
+#    include <hal/usb_serial_jtag_ll.h>
+#    include <freertos/FreeRTOS.h>
+#    include <freertos/task.h>
+#    include <esp_timer.h>
+#endif
 
 Usb::Usb() : _usb_num(0) {}
 
@@ -20,6 +30,33 @@ void Usb::begin() {
 #endif
     // USBCDC (TinyUSB) doesn't have setTxBufferSize method
     Serial.begin(115200);
+#ifdef FLUIDNC_USB_SERIAL_JTAG_DRAIN
+    //  Discard OUT data stranded across HWCDC::begin(), which cleared the
+    // RECV_PKT status that announced it, plus the host backlog queued behind it (see
+    // UsbRxDrain.h). This must run after begin(): a drain before it would let the
+    // host's retried packet land and have its RECV_PKT wiped by begin(), stranding it
+    // again. The HWCDC ISR is kept off the FIFO by masking the RECV_PKT interrupt
+    // enable (begin() is the only other code that sets it), which holds whichever core
+    // the ISR was allocated on. The int_ena read-modify-writes are done in a critical
+    // section so they cannot interleave with the ISR's own IN_EMPTY updates on this
+    // core. Re-enabling lets any RECV_PKT left raw-pending fire the ISR normally.
+    static portMUX_TYPE ena_mux = portMUX_INITIALIZER_UNLOCKED;
+    uint8_t             scratch[USB_SERIAL_JTAG_PACKET_SZ_BYTES];
+    portENTER_CRITICAL(&ena_mux);
+    usb_serial_jtag_ll_disable_intr_mask(USB_SERIAL_JTAG_INTR_SERIAL_OUT_RECV_PKT);
+    portEXIT_CRITICAL(&ena_mux);
+    _rx_drained_at_begin = drain_stranded_rx(
+        [] { usb_serial_jtag_ll_clr_intsts_mask(USB_SERIAL_JTAG_INTR_SERIAL_OUT_RECV_PKT); },
+        [] { return usb_serial_jtag_ll_rxfifo_data_available() != 0; },
+        [&scratch] { return usb_serial_jtag_ll_read_rxfifo(scratch, sizeof(scratch)); },
+        [] { return uint32_t(esp_timer_get_time()); },
+        [] { vTaskDelay(1); },
+        30 * 1000,    // quiet window: the host has stopped sending stale data
+        500 * 1000);  // cap: a host that never stops cannot hold boot longer
+    portENTER_CRITICAL(&ena_mux);
+    usb_serial_jtag_ll_ena_intr_mask(USB_SERIAL_JTAG_INTR_SERIAL_OUT_RECV_PKT);
+    portEXIT_CRITICAL(&ena_mux);
+#endif
 }
 
 int Usb::read() {

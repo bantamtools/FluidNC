@@ -22,6 +22,8 @@ private:
     
     int _usb_num  = 0;  // Hardware USB engine number
 
+    uint32_t _rx_drained_at_begin = 0;  //  stranded RX bytes discarded at begin()
+
 public:
 
     // Name is required for the configuration factory to work.
@@ -33,6 +35,9 @@ public:
 
     Usb();
     void begin();
+    //  Bytes discarded by begin(): the packet stranded in the USB-Serial-JTAG
+    // OUT buffer plus the host backlog queued behind it before the firmware was ready.
+    uint32_t rxDrainedAtBegin() const { return _rx_drained_at_begin; }
 
     // Stream methods - Uart must inherit from Stream because the TMCStepper library
     // needs a Stream instance.

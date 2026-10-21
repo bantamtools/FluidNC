@@ -113,4 +113,7 @@ void usbInit() {
     auto usb0 = new Usb();
     usb0->begin();
     Usb0.init(usb0);
+    if (usb0->rxDrainedAtBegin()) {
+        log_info("USB RX: discarded " << usb0->rxDrainedAtBegin() << " bytes stranded at USB init");
+    }
 }
