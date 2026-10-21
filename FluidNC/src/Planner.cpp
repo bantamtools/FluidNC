@@ -25,7 +25,10 @@ void plan_init() {
     if (block_buffer) {
         delete[] block_buffer;
     }
-    block_buffer = new plan_block_t[config->_planner_blocks];
+    // Value-initialize (zero) the ring, as Grbl's static array was. Slots that
+    // have never held a block are still read by a re-plan walk; uninitialized
+    // heap there can hold a negative entry speed .
+    block_buffer = new plan_block_t[config->_planner_blocks]();
 }
 
 // Define planner variables
@@ -514,6 +517,15 @@ void plan_cycle_reinitialize() {
     // Re-plan from a complete stop. Reset planner entry speeds and buffer planned pointer.
     Stepper::update_plan_block_parameters();
     block_buffer_planned = block_buffer_tail;
+    // An empty planner has nothing to re-plan. planner_recalculate()'s bail-out
+    // tests prev(head) == planned, which is false when head == tail, so it would
+    // walk every never-live slot of the ring and leave block_buffer_planned on
+    // one of them; the next block then inherits that slot's entry speed .
+    // Callers that reach here empty: a hold or park that ends after a '!' drain,
+    // and a feed or rapid override change while Idle.
+    if (block_buffer_head == block_buffer_tail) {
+        return;
+    }
     planner_recalculate();
 }
 
@@ -521,3 +533,34 @@ void plan_cycle_reinitialize() {
 void plan_get_planner_mpos(float* target) {
     motor_steps_to_mpos(target, pl.position);
 }
+
+#ifdef PAUSESIM
+// Host simulator only (env:pausesim): ring indices and a writer for the slots
+// outside [tail, head). Compiled out of firmware.
+plan_debug_indices_t plan_debug_indices() {
+    return { block_buffer_tail, block_buffer_head, block_buffer_planned };
+}
+
+int plan_debug_poison_dead_slots(float entry_speed_sqr) {
+    int n = 0;
+    for (uint8_t i = 0; i < config->_planner_blocks; i++) {
+        bool live = (block_buffer_tail <= block_buffer_head) ? (i >= block_buffer_tail && i < block_buffer_head)
+                                                             : (i >= block_buffer_tail || i < block_buffer_head);
+        if (!live) {
+            block_buffer[i].entry_speed_sqr = entry_speed_sqr;
+            ++n;
+        }
+    }
+    return n;
+}
+
+bool plan_debug_ring_is_zero() {
+    auto bytes = reinterpret_cast<const uint8_t*>(block_buffer);
+    for (size_t i = 0; i < sizeof(plan_block_t) * config->_planner_blocks; i++) {
+        if (bytes[i] != 0) {
+            return false;
+        }
+    }
+    return true;
+}
+#endif

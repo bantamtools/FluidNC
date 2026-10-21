@@ -396,6 +396,15 @@ void Stepper::prep_buffer() {
                 return;  // No planner blocks. Exit.
             }
 
+            // A planner bug must not become an unbounded step stream : a
+            // negative or NaN entry speed makes sqrtf() NaN, the block's
+            // remaining distance NaN, and the end-of-block test below never
+            // true, so the block is never discarded. Clamp it to a stop. Runs
+            // once per block load or re-plan, not per segment or step.
+            if (!(pl_block->entry_speed_sqr > 0.0f)) {
+                pl_block->entry_speed_sqr = 0.0f;
+            }
+
             // Check if we need to only recompute the velocity profile or load a new block.
             if (prep.recalculate_flag.recalculate) {
                 if (prep.recalculate_flag.parking) {

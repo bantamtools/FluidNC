@@ -14,6 +14,7 @@ namespace MotorDrivers {
         StealthChop = 0,  // very quiet
         CoolStep    = 1,  // cooler so higher current possible
         StallGuard  = 2,  // coolstep plus stall indication
+        SpreadCycle = 3,  // TMC2209 only: SpreadCycle at all speeds, including standstill (internal tracker)
     };
 
     extern EnumItem trinamicModes[];

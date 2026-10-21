@@ -146,3 +146,20 @@ uint8_t plan_get_block_buffer_available();
 uint8_t plan_check_full_buffer();
 
 void plan_get_planner_mpos(float* target);
+
+#ifdef PAUSESIM
+// Host simulator only (env:pausesim). Compiled out of firmware.
+struct plan_debug_indices_t {
+    uint8_t tail;
+    uint8_t head;
+    uint8_t planned;
+};
+// The ring's tail, head and planned indices.
+plan_debug_indices_t plan_debug_indices();
+// Writes entry_speed_sqr into every slot outside [tail, head), which no block
+// occupies; returns how many slots were written. Lets a test seed the
+// never-live slots without depending on the allocator's fill.
+int plan_debug_poison_dead_slots(float entry_speed_sqr);
+// True when every byte of the ring is zero (checked right after plan_init()).
+bool plan_debug_ring_is_zero();
+#endif

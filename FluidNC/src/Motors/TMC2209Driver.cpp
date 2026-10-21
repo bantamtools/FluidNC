@@ -6,10 +6,19 @@
 */
 
 #include "TMC2209Driver.h"
+#include "TrinamicUartStepper.h"
+#include "TmcTstep.h"
 #include "../Machine/MachineConfig.h"
 #include <atomic>
 
 namespace MotorDrivers {
+    // Indexed by value, like trinamicModes: set_registers looks modes up as tmc2209Modes[mode].
+    EnumItem tmc2209Modes[] = { { TrinamicMode::StealthChop, "StealthChop" },
+                                { TrinamicMode::CoolStep, "CoolStep" },
+                                { TrinamicMode::StallGuard, "StallGuard" },
+                                { TrinamicMode::SpreadCycle, "SpreadCycle" },
+                                EnumItem(TrinamicMode::StealthChop) };
+
     void TMC2209Driver::init() {
         TrinamicUartDriver::init();
         if (!_uart) {
@@ -20,7 +29,8 @@ namespace MotorDrivers {
             _r_sense = TMC2209_RSENSE_DEFAULT;
         }
 
-        tmc2209 = new TMC2209Stepper(_uart, _r_sense, _addr);
+        // TrinamicUartStepper accepts valid replies whose CRC is 0x00 (internal tracker).
+        tmc2209 = new TrinamicUartStepper(_uart, _r_sense, _addr);
 
         registration();
     }
@@ -37,7 +47,11 @@ namespace MotorDrivers {
             return;
         }
 
-        TrinamicMode _mode = static_cast<TrinamicMode>(trinamicModes[isHoming ? _homing_mode : _run_mode].value);
+        // Note: this local shadows TrinamicBase::_mode, which is never assigned for the
+        // TMC2209, so toffValue() always uses toff_stealthchop. That is deliberate to
+        // leave alone here: assigning the member would switch CoolStep and SpreadCycle
+        // axes to toff_coolstep, a TOFF no bench run has measured (internal tracker).
+        TrinamicMode _mode = static_cast<TrinamicMode>(tmc2209Modes[isHoming ? _homing_mode : _run_mode].value);
 
         // Run and hold current configuration items are in (float) Amps,
         // but the TMCStepper library expresses run current as (uint16_t) mA
@@ -45,7 +59,6 @@ namespace MotorDrivers {
         uint16_t run_i = (uint16_t)(_run_current * 1000.0);
         tmc2209->I_scale_analog(false);  // do not scale via pot
         tmc2209->rms_current(run_i, TrinamicBase::holdPercent());
-        uint32_t tpwmthrs_tstep = 1000000 / ((TPWMTHRS_FR / 60.0) * 80);
 
         // The TMCStepper library uses the value 0 to mean 1x microstepping
         int usteps = _microsteps == 1 ? 0 : _microsteps;
@@ -63,7 +76,15 @@ namespace MotorDrivers {
                 log_debug(axisName() << " Coolstep");
                 tmc2209->en_spreadCycle(false);
                 tmc2209->pwm_autoscale(true); 
-                tmc2209->TPWMTHRS(tpwmthrs_tstep);
+                tmc2209->TPWMTHRS(coolStepTpwmthrs());
+                break;
+            case TrinamicMode ::SpreadCycle:
+                // The mode the  bench campaign measured: en_spreadCycle=1 with the
+                // stock PWMCONF, so the driver never enters StealthChop, standstill included.
+                log_debug(axisName() << " SpreadCycle");
+                tmc2209->en_spreadCycle(true);
+                tmc2209->pwm_autoscale(true);  // unused in SpreadCycle; left as stock
+                tmc2209->TPWMTHRS(0x00);       // the threshold only applies when en_spreadCycle=0
                 break;
             case TrinamicMode ::StallGuard:  //TODO: check all configurations for stallguard
             {
@@ -87,6 +108,14 @@ namespace MotorDrivers {
         log_debug("PWMCONF: " << to_hex(tmc2209->PWMCONF()));
         log_debug("IHOLD_IRUN: " << to_hex(tmc2209->IHOLD_IRUN()));
         log_debug("TPWMTHRS: " << to_hex(tmc2209->TPWMTHRS()));
+    }
+
+    uint32_t TMC2209Driver::coolStepTpwmthrs() {
+        if (_tpwmthrs_mm_per_min <= 0) {
+            return TmcTstep::legacyCoolStepTpwmthrs();
+        }
+        float stepsPerMm = config->_axes->_axis[axis_index()]->_stepsPerMm;
+        return TmcTstep::forSpeed(_tpwmthrs_mm_per_min, stepsPerMm, _microsteps, fclk);
     }
 
     void TMC2209Driver::debug_message() {
@@ -114,7 +143,17 @@ namespace MotorDrivers {
         }
     }
 
+    // A failed check leaves the axis unconfigured until the next boot (config_motor
+    // skips set_registers), so one bad read must not decide it: try twice.
     bool TMC2209Driver::test() {
+        if (test_once()) {
+            return true;
+        }
+        log_warn(axisName() << " driver check failed, retrying");
+        return test_once();
+    }
+
+    bool TMC2209Driver::test_once() {
         if (!checkVersion(0x21, tmc2209->version())) {
             return false;
         }
