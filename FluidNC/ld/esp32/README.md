@@ -100,6 +100,31 @@ will need to be added to the list in vtable_in_dram.ld .  Alternatively,
 we could create a naming convention for files that need this
 special treatment, so a single pattern could catch all of them.
 
+### ESP32-S3: Narrowed Fragment
+
+The S3 fragment (../esp32s3/vtable_in_dram_s3.ld) no longer moves whole
+.rodata or .xt.prop into RAM.  It lists only
+
+```
+   *StepStick.cpp.o(.rodata._ZTV* .rodata._ZTI* .rodata._ZTS*)
+```
+
+i.e. vtables and typeinfo.  Measured on a wifi_s3 build, the old patterns
+put about 8.7K of .rodata into DRAM, of which about 7K were string
+literals (.rodata.*.str1.1) that ISR code does not need, plus about 25K
+of .xt.prop.  .xt.prop is a non-allocated Xtensa property table read only
+by the linker and debuggers, but once listed inside .dram0.data it is
+given real, loaded DRAM addresses.
+
+The IRAM_ATTR functions in the affected files reference string literals
+only on Assert/log_error failure paths, which already call FLASH code.
+The framework compiles with -fno-jump-tables and
+-fno-tree-switch-conversion, so no switch tables exist.  If an IRAM
+function in one of these files ever needs a const table, list its own
+.rodata.<mangled name> section in the S3 fragment.
+
+The esp32 fragment in this directory is unchanged.
+
 ### Things that Do Not Work
 
 PlatformIO has a board_build.ldscript feature.  I tried to use it

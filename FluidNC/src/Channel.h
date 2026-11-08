@@ -19,9 +19,10 @@
 #include "Error.h"  // Error
 #include "GCode.h"  // gc_modal_t
 #include "Types.h"  // State
+#include "ChannelInputQueue.h"  // ChannelInputQueue (_queue)
 #include <Stream.h>
 #include <freertos/FreeRTOS.h>  // TickType_T
-#include <queue>
+#include <queue>  // no longer used here; kept for files that get std::queue transitively
 #include <atomic>
 #include <cstdint>
 
@@ -36,7 +37,10 @@ protected:
     bool        _addCR     = false;
     char        _lastWasCR = false;
 
-    std::queue<uint8_t> _queue;
+    // Input bytes saved for later (pollLine with no line buffer, WS/macro pushes).
+    // Allocated on first push, so the many channels that never queue (FileStream,
+    // InputFile, ...) carry no ~560 B deque map+node. See ChannelInputQueue.h.
+    ChannelInputQueue _queue;
 
     uint32_t _reportInterval = 0;
     int32_t  _nextReportTime = 0;

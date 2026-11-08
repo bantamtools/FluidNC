@@ -27,6 +27,7 @@
 #include "GCode.h"  //  reemit_pause_instruction()
 #include "StartupLog.h"           // startupLog
 #include "Driver/fluidnc_gpio.h"  // gpio_dump()
+#include <esp_heap_caps.h>        // heap_caps_get_largest_free_block() for $Heap
 #ifdef USE_SDMMC
 #include "Driver/sdmmc.h"         // sd_populate_files_menu()
 #else
@@ -895,8 +896,26 @@ static Error setReportInterval(const char* value, WebUI::AuthenticationLevel aut
     return Error::Ok;
 }
 
+// A task's stack high-water mark in bytes (the least free stack it has had), or
+// -1 when there is no such task. The IDF counts StackType_t units; scaled anyway.
+static int taskStackFree(TaskHandle_t h) {
+    return h ? static_cast<int>(uxTaskGetStackHighWaterMark(h) * sizeof(StackType_t)) : -1;
+}
+
+// $Heap output. The first line keeps its original text and field order so the
+// bench parsers (regex "Heap free: (\d+) min: (\d+)") keep working; fields are
+// only appended to it:
+//   Heap free: <bytes> min: <bytes> maxblk: <bytes>
+//     maxblk = largest free internal 8-bit block (what one allocation can get)
+//   Stack free: loop=<b> poller=<b> fnc_wifi=<b> output=<b>
+//     each a task's stack high-water mark in bytes, -1 = task not found.
+//     loop is the Arduino loopTask (it runs protocol_main_loop).
+// Read-only and cheap: two heap queries and a handful of task-list lookups.
 static Error showHeap(const char* value, WebUI::AuthenticationLevel auth_level, Channel& out) {
-    log_info("Heap free: " << xPortGetFreeHeapSize() << " min: " << heapLowWater);
+    log_info("Heap free: " << xPortGetFreeHeapSize() << " min: " << heapLowWater
+                           << " maxblk: " << static_cast<unsigned int>(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)));
+    log_info("Stack free: loop=" << taskStackFree(xTaskGetHandle("loopTask")) << " poller=" << taskStackFree(pollingTask)
+                                 << " fnc_wifi=" << taskStackFree(wifiTask) << " output=" << taskStackFree(xTaskGetHandle("output")));
     return Error::Ok;
 }
 

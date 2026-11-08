@@ -16,17 +16,21 @@
 #    include "WifiConfig.h"  // wifi_config
 
 #    include "WebServer.h"
+#    include "UploadAbortRules.h"  // ABORTED-after-END decisions (fork 24ac5642, )
 
 #    include <WebSocketsServer.h>
 #    include <WiFi.h>
 #    include <WebServer.h>
-#    include <ESP32SSDP.h>
+// SSDP is compiled out unless ENABLE_SSDP is defined (RAM fix pass B: no client
+// uses it, and leaving the library unlinked drops its static buffers and object).
+#    ifdef ENABLE_SSDP
+#        include <ESP32SSDP.h>
+#    endif
 #    include <StreamString.h>
 #    include <Update.h>
 #    include <esp_wifi_types.h>
 #    include <esp_wifi.h>  //  esp_wifi_get/set_inactive_time for the upload link guard
 #    include <ESPmDNS.h>
-#    include <ESP32SSDP.h>
 #    include <DNSServer.h>
 #    include "WebSettings.h"
 
@@ -226,6 +230,7 @@ namespace WebUI {
             _webserver->on("/fwlink/", HTTP_ANY, handle_root);
         }
 
+#    ifdef ENABLE_SSDP
         //SSDP service presentation
         if (WiFi.getMode() == WIFI_STA) {
             _webserver->on("/description.xml", HTTP_GET, handle_SSDP);
@@ -247,6 +252,7 @@ namespace WebUI {
             log_info("SSDP Started");
             SSDP.begin();
         }
+#    endif
 
         log_info("HTTP started on port " << WebUI::http_port->get());
         //start webserver
@@ -268,7 +274,9 @@ namespace WebUI {
         // Don't carry a raised upload guard across a WiFi stop/start .
         releaseUploadLinkGuard();
 
+#    ifdef ENABLE_SSDP
         SSDP.end();
+#    endif
 
         //remove mDNS
         mdns_service_remove("_http", "_tcp");
@@ -460,6 +468,7 @@ namespace WebUI {
         send404Page();
     }
 
+#    ifdef ENABLE_SSDP
     //http SSDP xml presentation
     void Web_Server::handle_SSDP() {
         StreamString sschema;
@@ -500,6 +509,7 @@ namespace WebUI {
         sschema.printf(templ, sip, _port, wifi_config.Hostname().c_str(), serialNumber, uuid);
         _webserver->send(200, "text/xml", sschema);
     }
+#    endif
 
     // WebUI sends a PAGEID arg to identify the websocket it is using
     int Web_Server::getPageid() {
@@ -799,7 +809,30 @@ namespace WebUI {
                     size_t filesize = _webserver->hasArg(sizeargname.c_str()) ? _webserver->arg(sizeargname.c_str()).toInt() : 0;
                     uploadEnd(filesize);
                 } else {  //Upload cancelled
+                    if (v1AbortFollowsEnd(_uploadFile != nullptr)) {
+                        // ABORTED after END: a later part of the request failed
+                        // to parse. END already closed and kept the file, so
+                        // there is nothing to remove (see UploadAbortRules.h).
+                        // No request handler follows ABORTED, so nothing consumes
+                        // END's SUCCESSFUL; clear it, or a later GET /updatefw would
+                        // read it, report success and restart.
+                        _upload_status = UploadStatus::NONE;
+                        releaseUploadLinkGuard();
+                        if (config && config->_oled) {
+                            config->_oled->clearBusy(BusyReason::FileUpload);
+                        }
+                        return;
+                    }
                     uploadStop();
+                    // The request is over (no request handler follows ABORTED), so
+                    // nothing would consume this FAILED. Left set, the next upload's
+                    // uploadStart() refused to open its file, and every chunk of that
+                    // upload then went through uploadCheck() -> cancelUpload(), whose
+                    // stop() on a copy of the client does not close it but does sleep
+                    // 100 ms: a 10 MB retry drained for ~12 minutes and ended in 500
+                    // (bench, HW85). cancelUpload()'s own ABORTED only arrives while
+                    // FAILED, which the gate above keeps out of this branch.
+                    _upload_status = UploadStatus::NONE;
                     return;
                 }
             }
@@ -965,8 +998,30 @@ namespace WebUI {
                         pushError(ESP_ERROR_UPLOAD, "Update upload failed");
                     }
                 } else if (upload.status == UPLOAD_FILE_ABORTED) {
+                    if (updateAbortFollowsSuccess(_upload_status == UploadStatus::SUCCESSFUL, s_web_update_armed)) {
+                        // ABORTED after a successful END : the new image is
+                        // already the boot image. The fork calls no request handler
+                        // after ABORTED, so handleUpdate will not run for this
+                        // request. Do its job here: reply if the client is still
+                        // connected, then restart whether or not the reply got out.
+                        log_info("Update complete; ignoring a later malformed part");
+                        if (_webserver->client().connected()) {
+                            // The core resets the response length only before it calls a
+                            // request handler, so here it still holds the previous
+                            // request's value. After a chunked reply (a file listing) that
+                            // made this reply chunked with no final chunk, and the client
+                            // waited for the rest until the connection died (bench, HW85).
+                            _webserver->setContentLength(CONTENT_LENGTH_NOT_SET);
+                            sendStatus(200, std::to_string(int(UploadStatus::SUCCESSFUL)).c_str());
+                        }
+                        // Clear it so nothing later (a plain GET /updatefw) can see a
+                        // stale SUCCESSFUL before the restart happens.
+                        _upload_status = UploadStatus::NONE;
+                        delay_ms(1000);
+                        COMMANDS::restart_MCU();
+                        return;
+                    }
                     log_info("Update failed");
-                    _upload_status = UploadStatus::FAILED;
                     // Disarm the Updater: returning with it mid-update left _size set, so
                     // every later Update.begin() (another web update, or the SD menu's)
                     // failed as "already running" until reboot.
@@ -974,6 +1029,9 @@ namespace WebUI {
                         Update.abort();
                         s_web_update_armed = false;
                     }
+                    // No request handler follows ABORTED; a FAILED left here would make
+                    // the next /upload refuse its file (see fileUpload).
+                    _upload_status = UploadStatus::NONE;
                     return;
                 }
             }

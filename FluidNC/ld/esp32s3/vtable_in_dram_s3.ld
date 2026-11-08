@@ -1,30 +1,42 @@
 /* List of files and sections to place in RAM instead of FLASH */
-/* See README.md in this directory for a complete explanation */
+/* See README.md in ../esp32 for a complete explanation */
 
-    *Laser.cpp.o(.rodata .rodata.* .xt.prop .xt.prop.*)
+/* Only vtables (_ZTV) and typeinfo (_ZTI, _ZTS) are pulled into DRAM.
+ * String literals (.rodata.*.str1.1) and any other rodata of these objects
+ * stay in flash; the IRAM_ATTR functions in these files reference strings
+ * only on Assert/log_error failure paths, which already call flash code.
+ * -fno-jump-tables and -fno-tree-switch-conversion are set framework-wide,
+ * so no switch tables are emitted.  If an IRAM function here ever needs a
+ * const table, add its own .rodata.<mangled name> entry below.
+ *
+ * .xt.prop is deliberately NOT listed.  It is a non-allocated Xtensa
+ * property table used only by the linker and debuggers; listing it here
+ * made it occupy ~25 KB of loaded DRAM for no runtime purpose. */
+
+    *Laser.cpp.o(.rodata._ZTV* .rodata._ZTI* .rodata._ZTS*)
 
     /* All files whose name ends with Spindle.cpp */
-    **Spindle.cpp.o(.rodata .rodata.* .xt.prop .xt.prop.*)
+    **Spindle.cpp.o(.rodata._ZTV* .rodata._ZTI* .rodata._ZTS*)
 
     /* Motors */
-    *Motor.cpp.o(.rodata .rodata.* .xt.prop .xt.prop.*)
-    *Dynamixel2.cpp.o(.rodata .rodata.* .xt.prop .xt.prop.*)
-    *MotorDriver.cpp.o(.rodata .rodata.* .xt.prop .xt.prop.*)
-    *NullMotor.cpp.o(.rodata .rodata.* .xt.prop .xt.prop.*)
-    *RcServo.cpp.o(.rodata .rodata.* .xt.prop .xt.prop.*)
-    *Servo.cpp.o(.rodata .rodata.* .xt.prop .xt.prop.*)
-    *Solenoid.cpp.o(.rodata .rodata.* .xt.prop .xt.prop.*)
-    *StandardStepper.cpp.o(.rodata .rodata.* .xt.prop .xt.prop.*)
-    *StepStick.cpp.o(.rodata .rodata.* .xt.prop .xt.prop.*)
-    *TMC*Driver.cpp.o(.rodata .rodata.* .xt.prop .xt.prop.*)
-    *TrinamicBase.cpp.o(.rodata .rodata.* .xt.prop .xt.prop.*)
-    *TrinamicSpiDriver.cpp.o(.rodata .rodata.* .xt.prop .xt.prop.*)
-    *TrinamicUartDriver.cpp.o(.rodata .rodata.* .xt.prop .xt.prop.*)
-    *UnipolarMotor.cpp.o(.rodata .rodata.* .xt.prop .xt.prop.*)
+    *Motor.cpp.o(.rodata._ZTV* .rodata._ZTI* .rodata._ZTS*)
+    *Dynamixel2.cpp.o(.rodata._ZTV* .rodata._ZTI* .rodata._ZTS*)
+    *MotorDriver.cpp.o(.rodata._ZTV* .rodata._ZTI* .rodata._ZTS*)
+    *NullMotor.cpp.o(.rodata._ZTV* .rodata._ZTI* .rodata._ZTS*)
+    *RcServo.cpp.o(.rodata._ZTV* .rodata._ZTI* .rodata._ZTS*)
+    *Servo.cpp.o(.rodata._ZTV* .rodata._ZTI* .rodata._ZTS*)
+    *Solenoid.cpp.o(.rodata._ZTV* .rodata._ZTI* .rodata._ZTS*)
+    *StandardStepper.cpp.o(.rodata._ZTV* .rodata._ZTI* .rodata._ZTS*)
+    *StepStick.cpp.o(.rodata._ZTV* .rodata._ZTI* .rodata._ZTS*)
+    *TMC*Driver.cpp.o(.rodata._ZTV* .rodata._ZTI* .rodata._ZTS*)
+    *TrinamicBase.cpp.o(.rodata._ZTV* .rodata._ZTI* .rodata._ZTS*)
+    *TrinamicSpiDriver.cpp.o(.rodata._ZTV* .rodata._ZTI* .rodata._ZTS*)
+    *TrinamicUartDriver.cpp.o(.rodata._ZTV* .rodata._ZTI* .rodata._ZTS*)
+    *UnipolarMotor.cpp.o(.rodata._ZTV* .rodata._ZTI* .rodata._ZTS*)
 
     /* Pin Details */
-    **Detail.cpp.o(.rodata .rodata.* .xt.prop .xt.prop.*)
-    *PwmPin.cpp.o(.rodata .rodata.* .xt.prop .xt.prop.*)
-    *Pin.cpp.o(.rodata .rodata.* .xt.prop .xt.prop.*)
-    *PinExtenderDriver.cpp.o(.rodata .rodata.* .xt.prop .xt.prop.*)
-    *Extender.cpp.o(.rodata .rodata.* .xt.prop .xt.prop.*)
+    **Detail.cpp.o(.rodata._ZTV* .rodata._ZTI* .rodata._ZTS*)
+    *PwmPin.cpp.o(.rodata._ZTV* .rodata._ZTI* .rodata._ZTS*)
+    *Pin.cpp.o(.rodata._ZTV* .rodata._ZTI* .rodata._ZTS*)
+    *PinExtenderDriver.cpp.o(.rodata._ZTV* .rodata._ZTI* .rodata._ZTS*)
+    *Extender.cpp.o(.rodata._ZTV* .rodata._ZTI* .rodata._ZTS*)

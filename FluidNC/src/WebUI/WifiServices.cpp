@@ -27,7 +27,12 @@ namespace WebUI {
 #    include <WiFi.h>
 #    include "Driver/localfs.h"
 #    include <ESPmDNS.h>
-#    include <ArduinoOTA.h>
+// ArduinoOTA is compiled out unless ENABLE_ARDUINO_OTA is defined (RAM fix pass B:
+// no client uses it, and leaving the library unlinked drops its static buffer
+// and global object, about 1.7 KB of internal RAM).
+#    ifdef ENABLE_ARDUINO_OTA
+#        include <ArduinoOTA.h>
+#    endif
 #    include "WebSettings.h"
 
 // ( r4) global instrumentation flag (defined in Protocol.cpp)
@@ -46,6 +51,7 @@ namespace WebUI {
             return false;
         }
 
+#    ifdef ENABLE_ARDUINO_OTA
         ArduinoOTA
             .onStart([]() {
                 const char* type;
@@ -86,6 +92,7 @@ namespace WebUI {
             });
         log_info("Starting OTA service");
         ArduinoOTA.begin();
+#    endif
         //no need in AP mode
         if (WiFi.getMode() == WIFI_STA) {
             //start mDns
@@ -117,8 +124,10 @@ namespace WebUI {
         telnetServer.end();
         webServer.end();
 
+#    ifdef ENABLE_ARDUINO_OTA
         //stop OTA
         ArduinoOTA.end();
+#    endif
     }
 
     void WiFiServices::handle() {
@@ -132,8 +141,10 @@ namespace WebUI {
             }
         }
         // ( r4) mark which service the poller is in, to pin where wifi_config.handle parks.
+#    ifdef ENABLE_ARDUINO_OTA
         ::g_wifi_svc = 1;
         ArduinoOTA.handle();
+#    endif
         ::g_wifi_svc = 2;
         webServer.handle();
         ::g_wifi_svc = 3;
